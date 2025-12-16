@@ -1,0 +1,28 @@
+# Raspberry Pi GPIO and hardware
+RPi.GPIO>=0.7.1
+
+# Adafruit LoRa
+adafruit-blinka>=8.0.0
+adafruit-circuitpython-rfm9x>=2.0.0
+
+# Configuration
+PyYAML>=6.0
+
+# Data analysis
+polars>=0.20.0
+numpy>=1.24.0
+scipy>=1.10.0
+
+# Visualization
+matplotlib>=3.7.0
+seaborn>=0.12.0
+
+# Jupyter notebooks
+jupyter>=1.0.0
+notebook>=7.0.0
+
+# Testing
+pytest>=7.0.0
+
+# Utilities
+python-dateutil>=2.8.0

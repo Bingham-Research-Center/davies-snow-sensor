@@ -1,0 +1,34 @@
+# Snow Depth Sensor Station Configuration Template
+# Copy this file and rename to station_XX.yaml for each station
+
+# Station Identification
+station_id: "STN_01"  # Unique identifier for this station
+
+# Location (WGS84 coordinates)
+latitude: 0.0         # Decimal degrees
+longitude: 0.0        # Decimal degrees
+elevation_m: 0.0      # Meters above sea level
+
+# Sensor Configuration
+ground_height_mm: 2000  # Distance from sensor to bare ground (no snow)
+trigger_pin: 23         # GPIO pin for ultrasonic trigger (BCM numbering)
+echo_pin: 24            # GPIO pin for ultrasonic echo (BCM numbering)
+
+# Measurement Settings
+measurement_interval_seconds: 900  # 15 minutes = 900 seconds
+samples_per_reading: 5             # Number of readings to average
+
+# LoRa Configuration
+lora_frequency: 915.0       # MHz (915.0 for US ISM band)
+lora_spreading_factor: 7    # 7-12, higher = longer range, slower
+lora_bandwidth: 125000      # Hz
+base_station_address: 0     # Address of the base station
+station_address: 1          # This station's address (unique per station)
+
+# Local Storage Configuration
+local_storage_path: "/home/pi/snow_data"  # Path for local CSV backup
+max_local_files: 30                        # Days of local data to keep
+
+# Optional Metadata
+install_date: "2024-01-01"  # Installation date
+notes: ""                    # Any notes about this station location
