@@ -13,7 +13,7 @@ This document lists the components required to build one low-cost snow depth sen
 | LoRa Radio Module | Adafruit RFM95W Bonnet | 1 | $20 | Adafruit | 915MHz for US, includes OLED |
 | Ultrasonic Sensor | [TBD - see options below] | 1 | $15-50 | Various | Snow depth measurement |
 | Temperature Sensor | DS18B20 Waterproof Probe | 1 | ~$3 | Various | For speed-of-sound compensation |
-| Antenna | 915MHz LoRa Antenna | 1 | $5-10 | Various | For RFM95W |
+| Antenna | 915MHz 5.8dBi Fiberglass w/ Cable | 1 | ~$25 | Amazon | Waterproof, 20ft cable |
 | Pull-up Resistor | 4.7kΩ | 1 | <$1 | Various | For DS18B20 1-Wire data line |
 
 ### Raspberry Pi 4 Model B Detailed Specifications
@@ -85,6 +85,34 @@ Testing configurations: 2GB and 4GB models for sensor stations.
 **Included with Bonnet:**
 - 128x32 OLED display (I2C, address 0x3C) for status messages
 - 3 user buttons for interface/testing
+
+### 915MHz Fiberglass Antenna Detailed Specifications
+
+Waterproof outdoor antenna for extended LoRa range.
+
+| Specification | Value |
+|---------------|-------|
+| Frequency Range | 902-928 MHz (915 MHz) |
+| Gain | 5.8 dBi |
+| Antenna Connector | N-Male |
+| Impedance | 50 ohm |
+| SWR | ≤1.5 |
+| Antenna Length | 40 cm / 16.2 in |
+
+**Included Cable:**
+- 6m (20ft) N Female to RP-SMA Male KMR195 low-loss cable
+- Allows indoor/outdoor antenna placement
+
+**Included Adapter:**
+- RP-SMA Female to SMA Male adapter
+
+**Included:**
+- Fiberglass antenna
+- Mount kit
+- KMR195 cable (6m)
+- SMA adapter
+
+**Note:** Higher gain (5.8dBi) than stock antennas provides better range for remote sensor deployment.
 
 ### DS18B20 Temperature Sensor Detailed Specifications
 
@@ -163,10 +191,31 @@ Used for development and testing.
 
 | Component | Spec | Quantity | Est. Cost | Notes |
 |-----------|------|----------|-----------|-------|
-| Weatherproof Enclosure | IP65+ NEMA rated | 1 | $20-40 | Electronics housing |
+| Weatherproof Enclosure | QILIPSU IP67 Junction Box | 1 | ~$30 | Electronics housing |
 | Mounting Pole | Aluminum/Steel, 1-2m | 1 | $20-40 | Sensor mount |
 | Cable Glands | PG7/PG9 | 4-6 | $5 | Waterproof wire pass-through |
 | Sensor Bracket | Custom or 3D printed | 1 | $5-10 | Aim sensor downward |
+
+### QILIPSU Enclosure Detailed Specifications
+
+**Product:** QILIPSU Junction Box IP67 Waterproof Plastic Electrical Enclosure with Mounting Plate, Wall Brackets, Hinged Grey Cover
+
+| Specification | Value |
+|---------------|-------|
+| External Dimensions | 11.2" x 7.7" x 5.1" (285 x 195 x 130 mm) |
+| Material | ABS plastic |
+| IP Rating | IP67 (dust-tight, waterproof) |
+| Cover | Hinged grey cover |
+
+**Included:**
+- Mounting plate for equipment installation
+- Wall brackets
+
+**Features:**
+- Impact resistant and excellent electrical insulation
+- Easy to drill without cracking for cable gland installation
+- Suitable for outdoor use in harsh environments
+- Protects against water, dust, and environmental challenges
 
 ### Cables & Connectors
 
