@@ -4,10 +4,42 @@ Data loading utilities for analysis.
 Provides functions to load sensor data and reference data for analysis.
 """
 
+from datetime import date, datetime, time, timezone
 from pathlib import Path
 from typing import Optional
 
 import polars as pl
+
+
+def _csv_files(data_dir: str) -> list[Path]:
+    path = Path(data_dir)
+    if not path.exists():
+        raise FileNotFoundError(f"Data directory does not exist: {data_dir}")
+    return sorted(path.glob("*.csv"))
+
+
+def _normalize_timestamp(df: pl.DataFrame, column: str = "timestamp") -> pl.DataFrame:
+    if column not in df.columns:
+        return df
+    return df.with_columns(
+        pl.col(column)
+        .cast(pl.Utf8)
+        .str.replace("Z", "+00:00")
+        .str.to_datetime(strict=False)
+        .alias(column)
+    )
+
+
+def _parse_boundary(boundary: str, is_end: bool) -> datetime:
+    # Accept YYYY-MM-DD or full ISO datetime.
+    if len(boundary) == 10:
+        parsed_date = date.fromisoformat(boundary)
+        parsed_time = time.max if is_end else time.min
+        return datetime.combine(parsed_date, parsed_time, tzinfo=timezone.utc)
+    parsed = datetime.fromisoformat(boundary.replace("Z", "+00:00"))
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
 
 
 def load_sensor_data(
@@ -28,7 +60,35 @@ def load_sensor_data(
     Returns:
         DataFrame with sensor readings
     """
-    pass
+    files = _csv_files(data_dir)
+    if not files:
+        return pl.DataFrame()
+
+    frames: list[pl.DataFrame] = []
+    for file_path in files:
+        try:
+            frames.append(pl.read_csv(file_path))
+        except Exception:
+            continue
+
+    if not frames:
+        return pl.DataFrame()
+
+    df = pl.concat(frames, how="diagonal_relaxed")
+    df = _normalize_timestamp(df, "timestamp")
+
+    if station_id is not None and "station_id" in df.columns:
+        df = df.filter(pl.col("station_id") == station_id)
+    if start_date is not None and "timestamp" in df.columns:
+        start = _parse_boundary(start_date, is_end=False)
+        df = df.filter(pl.col("timestamp") >= start)
+    if end_date is not None and "timestamp" in df.columns:
+        end = _parse_boundary(end_date, is_end=True)
+        df = df.filter(pl.col("timestamp") <= end)
+
+    if "timestamp" in df.columns:
+        df = df.sort("timestamp")
+    return df
 
 
 def load_reference_data(
@@ -47,7 +107,33 @@ def load_reference_data(
     Returns:
         DataFrame with reference readings
     """
-    pass
+    files = _csv_files(data_dir)
+    if not files:
+        return pl.DataFrame()
+
+    frames: list[pl.DataFrame] = []
+    for file_path in files:
+        try:
+            frames.append(pl.read_csv(file_path))
+        except Exception:
+            continue
+
+    if not frames:
+        return pl.DataFrame()
+
+    df = pl.concat(frames, how="diagonal_relaxed")
+    df = _normalize_timestamp(df, "timestamp")
+
+    if start_date is not None and "timestamp" in df.columns:
+        start = _parse_boundary(start_date, is_end=False)
+        df = df.filter(pl.col("timestamp") >= start)
+    if end_date is not None and "timestamp" in df.columns:
+        end = _parse_boundary(end_date, is_end=True)
+        df = df.filter(pl.col("timestamp") <= end)
+
+    if "timestamp" in df.columns:
+        df = df.sort("timestamp")
+    return df
 
 
 def resample_to_hourly(df: pl.DataFrame, value_col: str = 'snow_depth_mm') -> pl.DataFrame:
@@ -61,7 +147,29 @@ def resample_to_hourly(df: pl.DataFrame, value_col: str = 'snow_depth_mm') -> pl
     Returns:
         Hourly resampled DataFrame
     """
-    pass
+    if df.is_empty():
+        return df
+    if "timestamp" not in df.columns:
+        raise ValueError("DataFrame must include 'timestamp' column")
+    if value_col not in df.columns:
+        raise ValueError(f"DataFrame must include '{value_col}' column")
+
+    working = _normalize_timestamp(df, "timestamp")
+    working = working.sort("timestamp")
+
+    aggs = [
+        pl.col(value_col).mean().alias(f"{value_col}_mean"),
+        pl.col(value_col).min().alias(f"{value_col}_min"),
+        pl.col(value_col).max().alias(f"{value_col}_max"),
+        pl.col(value_col).count().alias("samples"),
+    ]
+    if "station_id" in working.columns:
+        return working.group_by_dynamic(
+            index_column="timestamp",
+            every="1h",
+            group_by="station_id"
+        ).agg(aggs).sort(["station_id", "timestamp"])
+    return working.group_by_dynamic(index_column="timestamp", every="1h").agg(aggs).sort("timestamp")
 
 
 def merge_sensor_and_reference(
@@ -80,4 +188,23 @@ def merge_sensor_and_reference(
     Returns:
         Merged DataFrame with both data sources
     """
-    pass
+    if sensor_df.is_empty() or reference_df.is_empty():
+        return pl.DataFrame()
+    if "timestamp" not in sensor_df.columns or "timestamp" not in reference_df.columns:
+        raise ValueError("Both DataFrames must include a 'timestamp' column")
+
+    left = _normalize_timestamp(sensor_df, "timestamp").sort("timestamp")
+    right = _normalize_timestamp(reference_df, "timestamp").sort("timestamp")
+
+    # Prevent collisions for commonly shared measurement columns.
+    for col in ["snow_depth_mm", "sensor_temp_c", "battery_voltage"]:
+        if col in right.columns:
+            right = right.rename({col: f"reference_{col}"})
+
+    return left.join_asof(
+        right,
+        on="timestamp",
+        strategy="nearest",
+        tolerance=tolerance,
+        suffix="_ref",
+    )

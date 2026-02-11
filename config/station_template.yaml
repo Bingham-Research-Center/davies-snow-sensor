@@ -1,5 +1,12 @@
 # Snow Depth Sensor Station Configuration Template
 # Copy this file and rename to station_XX.yaml for each station
+#
+# 52Pi Easy Multiplexing Board row plan:
+#   - Row 1 (reserved): LoRa plug-and-play board/bonnet
+#   - Other rows: external sensor wiring
+# NOTE: All rows are mirrored breakouts of the same Raspberry Pi GPIO pins.
+# "Row" does not change BCM pin numbers.
+# Do not use LoRa/OLED pins for sensors: GPIO2,3,7,8,9,10,11,25
 
 # Station Identification
 station_id: "STN_01"  # Unique identifier for this station
@@ -11,8 +18,15 @@ elevation_m: 0.0      # Meters above sea level
 
 # Sensor Configuration
 ground_height_mm: 2000  # Distance from sensor to bare ground (no snow)
-trigger_pin: 23         # GPIO pin for ultrasonic trigger (BCM numbering)
-echo_pin: 24            # GPIO pin for ultrasonic echo (BCM numbering)
+trigger_pin: 23         # HC-SR04 TRIG (BCM GPIO23, physical pin 16)
+echo_pin: 24            # HC-SR04 ECHO input (BCM GPIO24, physical pin 18) via 1k/2k divider
+
+# Temperature Sensor (DS18B20)
+temp_sensor_enabled: true  # Enable DS18B20 temperature sensor
+temp_sensor_pin: 4         # 1-Wire DATA on BCM GPIO4 (physical pin 7) with 4.7k pull-up to 3.3V
+
+# OLED Display (on LoRa Bonnet)
+oled_enabled: true  # Enable OLED status display
 
 # Measurement Settings
 measurement_interval_seconds: 900  # 15 minutes = 900 seconds

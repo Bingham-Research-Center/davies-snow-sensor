@@ -25,6 +25,10 @@ Each sensor station consists of:
 - Weatherproof enclosure
 - Power supply (battery + solar TBD)
 
+For 52Pi Easy Multiplexing Board row-by-row wiring, see:
+- [hardware/multiplexing_board_wiring.md](hardware/multiplexing_board_wiring.md)
+- This includes your HC-SR04 ECHO divider requirement (`1k` top, `2k` bottom) and DS18B20 `GPIO4` + `4.7k` pull-up.
+
 ## Project Structure
 
 ```
@@ -67,10 +71,25 @@ Each sensor station consists of:
    # Edit station_01.yaml with your station's settings
    ```
 
-4. Run the sensor station:
+4. Run one-time hardware checks (recommended):
+   ```bash
+   python scripts/test_hardware.py --all
+   ```
+
+5. Run the sensor station:
    ```bash
    python -m src.sensor.main --config config/station_01.yaml
    ```
+
+6. Run the base station receiver:
+   ```bash
+   python -m src.base_station.main --storage-path /home/pi/snow_base_data
+   ```
+
+### Useful Runtime Flags
+
+- Sensor test mode (single reading): `python -m src.sensor.main --config config/station_01.yaml --test`
+- Verbose logs: `python -m src.sensor.main --config config/station_01.yaml --verbose`
 
 ## Data Format
 
