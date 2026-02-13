@@ -23,7 +23,7 @@ trigger_pin: 23
 echo_pin: 24
 measurement_interval_seconds: 900
 lora_frequency: 915.0
-local_storage_path: ~/snow_data
+primary_storage_path: ~/snow_data
 """.strip(),
     )
 
@@ -31,7 +31,32 @@ local_storage_path: ~/snow_data
     assert config.samples_per_reading == 5
     assert config.oled_enabled is True
     assert config.temp_sensor_enabled is True
-    assert config.local_storage_path == str(Path("~/snow_data").expanduser())
+    assert config.primary_storage_path == str(Path("~/snow_data").expanduser())
+    assert config.backup_storage_path is None
+    assert config.backup_sync_mode == "immediate"
+    assert config.backup_required is False
+
+
+def test_load_config_maps_legacy_local_storage_path(tmp_path: Path) -> None:
+    config_path = tmp_path / "legacy.yaml"
+    _write_config(
+        config_path,
+        """
+station_id: STN_01
+latitude: 45.1
+longitude: -111.2
+elevation_m: 1200
+ground_height_mm: 2000
+trigger_pin: 23
+echo_pin: 24
+measurement_interval_seconds: 900
+lora_frequency: 915.0
+local_storage_path: ~/legacy_snow_data
+""".strip(),
+    )
+
+    config = load_config(str(config_path))
+    assert config.primary_storage_path == str(Path("~/legacy_snow_data").expanduser())
 
 
 def test_load_config_rejects_empty_yaml(tmp_path: Path) -> None:
@@ -64,6 +89,50 @@ station_address: 1
     config = load_config(str(config_path))
     errors = validate_config(config)
     assert any("must be different" in error for error in errors)
+
+
+def test_validate_config_rejects_placeholder_station_id(tmp_path: Path) -> None:
+    config_path = tmp_path / "placeholder.yaml"
+    _write_config(
+        config_path,
+        """
+station_id: STN_XX
+latitude: 45.1
+longitude: -111.2
+elevation_m: 1200
+ground_height_mm: 2000
+trigger_pin: 23
+echo_pin: 24
+measurement_interval_seconds: 900
+lora_frequency: 915.0
+""".strip(),
+    )
+
+    config = load_config(str(config_path))
+    errors = validate_config(config)
+    assert any("placeholder" in error for error in errors)
+
+
+def test_validate_config_rejects_default_zero_coordinates(tmp_path: Path) -> None:
+    config_path = tmp_path / "zero_coords.yaml"
+    _write_config(
+        config_path,
+        """
+station_id: STN_07
+latitude: 0.0
+longitude: 0.0
+elevation_m: 1200
+ground_height_mm: 2000
+trigger_pin: 23
+echo_pin: 24
+measurement_interval_seconds: 900
+lora_frequency: 915.0
+""".strip(),
+    )
+
+    config = load_config(str(config_path))
+    errors = validate_config(config)
+    assert any("defaults" in error for error in errors)
 
 
 def test_validate_config_rejects_lora_reserved_sensor_pins(tmp_path: Path) -> None:

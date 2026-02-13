@@ -11,6 +11,23 @@ from typing import Optional
 import polars as pl
 
 
+def _parse_iso_utc(value: Optional[str]) -> Optional[datetime]:
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    try:
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    else:
+        parsed = parsed.astimezone(timezone.utc)
+    return parsed
+
+
 def _csv_files(data_dir: str) -> list[Path]:
     path = Path(data_dir)
     if not path.exists():
@@ -24,8 +41,7 @@ def _normalize_timestamp(df: pl.DataFrame, column: str = "timestamp") -> pl.Data
     return df.with_columns(
         pl.col(column)
         .cast(pl.Utf8)
-        .str.replace("Z", "+00:00")
-        .str.to_datetime(strict=False)
+        .map_elements(_parse_iso_utc, return_dtype=pl.Datetime(time_zone="UTC"))
         .alias(column)
     )
 

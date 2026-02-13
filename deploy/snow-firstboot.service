@@ -1,0 +1,19 @@
+[Unit]
+Description=Snow Sensor First-Boot Provisioning
+After=local-fs.target network-online.target
+Wants=network-online.target
+Before=snow-sensor.service
+ConditionPathExists=!/var/lib/snow-sensor/provisioned
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/home/pi/davies-snow-sensor
+ExecStart=/home/pi/davies-snow-sensor/venv/bin/python /home/pi/davies-snow-sensor/scripts/first_boot_provision.py
+StandardInput=tty-force
+StandardOutput=journal+console
+StandardError=journal+console
+TTYPath=/dev/tty1
+
+[Install]
+WantedBy=multi-user.target

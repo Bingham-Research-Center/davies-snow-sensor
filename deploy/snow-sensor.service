@@ -1,0 +1,20 @@
+[Unit]
+Description=Snow Sensor Node
+After=network-online.target
+Wants=network-online.target
+After=snow-firstboot.service
+Wants=snow-firstboot.service
+ConditionPathExists=/var/lib/snow-sensor/provisioned
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/home/pi/davies-snow-sensor
+ExecStart=/home/pi/davies-snow-sensor/venv/bin/python -m src.sensor.main --config /home/pi/davies-snow-sensor/config/station_01.yaml
+Restart=on-failure
+RestartSec=30
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Install]
+WantedBy=multi-user.target

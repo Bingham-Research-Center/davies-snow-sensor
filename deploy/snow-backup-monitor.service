@@ -1,0 +1,8 @@
+[Unit]
+Description=Snow Sensor Backup Mount Health Check
+After=local-fs.target
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/bin/bash -lc 'if mountpoint -q /mnt/snow_backup && test -w /mnt/snow_backup; then logger -t snow-backup-monitor "backup mount healthy at /mnt/snow_backup"; else logger -p user.warning -t snow-backup-monitor "backup mount missing or not writable at /mnt/snow_backup"; fi'

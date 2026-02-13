@@ -9,7 +9,7 @@
 # Do not use LoRa/OLED pins for sensors: GPIO2,3,7,8,9,10,11,25
 
 # Station Identification
-station_id: "STN_01"  # Unique identifier for this station
+station_id: "STN_XX"  # Unique identifier for this station (must be changed per Pi)
 
 # Location (WGS84 coordinates)
 latitude: 0.0         # Decimal degrees
@@ -40,8 +40,11 @@ base_station_address: 0     # Address of the base station
 station_address: 1          # This station's address (unique per station)
 
 # Local Storage Configuration
-local_storage_path: "/home/pi/snow_data"  # Path for local CSV backup
-max_local_files: 30                        # Days of local data to keep
+primary_storage_path: "/home/pi/snow_data"         # Primary local storage on SD card
+backup_storage_path: "/mnt/snow_backup/snow_data"  # Optional SSD mirror location
+backup_sync_mode: "immediate"                      # Mirror writes after each reading
+backup_required: false                             # false = continue on SD if SSD is unavailable
+max_local_files: 30                                # Days of local data to keep
 
 # Optional Metadata
 install_date: "2024-01-01"  # Installation date

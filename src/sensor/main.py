@@ -61,9 +61,12 @@ class SensorStation:
         )
 
         self.storage = LocalStorage(
-            storage_path=config.local_storage_path,
+            primary_storage_path=config.primary_storage_path,
             station_id=config.station_id,
-            max_files=config.max_local_files
+            max_files=config.max_local_files,
+            backup_storage_path=config.backup_storage_path,
+            backup_sync_mode=config.backup_sync_mode,
+            backup_required=config.backup_required,
         )
 
         self.display: Optional[OLEDDisplay] = None
@@ -130,6 +133,9 @@ class SensorStation:
                 self.display.show_error("Storage fail")
             return False
         LOGGER.info("Local storage: OK")
+        backup_health = self.storage.get_backup_health()
+        if backup_health["configured"] and not backup_health["ready"]:
+            LOGGER.warning("Backup storage unavailable at startup: %s", backup_health["last_error"])
 
         LOGGER.info("Station initialization complete")
 
@@ -216,6 +222,10 @@ class SensorStation:
         # Always save to local storage as backup
         if not self.storage.save_reading(reading):
             LOGGER.error("CRITICAL: failed to persist reading locally")
+        else:
+            backup_health = self.storage.get_backup_health()
+            if backup_health["configured"] and not backup_health["ready"]:
+                LOGGER.warning("Backup mirror unavailable: %s", backup_health["last_error"])
 
         # Update OLED display
         if self.display:

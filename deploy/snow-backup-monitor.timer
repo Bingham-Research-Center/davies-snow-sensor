@@ -1,0 +1,11 @@
+[Unit]
+Description=Periodic backup mount health checks for snow sensor node
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+Persistent=true
+Unit=snow-backup-monitor.service
+
+[Install]
+WantedBy=timers.target

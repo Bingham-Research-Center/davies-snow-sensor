@@ -45,7 +45,10 @@ class StationConfig:
     station_address: int
 
     # Storage settings
-    local_storage_path: str
+    primary_storage_path: str
+    backup_storage_path: Optional[str]
+    backup_sync_mode: str
+    backup_required: bool
     max_local_files: int
 
     # Optional metadata
@@ -62,7 +65,10 @@ _DEFAULTS: dict[str, Any] = {
     "lora_bandwidth": 125000,
     "base_station_address": 0,
     "station_address": 1,
-    "local_storage_path": "/home/pi/snow_data",
+    "primary_storage_path": "/home/pi/snow_data",
+    "backup_storage_path": None,
+    "backup_sync_mode": "immediate",
+    "backup_required": False,
     "max_local_files": 30,
 }
 
@@ -79,6 +85,7 @@ _REQUIRED_FIELDS = {
 }
 
 _VALID_LORA_BANDWIDTHS = {7800, 10400, 15600, 20800, 31250, 41700, 62500, 125000, 250000, 500000}
+_PLACEHOLDER_STATION_IDS = {"STN_XX", "TEMPLATE", "CHANGE_ME"}
 
 # Pins used by the LoRa bonnet + onboard OLED on the "LoRa row" of the
 # 52Pi Easy Multiplexing Board. Avoid assigning sensors to these pins.
@@ -112,12 +119,21 @@ def load_config(config_path: str) -> StationConfig:
     merged = dict(_DEFAULTS)
     merged.update(data)
 
+    # Backward compatibility for older configs.
+    if "primary_storage_path" not in data and "local_storage_path" in data:
+        merged["primary_storage_path"] = merged["local_storage_path"]
+    merged.pop("local_storage_path", None)
+
     valid_fields = {f.name for f in fields(StationConfig)}
     unknown = sorted(key for key in merged.keys() if key not in valid_fields)
     if unknown:
         raise ValueError(f"Unknown configuration fields: {', '.join(unknown)}")
 
-    merged["local_storage_path"] = str(Path(str(merged["local_storage_path"])).expanduser())
+    merged["primary_storage_path"] = str(Path(str(merged["primary_storage_path"])).expanduser())
+    if merged.get("backup_storage_path"):
+        merged["backup_storage_path"] = str(Path(str(merged["backup_storage_path"])).expanduser())
+    else:
+        merged["backup_storage_path"] = None
 
     try:
         return StationConfig(**merged)
@@ -131,12 +147,19 @@ def validate_config(config: StationConfig) -> list[str]:
 
     if not config.station_id.strip():
         errors.append("station_id cannot be empty")
+    if config.station_id.strip().upper() in _PLACEHOLDER_STATION_IDS:
+        errors.append(
+            f"station_id '{config.station_id}' is a placeholder. "
+            "Set a unique station ID before deployment."
+        )
 
     # Validate coordinates
     if not -90 <= config.latitude <= 90:
         errors.append(f"Invalid latitude: {config.latitude}")
     if not -180 <= config.longitude <= 180:
         errors.append(f"Invalid longitude: {config.longitude}")
+    if config.latitude == 0.0 and config.longitude == 0.0:
+        errors.append("latitude/longitude are still defaults (0.0, 0.0); set real station coordinates")
 
     # Validate GPIO pins (BCM numbering, valid range 2-27)
     valid_gpio = range(2, 28)
@@ -196,5 +219,13 @@ def validate_config(config: StationConfig) -> list[str]:
         errors.append(f"ground_height_mm {config.ground_height_mm} seems unreasonable (expected 500-5000)")
     if config.max_local_files < 1:
         errors.append(f"max_local_files must be >= 1, got {config.max_local_files}")
+    if config.backup_sync_mode not in {"immediate"}:
+        errors.append(
+            f"backup_sync_mode must be 'immediate', got {config.backup_sync_mode}"
+        )
+    if not str(config.primary_storage_path).strip():
+        errors.append("primary_storage_path cannot be empty")
+    if config.backup_storage_path is not None and not str(config.backup_storage_path).strip():
+        errors.append("backup_storage_path cannot be blank when provided")
 
     return errors
