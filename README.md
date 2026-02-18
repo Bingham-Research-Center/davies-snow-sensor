@@ -74,7 +74,13 @@ If you are bringing up a **cloned Pi**, install/enable services and let first-bo
 
 Enable the hardware interfaces needed by the LoRa bonnet (SPI), OLED display (I2C), and DS18B20 temperature sensor (1-Wire).
 
-Add or uncomment these lines in `/boot/firmware/config.txt`:
+Run the interface setup script (checks and adds any missing lines to `/boot/firmware/config.txt`):
+
+```bash
+sudo ./scripts/enable_interfaces.sh
+```
+
+Or add/uncomment these lines manually in `/boot/firmware/config.txt`:
 
 ```
 dtparam=spi=on

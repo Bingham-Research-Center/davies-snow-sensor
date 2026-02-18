@@ -82,6 +82,51 @@ def ask_yes_no(prompt: str) -> bool:
         print("Please enter 'y' or 'n'")
 
 
+def check_interfaces() -> dict:
+    """Check that SPI, I2C, and 1-Wire interfaces are enabled.
+
+    Returns a dict mapping interface name to (ok, detail) tuples.
+    """
+    import glob as globmod
+
+    results = {}
+
+    # SPI — required for LoRa radio
+    spi_devs = globmod.glob("/dev/spidev*")
+    results["SPI"] = (bool(spi_devs), ", ".join(spi_devs) if spi_devs else "no /dev/spidev* devices")
+
+    # I2C — required for OLED display
+    i2c_ok = Path("/dev/i2c-1").exists()
+    results["I2C"] = (i2c_ok, "/dev/i2c-1" if i2c_ok else "no /dev/i2c-1 device")
+
+    # 1-Wire — required for DS18B20 temperature sensor
+    w1_devs = globmod.glob("/sys/bus/w1/devices/28-*")
+    results["1-Wire"] = (bool(w1_devs), w1_devs[0] if w1_devs else "no /sys/bus/w1/devices/28-* found")
+
+    return results
+
+
+def print_interface_check() -> bool:
+    """Print interface status and return True if all are active."""
+    print_header("INTERFACE PRE-CHECK")
+    results = check_interfaces()
+    all_ok = True
+    for name, (ok, detail) in results.items():
+        if ok:
+            print_pass(f"{name}: {detail}")
+        else:
+            print_fail(f"{name}: {detail}")
+            all_ok = False
+
+    if not all_ok:
+        print()
+        print_warn("Some hardware interfaces are not active.")
+        print_info("Run: sudo ./scripts/enable_interfaces.sh")
+        print_info("Then: sudo reboot")
+        print()
+    return all_ok
+
+
 class HardwareTestRunner:
     """Runs interactive hardware tests for snow sensor components."""
 
@@ -448,6 +493,8 @@ class HardwareTestRunner:
         Returns:
             Dictionary of test results
         """
+        print_interface_check()
+
         print_header("RUNNING COMPLETE TEST SUITE")
 
         print("[1/3] Testing Ultrasonic Sensor...")
@@ -494,6 +541,8 @@ class HardwareTestRunner:
 
     def show_menu(self) -> None:
         """Display interactive menu and handle user selection."""
+        print_interface_check()
+
         while True:
             print_header("SNOW SENSOR HARDWARE TEST SUITE")
 

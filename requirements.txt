@@ -1,9 +1,14 @@
 # Raspberry Pi GPIO and hardware
 RPi.GPIO>=0.7.1
+gpiozero>=2.0
 
 # Adafruit LoRa
 adafruit-blinka>=8.0.0
 adafruit-circuitpython-rfm9x>=2.0.0
+
+# Adafruit OLED Display
+adafruit-circuitpython-ssd1306>=2.12.0
+Pillow>=10.0.0
 
 # Configuration
 PyYAML>=6.0
