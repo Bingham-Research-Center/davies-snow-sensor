@@ -115,7 +115,7 @@ cd davies-snow-sensor
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
-pip install gpiozero adafruit-circuitpython-ssd1306
+pip install gpiozero adafruit-blinka adafruit-circuitpython-rfm9x adafruit-circuitpython-ssd1306
 ```
 
 ## Station Configuration
@@ -184,6 +184,7 @@ Individual component tests:
 sudo venv/bin/python scripts/test_hardware.py -u   # Ultrasonic only
 sudo venv/bin/python scripts/test_hardware.py -t   # Temperature only
 sudo venv/bin/python scripts/test_hardware.py -o   # OLED only
+sudo venv/bin/python scripts/test_hardware.py -l   # LoRa radio only
 ```
 
 To use your station config for pin assignments:
