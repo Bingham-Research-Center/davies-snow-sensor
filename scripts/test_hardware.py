@@ -2,7 +2,7 @@
 """
 Interactive hardware test script for snow sensor station.
 
-Tests ultrasonic sensor, temperature sensor, and OLED display
+Tests ultrasonic sensor, temperature sensor, OLED display, and LoRa radio
 with live feedback and user verification.
 
 Usage:
@@ -11,6 +11,7 @@ Usage:
     python scripts/test_hardware.py -u        # Ultrasonic only
     python scripts/test_hardware.py -t        # Temperature only
     python scripts/test_hardware.py -o        # OLED only
+    python scripts/test_hardware.py -l        # LoRa radio only
 """
 
 import argparse
@@ -486,6 +487,152 @@ class HardwareTestRunner:
                 except Exception:
                     pass
 
+    def test_lora(self) -> bool:
+        """
+        Test the RFM95W LoRa radio on the Adafruit LoRa Radio Bonnet.
+
+        Returns:
+            True if test passed, False otherwise
+        """
+        print_header("LORA RADIO TEST")
+
+        print("Hardware: RFM95W (SX1276) on Adafruit LoRa Radio Bonnet")
+        print("SPI Pins: MOSI=GPIO10, MISO=GPIO9, SCK=GPIO11")
+        print("CS=CE1 (GPIO7), RESET=GPIO25")
+        print()
+
+        # Try to import the transmitter module
+        try:
+            from src.sensor.lora_transmit import LoRaTransmitter
+        except ImportError as e:
+            print_fail(f"Could not import LoRaTransmitter: {e}")
+            print_info("Run: pip install -r requirements.txt")
+            return False
+
+        transmitter = None
+        try:
+            # Sub-test 1: Initialization
+            print_subheader("Sub-test 1: Initialization")
+            print_info("Creating LoRaTransmitter (915.0 MHz, SF7, 23 dBm)...")
+            transmitter = LoRaTransmitter(
+                frequency_mhz=915.0,
+                spreading_factor=7,
+                tx_power=23,
+            )
+            if not transmitter.initialize():
+                print_fail("LoRa initialization failed")
+                print()
+                print("Troubleshooting steps:")
+                print("  1. Check that the LoRa Radio Bonnet is seated properly")
+                print("  2. Enable SPI: sudo raspi-config -> Interface Options -> SPI")
+                print("  3. Verify SPI devices: ls /dev/spidev*")
+                print("  4. Check for pin conflicts with other HATs/overlays")
+                self.results['lora'] = 'FAIL'
+                return False
+            print_pass("LoRa radio initialized successfully")
+
+            rfm = transmitter._rfm9x
+
+            # Sub-test 2: Version register
+            print_subheader("Sub-test 2: Version Register")
+            print_info("Reading SX1276 version register (0x42)...")
+            version = rfm._read_u8(0x42)
+            print_info(f"Register 0x42 = 0x{version:02X}")
+            if version == 0x12:
+                print_pass("Chip ID 0x12 confirmed — SX1276 detected")
+            else:
+                print_fail(f"Expected chip ID 0x12, got 0x{version:02X}")
+                self.results['lora'] = 'FAIL'
+                return False
+
+            # Sub-test 3: Config readback
+            print_subheader("Sub-test 3: Configuration Readback")
+            freq = rfm.frequency_mhz
+            sf = rfm.spreading_factor
+            bw = rfm.signal_bandwidth
+            pwr = rfm.tx_power
+            print(f"  Frequency:        {freq} MHz")
+            print(f"  Spreading factor: SF{sf}")
+            print(f"  Bandwidth:        {bw} Hz")
+            print(f"  TX power:         {pwr} dBm")
+
+            config_ok = True
+            if abs(freq - 915.0) > 0.1:
+                print_fail(f"Frequency mismatch: expected 915.0, got {freq}")
+                config_ok = False
+            if sf != 7:
+                print_fail(f"Spreading factor mismatch: expected 7, got {sf}")
+                config_ok = False
+            if bw != 125000:
+                print_fail(f"Bandwidth mismatch: expected 125000, got {bw}")
+                config_ok = False
+            if pwr < 20:
+                print_fail(f"TX power too low: expected >=20, got {pwr}")
+                config_ok = False
+
+            if config_ok:
+                print_pass("All radio parameters match expected values")
+            else:
+                self.results['lora'] = 'FAIL'
+                return False
+
+            # Sub-test 4: RSSI noise floor
+            print_subheader("Sub-test 4: RSSI Noise Floor")
+            print_info("Switching to listen mode for 100ms...")
+            rfm.listen()
+            time.sleep(0.1)
+            wideband_rssi_raw = rfm._read_u8(0x1B)
+            rfm.idle()
+            noise_floor_dbm = wideband_rssi_raw - 164  # offset for 915 MHz (HF mode)
+            print(f"  Wideband RSSI register (0x1B): {wideband_rssi_raw}")
+            print(f"  Noise floor: {noise_floor_dbm} dBm")
+            if -140 <= noise_floor_dbm <= -50:
+                print_pass(f"Noise floor {noise_floor_dbm} dBm is within expected range")
+            else:
+                print_warn(f"Noise floor {noise_floor_dbm} dBm is outside typical range (-140 to -50)")
+
+            # Sub-test 5: Trial transmit (opt-in)
+            print_subheader("Sub-test 5: Trial Transmit")
+            print_warn("WARNING: Transmitting without an antenna can damage the radio PA.")
+            if ask_yes_no("Send a test packet? (Ensure antenna is connected)"):
+                print_info("Sending test packet...")
+                tx_ok = rfm.send(bytes("LORA_HW_TEST", "utf-8"))
+                if tx_ok:
+                    print_pass("TX_DONE received — packet sent successfully")
+                else:
+                    print_fail("Transmit timed out — TX_DONE not received")
+                    self.results['lora'] = 'FAIL'
+                    return False
+            else:
+                print_info("Transmit test skipped by user")
+
+            print()
+            print_pass("All LoRa radio tests passed")
+            self.results['lora'] = 'PASS'
+            return True
+
+        except RuntimeError as e:
+            if "SPI" in str(e) or "spi" in str(e):
+                print_fail(f"SPI communication error: {e}")
+                print_info("Check that SPI is enabled: ls /dev/spidev*")
+            else:
+                print_fail(f"Hardware error: {e}")
+            self.results['lora'] = 'FAIL'
+            return False
+
+        except Exception as e:
+            print_fail(f"Unexpected error: {e}")
+            self.results['lora'] = 'FAIL'
+            return False
+
+        finally:
+            if transmitter is not None:
+                try:
+                    transmitter.cleanup()
+                    print_info("LoRa radio cleaned up")
+                except Exception:
+                    pass
+
     def run_all_tests(self) -> dict:
         """
         Run all hardware tests in sequence.
@@ -497,16 +644,20 @@ class HardwareTestRunner:
 
         print_header("RUNNING COMPLETE TEST SUITE")
 
-        print("[1/3] Testing Ultrasonic Sensor...")
+        print("[1/4] Testing Ultrasonic Sensor...")
         self.test_ultrasonic()
         wait_for_enter()
 
-        print("[2/3] Testing Temperature Sensor...")
+        print("[2/4] Testing Temperature Sensor...")
         self.test_temperature()
         wait_for_enter()
 
-        print("[3/3] Testing OLED Display...")
+        print("[3/4] Testing OLED Display...")
         self.test_oled()
+        wait_for_enter()
+
+        print("[4/4] Testing LoRa Radio...")
+        self.test_lora()
 
         # Print summary
         self.print_summary()
@@ -550,7 +701,8 @@ class HardwareTestRunner:
             print("  [1] Ultrasonic Distance Sensor")
             print("  [2] Temperature Sensor (DS18B20)")
             print("  [3] OLED Display")
-            print("  [4] Run All Tests")
+            print("  [4] LoRa Radio (RFM95W)")
+            print("  [5] Run All Tests")
             print("  [Q] Quit")
             print()
 
@@ -566,6 +718,9 @@ class HardwareTestRunner:
                 self.test_oled()
                 wait_for_enter()
             elif choice == '4':
+                self.test_lora()
+                wait_for_enter()
+            elif choice == '5':
                 self.run_all_tests()
                 wait_for_enter()
             elif choice == 'q':
@@ -586,6 +741,7 @@ Examples:
   python scripts/test_hardware.py -u        # Test ultrasonic only
   python scripts/test_hardware.py -t        # Test temperature only
   python scripts/test_hardware.py -o        # Test OLED only
+  python scripts/test_hardware.py -l        # Test LoRa radio only
   python scripts/test_hardware.py --all --config config/station_01.yaml
         """
     )
@@ -603,6 +759,11 @@ Examples:
         '--oled', '-o',
         action='store_true',
         help='Run only OLED display test'
+    )
+    parser.add_argument(
+        '--lora', '-l',
+        action='store_true',
+        help='Run only LoRa radio test'
     )
     parser.add_argument(
         '--all', '-a',
@@ -653,6 +814,8 @@ Examples:
         runner.test_temperature()
     elif args.oled:
         runner.test_oled()
+    elif args.lora:
+        runner.test_lora()
     elif args.all:
         runner.run_all_tests()
     else:

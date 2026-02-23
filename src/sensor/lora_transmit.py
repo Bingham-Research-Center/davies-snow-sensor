@@ -69,12 +69,13 @@ class LoRaTransmitter:
             self._cs = digitalio.DigitalInOut(board.CE1)
             self._reset = digitalio.DigitalInOut(board.D25)
 
-            # Initialize the RFM95W
+            # Initialize the RFM95W (high_power=True enables PA_BOOST for up to 23 dBm)
             self._rfm9x = adafruit_rfm9x.RFM9x(
                 self._spi,
                 self._cs,
                 self._reset,
-                self.frequency_mhz
+                self.frequency_mhz,
+                high_power=True,
             )
 
             # Configure radio parameters
