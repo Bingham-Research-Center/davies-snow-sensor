@@ -20,6 +20,9 @@ class LocalStorage:
         "sensor_temp_c",
         "battery_voltage",
         "signal_quality",
+        "sensor_failure_reason",
+        "temp_read_ms",
+        "ultrasonic_read_ms",
         "transmission_status",
     ]
 

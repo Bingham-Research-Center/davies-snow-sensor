@@ -36,6 +36,10 @@ class StationConfig:
     # Measurement settings
     measurement_interval_seconds: int
     samples_per_reading: int
+    temp_read_timeout_ms: int
+    ultrasonic_read_timeout_ms: int
+    sensor_warmup_ms: int
+    max_consecutive_sensor_failures: int
 
     # LoRa configuration
     lora_frequency: float  # MHz
@@ -61,6 +65,10 @@ _DEFAULTS: dict[str, Any] = {
     "temp_sensor_pin": 4,
     "oled_enabled": True,
     "samples_per_reading": 5,
+    "temp_read_timeout_ms": 800,
+    "ultrasonic_read_timeout_ms": 1200,
+    "sensor_warmup_ms": 500,
+    "max_consecutive_sensor_failures": 5,
     "lora_spreading_factor": 7,
     "lora_bandwidth": 125000,
     "base_station_address": 0,
@@ -213,6 +221,20 @@ def validate_config(config: StationConfig) -> list[str]:
         errors.append("measurement_interval_seconds should be at least 60")
     if not 1 <= config.samples_per_reading <= 20:
         errors.append(f"samples_per_reading should be 1-20, got {config.samples_per_reading}")
+    if not 100 <= config.temp_read_timeout_ms <= 10000:
+        errors.append(f"temp_read_timeout_ms should be 100-10000, got {config.temp_read_timeout_ms}")
+    if not 100 <= config.ultrasonic_read_timeout_ms <= 10000:
+        errors.append(
+            "ultrasonic_read_timeout_ms should be 100-10000, "
+            f"got {config.ultrasonic_read_timeout_ms}"
+        )
+    if not 0 <= config.sensor_warmup_ms <= 10000:
+        errors.append(f"sensor_warmup_ms should be 0-10000, got {config.sensor_warmup_ms}")
+    if not 1 <= config.max_consecutive_sensor_failures <= 100:
+        errors.append(
+            "max_consecutive_sensor_failures should be 1-100, "
+            f"got {config.max_consecutive_sensor_failures}"
+        )
 
     # Validate ground height and storage settings
     if not 500 <= config.ground_height_mm <= 5000:

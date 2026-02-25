@@ -29,6 +29,10 @@ primary_storage_path: ~/snow_data
 
     config = load_config(str(config_path))
     assert config.samples_per_reading == 5
+    assert config.temp_read_timeout_ms == 800
+    assert config.ultrasonic_read_timeout_ms == 1200
+    assert config.sensor_warmup_ms == 500
+    assert config.max_consecutive_sensor_failures == 5
     assert config.oled_enabled is True
     assert config.temp_sensor_enabled is True
     assert config.primary_storage_path == str(Path("~/snow_data").expanduser())
@@ -158,3 +162,32 @@ temp_sensor_pin: 3
     errors = validate_config(config)
     assert any("trigger_pin 7 conflicts" in error for error in errors)
     assert any("temp_sensor_pin 3 conflicts" in error for error in errors)
+
+
+def test_validate_config_rejects_invalid_sensor_timeouts(tmp_path: Path) -> None:
+    config_path = tmp_path / "bad_timeouts.yaml"
+    _write_config(
+        config_path,
+        """
+station_id: STN_08
+latitude: 45.1
+longitude: -111.2
+elevation_m: 1200
+ground_height_mm: 2000
+trigger_pin: 23
+echo_pin: 24
+measurement_interval_seconds: 900
+lora_frequency: 915.0
+temp_read_timeout_ms: 50
+ultrasonic_read_timeout_ms: 20000
+sensor_warmup_ms: -1
+max_consecutive_sensor_failures: 0
+""".strip(),
+    )
+
+    config = load_config(str(config_path))
+    errors = validate_config(config)
+    assert any("temp_read_timeout_ms" in error for error in errors)
+    assert any("ultrasonic_read_timeout_ms" in error for error in errors)
+    assert any("sensor_warmup_ms" in error for error in errors)
+    assert any("max_consecutive_sensor_failures" in error for error in errors)

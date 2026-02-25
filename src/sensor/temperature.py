@@ -22,17 +22,21 @@ class TemperatureSensor:
     # DS18B20 devices start with '28-'
     W1_DEVICE_PREFIX = '28-'
 
-    def __init__(self, gpio_pin: int = 4):
+    def __init__(self, gpio_pin: int = 4, read_timeout_ms: int = 800):
         """
         Initialize the temperature sensor.
 
         Args:
             gpio_pin: GPIO pin for 1-Wire data (default 4).
                       Note: The pin must be configured in /boot/config.txt
+            read_timeout_ms: Max wall time per read attempt cycle.
         """
         self.gpio_pin = gpio_pin
+        self.read_timeout_s = max(read_timeout_ms, 1) / 1000.0
         self._device_path: Optional[str] = None
         self._initialized = False
+        self._last_error_reason: Optional[str] = None
+        self._last_read_duration_ms: int = 0
 
     def initialize(self) -> bool:
         """
@@ -71,33 +75,58 @@ class TemperatureSensor:
         Returns:
             Temperature in Celsius, or None if reading failed
         """
+        start = time.monotonic()
+        self._last_error_reason = None
+        self._last_read_duration_ms = 0
         if not self._initialized or not self._device_path:
+            self._last_error_reason = "temp_not_initialized"
+            self._last_read_duration_ms = round((time.monotonic() - start) * 1000)
             return None
 
+        deadline = start + self.read_timeout_s
+        retries = 3
+
         # DS18B20 can occasionally return invalid CRC on first read.
-        for _ in range(3):
+        for attempt in range(retries):
             try:
                 with open(self._device_path, 'r', encoding='utf-8') as f:
                     lines = f.readlines()
 
                 if len(lines) < 2:
-                    time.sleep(0.1)
-                    continue
-                if 'YES' not in lines[0]:
-                    time.sleep(0.1)
-                    continue
+                    self._last_error_reason = "temp_short_read"
+                elif 'YES' not in lines[0]:
+                    self._last_error_reason = "temp_crc"
+                else:
+                    equals_pos = lines[1].find('t=')
+                    if equals_pos == -1:
+                        self._last_error_reason = "temp_format"
+                    else:
+                        temp_string = lines[1][equals_pos + 2:]
+                        temp_millidegrees = int(temp_string)
+                        self._last_read_duration_ms = round((time.monotonic() - start) * 1000)
+                        return temp_millidegrees / 1000.0
 
-                equals_pos = lines[1].find('t=')
-                if equals_pos == -1:
-                    time.sleep(0.1)
-                    continue
-
-                temp_string = lines[1][equals_pos + 2:]
-                temp_millidegrees = int(temp_string)
-                return temp_millidegrees / 1000.0
-            except (OSError, ValueError) as e:
-                print(f"Error reading temperature: {e}")
+                if self._last_error_reason is None:
+                    self._last_error_reason = "temp_unavailable"
+            except OSError:
+                self._last_error_reason = "temp_io_error"
+                self._last_read_duration_ms = round((time.monotonic() - start) * 1000)
                 return None
+            except ValueError:
+                self._last_error_reason = "temp_parse"
+                self._last_read_duration_ms = round((time.monotonic() - start) * 1000)
+                return None
+
+            if time.monotonic() >= deadline or attempt == retries - 1:
+                break
+            time.sleep(min(0.1, max(0.0, deadline - time.monotonic())))
+
+        elapsed_ms = round((time.monotonic() - start) * 1000)
+        self._last_read_duration_ms = elapsed_ms
+        if self._last_error_reason is None and elapsed_ms >= round(self.read_timeout_s * 1000):
+            self._last_error_reason = "temp_timeout"
+        if self._last_error_reason is None:
+            self._last_error_reason = "temp_unavailable"
         return None
 
     def read_temperature_f(self) -> Optional[float]:
@@ -135,3 +164,13 @@ class TemperatureSensor:
         """Release resources (no-op for 1-Wire, but included for consistency)."""
         self._initialized = False
         self._device_path = None
+        self._last_error_reason = None
+        self._last_read_duration_ms = 0
+
+    def get_last_error_reason(self) -> Optional[str]:
+        """Return the reason code from the most recent read failure."""
+        return self._last_error_reason
+
+    def get_last_read_duration_ms(self) -> int:
+        """Return wall-time duration of the most recent read call."""
+        return self._last_read_duration_ms

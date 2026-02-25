@@ -31,6 +31,10 @@ oled_enabled: true  # Enable OLED status display
 # Measurement Settings
 measurement_interval_seconds: 900  # 15 minutes = 900 seconds
 samples_per_reading: 5             # Number of readings to average
+temp_read_timeout_ms: 800          # DS18B20 read budget per cycle
+ultrasonic_read_timeout_ms: 1200   # HC-SR04 read budget per cycle
+sensor_warmup_ms: 500              # Delay after ultrasonic init
+max_consecutive_sensor_failures: 5 # Escalate warning threshold
 
 # LoRa Configuration
 lora_frequency: 915.0       # MHz (915.0 for US ISM band)
