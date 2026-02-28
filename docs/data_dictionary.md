@@ -7,28 +7,28 @@ This document describes the data formats and fields used throughout the snow dep
 ### File Format
 - Format: CSV
 - Encoding: UTF-8
-- File naming: `{station_id}_{YYYY-MM-DD}.csv`
-- Location: `data/raw/`
+- File naming: `snow_data.csv`
+- Location: mounted SSD path from config (`storage.ssd_mount_path`)
 
 ### Fields
 
 | Field | Type | Unit | Description |
 |-------|------|------|-------------|
 | `timestamp` | ISO 8601 | UTC | Measurement timestamp (e.g., `2024-01-15T14:30:00Z`) |
-| `station_id` | string | - | Unique station identifier (e.g., `STN_01`) |
-| `raw_distance_mm` | integer | mm | Raw ultrasonic sensor reading (distance to surface) |
-| `snow_depth_mm` | integer | mm | Calculated snow depth (ground_height - raw_distance) |
-| `sensor_temp_c` | float | °C | Sensor/enclosure temperature (if available) |
-| `battery_voltage` | float | V | Station battery voltage |
-| `signal_quality` | integer | - | LoRa signal quality indicator (0-100) |
-| `transmission_status` | string | - | `success`, `retry`, `local_only` |
+| `station_id` | string | - | Unique station identifier (e.g., `DAVIES-01`) |
+| `snow_depth_cm` | float | cm | Calculated snow depth (`sensor_height_cm - distance_raw_cm`) |
+| `distance_raw_cm` | float | cm | Raw/filtered ultrasonic distance to snow surface |
+| `temperature_c` | float | °C | DS18B20 ambient temperature (blank on failure) |
+| `sensor_height_cm` | float | cm | Installed sensor-to-bare-ground height |
+| `lora_tx_success` | boolean | - | `True` when ACK was received, else `False` |
+| `error_flags` | string | - | Pipe-delimited cycle errors (empty when none) |
 
 ### Example
 
 ```csv
-timestamp,station_id,raw_distance_mm,snow_depth_mm,sensor_temp_c,battery_voltage,signal_quality,transmission_status
-2024-01-15T14:30:00Z,STN_01,1850,150,−5.2,12.4,85,success
-2024-01-15T14:45:00Z,STN_01,1845,155,−5.1,12.4,82,success
+timestamp,station_id,snow_depth_cm,distance_raw_cm,temperature_c,sensor_height_cm,lora_tx_success,error_flags
+2026-01-15T14:30:00Z,DAVIES-01,45.2,154.8,-12.3,200.0,True,
+2026-01-15T14:45:00Z,DAVIES-01,,155.1,,200.0,False,temp_unavailable|lora_ack_timeout
 ```
 
 ## Processed Data
@@ -56,14 +56,12 @@ timestamp,station_id,raw_distance_mm,snow_depth_mm,sensor_temp_c,battery_voltage
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `station_id` | string | Unique identifier |
-| `latitude` | float | Decimal degrees (WGS84) |
-| `longitude` | float | Decimal degrees (WGS84) |
-| `elevation_m` | float | Elevation in meters |
-| `ground_height_mm` | integer | Distance from sensor to bare ground |
-| `install_date` | date | Installation date |
-| `sensor_model` | string | Ultrasonic sensor model |
-| `notes` | string | Installation notes |
+| `station.id` | string | Unique identifier |
+| `station.sensor_height_cm` | float | Distance from sensor to bare ground |
+| `pins.*` | integers | GPIO/SPI pin assignments |
+| `lora.*` | mixed | LoRa frequency/power/timeout settings |
+| `storage.*` | strings | SSD mount path and CSV filename |
+| `timing.*` | mixed | Cycle interval, stabilization, sampling count |
 
 ## Bingham Reference Data
 
@@ -110,7 +108,6 @@ timestamp,station_id,raw_distance_mm,snow_depth_mm,sensor_temp_c,battery_voltage
 ## Units Convention
 
 All measurements use SI units:
-- Distance/depth: millimeters (mm)
+- Distance/depth: centimeters (cm)
 - Temperature: Celsius (°C)
-- Voltage: Volts (V)
 - Time: UTC in ISO 8601 format

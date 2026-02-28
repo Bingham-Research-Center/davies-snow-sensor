@@ -55,8 +55,8 @@ For 52Pi Easy Multiplexing Board row-by-row wiring, see:
 If you are preparing the **reference Pi** right now, use this sequence:
 
 1. Install dependencies and hardware interface settings (SPI/I2C/1-Wire).
-2. Set real station values in `config/station_01.yaml` (`station_id`, `latitude`, `longitude`).
-3. Mount SSD at `/mnt/snow_backup` and create `/mnt/snow_backup/snow_data`.
+2. Set real station values in `config/station_01.yaml` (`station.id`, `station.sensor_height_cm`).
+3. Mount SSD at `/mnt/ssd`.
 4. Run hardware tests:
 ```bash
 cd /home/pi/davies-snow-sensor
@@ -72,7 +72,7 @@ If you are bringing up a **cloned Pi**, install/enable services and let first-bo
 
 ## Raspberry Pi Setup
 
-Enable the hardware interfaces needed by the LoRa bonnet (SPI), OLED display (I2C), and DS18B20 temperature sensor (1-Wire).
+Enable the hardware interfaces needed by the LoRa bonnet (SPI) and DS18B20 temperature sensor (1-Wire).
 
 Run the interface setup script (checks and adds any missing lines to `/boot/firmware/config.txt`):
 
@@ -84,7 +84,6 @@ Or add/uncomment these lines manually in `/boot/firmware/config.txt`:
 
 ```
 dtparam=spi=on
-dtparam=i2c_arm=on
 dtoverlay=w1-gpio,gpiopin=4
 ```
 
@@ -92,7 +91,7 @@ Install required system packages:
 
 ```bash
 sudo apt update
-sudo apt install python3-venv python3-dev libgpiod-dev i2c-tools
+sudo apt install python3-venv python3-dev libgpiod-dev
 ```
 
 Reboot to activate the interface changes:
@@ -101,10 +100,9 @@ Reboot to activate the interface changes:
 sudo reboot
 ```
 
-After reboot, verify I2C is working (the OLED on the LoRa bonnet should appear at address `0x3C`):
-
+After reboot, verify 1-Wire is active:
 ```bash
-i2cdetect -y 1
+ls /sys/bus/w1/devices/28-*
 ```
 
 ## Installation
@@ -115,7 +113,7 @@ cd davies-snow-sensor
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
-pip install gpiozero adafruit-blinka adafruit-circuitpython-rfm9x adafruit-circuitpython-ssd1306
+pip install gpiozero adafruit-blinka adafruit-circuitpython-rfm9x
 ```
 
 ## Station Configuration
@@ -133,40 +131,37 @@ Key fields to set in `config/station_01.yaml`:
 
 | Field | Description | Default |
 |-------|-------------|---------|
-| `station_id` | Unique station identifier | `STN_XX` |
-| `latitude` / `longitude` | WGS84 coordinates of the station | `0.0` |
-| `ground_height_mm` | Sensor-to-bare-ground distance in mm | `2000` |
-| `primary_storage_path` | Primary write path (SD card) | `/home/pi/snow_data` |
-| `backup_storage_path` | Optional mirror path (SSD mount) | `/mnt/snow_backup/snow_data` |
-| `backup_sync_mode` | Mirror policy | `immediate` |
-| `backup_required` | If true, fail startup when backup path is unavailable | `false` |
+| `station.id` | Unique station identifier | `DAVIES-01` |
+| `station.sensor_height_cm` | Sensor-to-bare-ground distance in cm | `200.0` |
+| `pins.hcsr04_trigger` / `pins.hcsr04_echo` | HC-SR04 pins | `23 / 24` |
+| `pins.hcsr04_power` / `pins.ds18b20_power` | Sensor power-control pins | `27 / 17` |
+| `storage.ssd_mount_path` | SSD mount root | `/mnt/ssd` |
+| `storage.csv_filename` | CSV file written each cycle | `snow_data.csv` |
+| `timing.cycle_interval_minutes` | Timer interval | `15` |
 
 Pin assignments and LoRa settings have sensible defaults; see the template comments for details.
 
-Legacy `local_storage_path` is still accepted and mapped to `primary_storage_path`.
-
-`station_id` placeholders like `STN_XX` and default coordinates `0.0/0.0` are rejected at startup.
+Legacy flat config keys are still accepted and mapped into the nested schema.
 
 ## SSD Backup Mount Setup (Sensor Node Pi)
 
-This repo assumes the external SSD is mounted at `/mnt/snow_backup`.
+This repo assumes the external SSD is mounted at `/mnt/ssd`.
 
 Create mountpoint and configure `/etc/fstab`:
 
 ```bash
-sudo mkdir -p /mnt/snow_backup
+sudo mkdir -p /mnt/ssd
 sudo cp deploy/fstab.example /tmp/fstab.example
 # Edit /tmp/fstab.example and replace UUID, then append to /etc/fstab
 sudo nano /etc/fstab
 sudo mount -a
-mount | grep snow_backup
+mount | grep /mnt/ssd
 ```
 
-Create the mirrored data folder and verify writable permissions:
+Set mount ownership so the runtime user can write CSV:
 
 ```bash
-sudo mkdir -p /mnt/snow_backup/snow_data
-sudo chown -R pi:pi /mnt/snow_backup/snow_data
+sudo chown -R pi:pi /mnt/ssd
 ```
 
 ## Hardware Testing
@@ -183,7 +178,6 @@ Individual component tests:
 ```bash
 sudo venv/bin/python scripts/test_hardware.py -u   # Ultrasonic only
 sudo venv/bin/python scripts/test_hardware.py -t   # Temperature only
-sudo venv/bin/python scripts/test_hardware.py -o   # OLED only
 sudo venv/bin/python scripts/test_hardware.py -l   # LoRa radio only
 ```
 
@@ -221,15 +215,13 @@ Take one reading and exit — useful for verifying the full pipeline:
 sudo venv/bin/python -m src.sensor.main --config config/station_01.yaml --test
 ```
 
-### Manual continuous mode
-
-Run in the foreground with debug logging:
+### Manual one-shot cycle
 
 ```bash
 sudo venv/bin/python -m src.sensor.main --config config/station_01.yaml --verbose
 ```
 
-Press `Ctrl+C` to stop.
+This performs exactly one cycle and exits.
 
 ### Systemd service (auto-start on boot)
 
@@ -238,26 +230,26 @@ Install service units from `deploy/`:
 ```bash
 sudo cp deploy/snow-firstboot.service /etc/systemd/system/
 sudo cp deploy/snow-sensor.service /etc/systemd/system/
+sudo cp deploy/snow-sensor.timer /etc/systemd/system/
 sudo cp deploy/snow-backup-monitor.service /etc/systemd/system/
 sudo cp deploy/snow-backup-monitor.timer /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable snow-firstboot
-sudo systemctl enable snow-sensor
+sudo systemctl enable snow-sensor.timer
 sudo systemctl start snow-firstboot
+sudo systemctl enable --now snow-sensor.timer
 sudo systemctl enable --now snow-backup-monitor.timer
 ```
 
 `snow-firstboot.service` only runs when `/var/lib/snow-sensor/provisioned` is absent.
-`snow-sensor.service` only starts when that marker exists.
+`snow-sensor.timer` schedules `snow-sensor.service` every 15 minutes once provisioned.
 
 On first boot, provisioning runs on console (`tty1`) and prompts for:
 - station ID
-- latitude / longitude / elevation
-- ground height
-- notes
+- sensor height
 
 It writes `config/station_01.yaml`, creates `/var/lib/snow-sensor/provisioned`,
-and then enables/starts `snow-sensor`.
+and then enables/starts timers.
 
 For headless provisioning, run manually over SSH:
 
@@ -274,7 +266,7 @@ sudo /home/pi/davies-snow-sensor/venv/bin/python /home/pi/davies-snow-sensor/scr
 View live logs:
 
 ```bash
-journalctl -u snow-sensor -f
+journalctl -u snow-sensor.service -f
 ```
 
 ## Running the Base Station (Separate Central Pi)
@@ -291,18 +283,19 @@ sudo venv/bin/python -m src.base_station.main --storage-path /home/pi/snow_base_
 
 | Action | Command |
 |--------|---------|
-| Enable on boot | `sudo systemctl enable snow-sensor` |
-| Start | `sudo systemctl start snow-sensor` |
-| Stop | `sudo systemctl stop snow-sensor` |
-| Restart | `sudo systemctl restart snow-sensor` |
-| Status | `sudo systemctl status snow-sensor` |
-| Follow logs | `journalctl -u snow-sensor -f` |
-| Last 50 log lines | `journalctl -u snow-sensor -n 50` |
+| Enable schedule on boot | `sudo systemctl enable snow-sensor.timer` |
+| Start schedule | `sudo systemctl start snow-sensor.timer` |
+| Stop schedule | `sudo systemctl stop snow-sensor.timer` |
+| Run one cycle now | `sudo systemctl start snow-sensor.service` |
+| Service status | `sudo systemctl status snow-sensor.service` |
+| Timer status | `sudo systemctl status snow-sensor.timer` |
+| Follow logs | `journalctl -u snow-sensor.service -f` |
+| Last 50 log lines | `journalctl -u snow-sensor.service -n 50` |
 | First-boot provision logs | `journalctl -u snow-firstboot -f` |
 | Backup monitor status | `sudo systemctl status snow-backup-monitor.timer` |
 | Backup monitor logs | `journalctl -t snow-backup-monitor -f` |
 
-The sensor service runs as root from `/home/pi/davies-snow-sensor` using the project venv. It restarts automatically on failure (after 30 s, up to 5 times per 5 minutes).
+The one-shot sensor service runs as root from `/home/pi/davies-snow-sensor` using the project venv and is scheduled by `snow-sensor.timer`.
 
 ## Golden Image Workflow
 
@@ -340,7 +333,7 @@ SOAK_SECONDS=14400 ./scripts/reference_pi_validation.sh
 
 All components connect through the [52Pi Easy Multiplexing Board](hardware/multiplexing_board_wiring.md), which mirrors the Pi GPIO header across multiple rows. Each row uses the same BCM pin numbers — the row just provides physical separation.
 
-### Row 1 — LoRa Bonnet / OLED (plug-and-play)
+### Row 1 — LoRa Bonnet (plug-and-play)
 
 Seat the Adafruit LoRa bonnet directly onto Row 1. Reserved pins (do not use for sensors): GPIO 2, 3, 7, 8, 9, 10, 11, 25.
 
@@ -372,7 +365,7 @@ ECHO ---[1kΩ]---+---[2kΩ]--- GND
 
 ### Rows 3–4 — Spare
 
-Reserved for future sensors. Do not reuse LoRa/OLED pins.
+Reserved for future sensors. Do not reuse LoRa bonnet pins.
 
 ## Further Documentation
 

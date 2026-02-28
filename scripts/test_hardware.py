@@ -2,7 +2,7 @@
 """
 Interactive hardware test script for snow sensor station.
 
-Tests ultrasonic sensor, temperature sensor, OLED display, and LoRa radio
+Tests ultrasonic sensor, temperature sensor, and LoRa radio
 with live feedback and user verification.
 
 Usage:
@@ -10,7 +10,6 @@ Usage:
     python scripts/test_hardware.py --all     # Run all tests
     python scripts/test_hardware.py -u        # Ultrasonic only
     python scripts/test_hardware.py -t        # Temperature only
-    python scripts/test_hardware.py -o        # OLED only
     python scripts/test_hardware.py -l        # LoRa radio only
 """
 
@@ -84,7 +83,7 @@ def ask_yes_no(prompt: str) -> bool:
 
 
 def check_interfaces() -> dict:
-    """Check that SPI, I2C, and 1-Wire interfaces are enabled.
+    """Check that SPI and 1-Wire interfaces are enabled.
 
     Returns a dict mapping interface name to (ok, detail) tuples.
     """
@@ -95,10 +94,6 @@ def check_interfaces() -> dict:
     # SPI — required for LoRa radio
     spi_devs = globmod.glob("/dev/spidev*")
     results["SPI"] = (bool(spi_devs), ", ".join(spi_devs) if spi_devs else "no /dev/spidev* devices")
-
-    # I2C — required for OLED display
-    i2c_ok = Path("/dev/i2c-1").exists()
-    results["I2C"] = (i2c_ok, "/dev/i2c-1" if i2c_ok else "no /dev/i2c-1 device")
 
     # 1-Wire — required for DS18B20 temperature sensor
     w1_devs = globmod.glob("/sys/bus/w1/devices/28-*")
@@ -136,14 +131,14 @@ class HardwareTestRunner:
         trigger_pin: int = 23,
         echo_pin: int = 24,
         temp_sensor_pin: int = 4,
-        ground_height_mm: int = 2000,
+        sensor_height_cm: float = 200.0,
         station_id: str = "TEST",
     ):
         self.results = {}
         self.trigger_pin = trigger_pin
         self.echo_pin = echo_pin
         self.temp_sensor_pin = temp_sensor_pin
-        self.ground_height_mm = ground_height_mm
+        self.sensor_height_cm = sensor_height_cm
         self.station_id = station_id
 
     def test_ultrasonic(self) -> bool:
@@ -175,7 +170,7 @@ class HardwareTestRunner:
             sensor = UltrasonicSensor(
                 trigger_pin=self.trigger_pin,
                 echo_pin=self.echo_pin,
-                ground_height_mm=self.ground_height_mm
+                sensor_height_cm=self.sensor_height_cm,
             )
             sensor.initialize()
             print_pass("Sensor initialized successfully")
@@ -196,12 +191,12 @@ class HardwareTestRunner:
                     break
 
                 reading_num += 1
-                distance = sensor.read_distance_mm()
+                distance = sensor.read_distance_cm()
 
                 if distance is not None:
-                    snow_depth = sensor.calculate_snow_depth(distance)
-                    print(f"   Reading {reading_num}: {distance} mm ({distance/10:.1f} cm)")
-                    print(f"   Snow depth (if ground at {self.ground_height_mm}mm): {snow_depth} mm")
+                    snow_depth = sensor.calculate_snow_depth_cm(distance)
+                    print(f"   Reading {reading_num}: {distance:.2f} cm")
+                    print(f"   Snow depth (if sensor at {self.sensor_height_cm:.1f}cm): {snow_depth:.2f} cm")
                     readings.append(distance)
                 else:
                     print_warn(f"   Reading {reading_num}: No echo received - check wiring")
@@ -210,8 +205,8 @@ class HardwareTestRunner:
             if readings:
                 print_subheader("Statistics")
                 print(f"Readings taken: {len(readings)}")
-                print(f"Range: {min(readings)} - {max(readings)} mm")
-                print(f"Average: {sum(readings)/len(readings):.0f} mm")
+                print(f"Range: {min(readings):.2f} - {max(readings):.2f} cm")
+                print(f"Average: {sum(readings)/len(readings):.2f} cm")
 
                 # Ask for user verification
                 print()
@@ -282,7 +277,7 @@ class HardwareTestRunner:
         try:
             # Initialize sensor
             print_info("Checking for DS18B20 device...")
-            sensor = TemperatureSensor(gpio_pin=self.temp_sensor_pin)
+            sensor = TemperatureSensor(data_pin=self.temp_sensor_pin)
 
             if not sensor.initialize():
                 print_fail("No DS18B20 sensor found")
@@ -296,8 +291,7 @@ class HardwareTestRunner:
                 self.results['temperature'] = 'FAIL'
                 return False
 
-            device_id = sensor.get_device_id()
-            print_pass(f"Found DS18B20 device: {device_id}")
+            print_pass("Found DS18B20 device")
 
             # Interactive reading loop
             print_subheader("Temperature Readings")
@@ -315,9 +309,9 @@ class HardwareTestRunner:
 
                 reading_num += 1
                 temp_c = sensor.read_temperature_c()
-                temp_f = sensor.read_temperature_f()
 
                 if temp_c is not None:
+                    temp_f = (temp_c * 9.0 / 5.0) + 32.0
                     print(f"   Reading {reading_num}: {temp_c:.1f}C ({temp_f:.1f}F)")
                     readings.append(temp_c)
                 else:
@@ -372,121 +366,6 @@ class HardwareTestRunner:
                 except Exception:
                     pass
 
-    def test_oled(self) -> bool:
-        """
-        Test the SSD1306 OLED display.
-
-        Returns:
-            True if test passed, False otherwise
-        """
-        print_header("OLED DISPLAY TEST")
-
-        print("Hardware: SSD1306 128x32 OLED (I2C)")
-        print("I2C Address: 0x3C")
-        print()
-        print("Prerequisites:")
-        print("  - I2C must be enabled via raspi-config")
-        print("  - Check with: i2cdetect -y 1")
-        print()
-
-        # Try to import the display module
-        try:
-            from src.sensor.oled_display import OLEDDisplay
-        except ImportError as e:
-            print_fail(f"Could not import OLEDDisplay: {e}")
-            print_info("Run: pip install -r requirements.txt")
-            return False
-
-        display = None
-        test_results = {}
-
-        try:
-            # Initialize display
-            print_info("Initializing OLED display...")
-            display = OLEDDisplay()
-
-            if not display.initialize():
-                print_fail("Failed to initialize OLED display")
-                print()
-                print("Troubleshooting steps:")
-                print("  1. Enable I2C: sudo raspi-config -> Interface Options -> I2C")
-                print("  2. Check connection: i2cdetect -y 1")
-                print("     Should show device at address 0x3C")
-                print("  3. Check wiring: SDA=GPIO2, SCL=GPIO3")
-                self.results['oled'] = 'FAIL'
-                return False
-
-            print_pass("Display initialized successfully")
-
-            # Test 1: Clear display
-            print_subheader("Test 1: Clear Display")
-            display.clear()
-            print_info("Display should be completely blank/off")
-            test_results['clear'] = ask_yes_no("Is the display cleared?")
-
-            # Test 2: Show message
-            print_subheader("Test 2: Show Message")
-            display.show_message("TEST MODE", "Hardware Check", "Line 3 Test")
-            print_info("Display should show:")
-            print('   Line 1: "TEST MODE"')
-            print('   Line 2: "Hardware Check"')
-            print('   Line 3: "Line 3 Test"')
-            test_results['message'] = ask_yes_no("Can you see all three lines?")
-
-            # Test 3: Status display
-            print_subheader("Test 3: Status Display")
-            display.update_status(
-                station_id=self.station_id[:4],
-                snow_depth_mm=150,
-                temperature_c=22.5,
-                signal_quality=75,
-                last_tx_success=True
-            )
-            print_info("Display should show status format:")
-            print('   "TEST HH:MM"')
-            print('   "Snow: 150mm"')
-            print('   "22.5C Sig:75% OK"')
-            test_results['status'] = ask_yes_no("Does it show the status format correctly?")
-
-            # Test 4: Error display
-            print_subheader("Test 4: Error Display")
-            display.show_error("Test Error")
-            print_info('Display should show "ERROR" on line 1')
-            test_results['error'] = ask_yes_no("Can you see the error display?")
-
-            # Summary
-            print_subheader("Test Results")
-            all_passed = True
-            for test_name, passed in test_results.items():
-                if passed:
-                    print_pass(f"{test_name}: PASS")
-                else:
-                    print_fail(f"{test_name}: FAIL")
-                    all_passed = False
-
-            if all_passed:
-                print_pass("All OLED tests passed")
-                self.results['oled'] = 'PASS'
-                return True
-            else:
-                print_fail("Some OLED tests failed")
-                self.results['oled'] = 'FAIL'
-                return False
-
-        except Exception as e:
-            print_fail(f"Unexpected error: {e}")
-            self.results['oled'] = 'FAIL'
-            return False
-
-        finally:
-            if display is not None:
-                try:
-                    display.clear()
-                    display.cleanup()
-                    print_info("Display cleaned up")
-                except Exception:
-                    pass
-
     def test_lora(self) -> bool:
         """
         Test the RFM95W LoRa radio on the Adafruit LoRa Radio Bonnet.
@@ -513,10 +392,9 @@ class HardwareTestRunner:
         try:
             # Sub-test 1: Initialization
             print_subheader("Sub-test 1: Initialization")
-            print_info("Creating LoRaTransmitter (915.0 MHz, SF7, 23 dBm)...")
+            print_info("Creating LoRaTransmitter (915.0 MHz, 23 dBm)...")
             transmitter = LoRaTransmitter(
                 frequency_mhz=915.0,
-                spreading_factor=7,
                 tx_power=23,
             )
             if not transmitter.initialize():
@@ -644,19 +522,15 @@ class HardwareTestRunner:
 
         print_header("RUNNING COMPLETE TEST SUITE")
 
-        print("[1/4] Testing Ultrasonic Sensor...")
+        print("[1/3] Testing Ultrasonic Sensor...")
         self.test_ultrasonic()
         wait_for_enter()
 
-        print("[2/4] Testing Temperature Sensor...")
+        print("[2/3] Testing Temperature Sensor...")
         self.test_temperature()
         wait_for_enter()
 
-        print("[3/4] Testing OLED Display...")
-        self.test_oled()
-        wait_for_enter()
-
-        print("[4/4] Testing LoRa Radio...")
+        print("[3/3] Testing LoRa Radio...")
         self.test_lora()
 
         # Print summary
@@ -700,9 +574,8 @@ class HardwareTestRunner:
             print("Select a test to run:\n")
             print("  [1] Ultrasonic Distance Sensor")
             print("  [2] Temperature Sensor (DS18B20)")
-            print("  [3] OLED Display")
-            print("  [4] LoRa Radio (RFM95W)")
-            print("  [5] Run All Tests")
+            print("  [3] LoRa Radio (RFM95W)")
+            print("  [4] Run All Tests")
             print("  [Q] Quit")
             print()
 
@@ -715,12 +588,9 @@ class HardwareTestRunner:
                 self.test_temperature()
                 wait_for_enter()
             elif choice == '3':
-                self.test_oled()
-                wait_for_enter()
-            elif choice == '4':
                 self.test_lora()
                 wait_for_enter()
-            elif choice == '5':
+            elif choice == '4':
                 self.run_all_tests()
                 wait_for_enter()
             elif choice == 'q':
@@ -740,7 +610,6 @@ Examples:
   python scripts/test_hardware.py --all     # Run all tests
   python scripts/test_hardware.py -u        # Test ultrasonic only
   python scripts/test_hardware.py -t        # Test temperature only
-  python scripts/test_hardware.py -o        # Test OLED only
   python scripts/test_hardware.py -l        # Test LoRa radio only
   python scripts/test_hardware.py --all --config config/station_01.yaml
         """
@@ -754,11 +623,6 @@ Examples:
         '--temperature', '-t',
         action='store_true',
         help='Run only temperature sensor test'
-    )
-    parser.add_argument(
-        '--oled', '-o',
-        action='store_true',
-        help='Run only OLED display test'
     )
     parser.add_argument(
         '--lora', '-l',
@@ -790,11 +654,11 @@ Examples:
                 sys.exit(1)
 
             runner_kwargs = {
-                "trigger_pin": cfg.trigger_pin,
-                "echo_pin": cfg.echo_pin,
-                "temp_sensor_pin": cfg.temp_sensor_pin,
-                "ground_height_mm": cfg.ground_height_mm,
-                "station_id": cfg.station_id,
+                "trigger_pin": cfg.pins.hcsr04_trigger,
+                "echo_pin": cfg.pins.hcsr04_echo,
+                "temp_sensor_pin": cfg.pins.ds18b20_data,
+                "sensor_height_cm": cfg.station.sensor_height_cm,
+                "station_id": cfg.station.id,
             }
             print_info(f"Loaded test pins from config: {args.config}")
             print_info(
@@ -812,8 +676,6 @@ Examples:
         runner.test_ultrasonic()
     elif args.temperature:
         runner.test_temperature()
-    elif args.oled:
-        runner.test_oled()
     elif args.lora:
         runner.test_lora()
     elif args.all:

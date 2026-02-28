@@ -16,7 +16,7 @@ Default soak is 4 hours (`14400` seconds). Increase to 8+ hours when possible.
 
 - [ ] `config/station_01.yaml` has a real station ID (not `STN_XX`).
 - [ ] `latitude` and `longitude` are real values (not `0.0, 0.0`).
-- [ ] SSD mounted at `/mnt/snow_backup`.
+- [ ] SSD mounted at `/mnt/ssd`.
 - [ ] LoRa receiver/base endpoint available for success-path checks.
 
 ## Phase Results
@@ -37,7 +37,6 @@ Notes:
 
 - [ ] Ultrasonic test passes (`test_hardware.py -u`).
 - [ ] Temperature test passes (`test_hardware.py -t`).
-- [ ] OLED test passes (`test_hardware.py -o`).
 - [ ] Combined test passes (`test_hardware.py --all`).
 
 Notes:
@@ -48,7 +47,7 @@ Notes:
 
 ### Phase 3: Soak Test
 
-- [ ] Continuous run completed for target duration.
+- [ ] Repeated one-shot cycles completed for target duration.
 - [ ] No crash loops or repeated fatal errors.
 - [ ] Measurement cadence remained stable.
 
@@ -66,10 +65,10 @@ Notes:
 
 ### Phase 4: Failure-Mode Checks
 
-- [ ] LoRa-up case records `transmission_status=success`.
-- [ ] LoRa-down case records `transmission_status=local_only`.
-- [ ] SSD-unavailable case continues SD writes and logs warning.
-- [ ] SSD-restored case resumes backup mirroring.
+- [ ] LoRa-up case records `lora_tx_success=True`.
+- [ ] LoRa-down case records `lora_tx_success=False`.
+- [ ] SSD-unavailable case logs mount/write warning and cycle continues.
+- [ ] SSD-restored case resumes writes to `/mnt/ssd/snow_data.csv`.
 
 Notes:
 
@@ -80,7 +79,8 @@ Notes:
 ### Phase 5: Services + Diagnostics
 
 - [ ] `scripts/station_diagnostics.sh` reports expected station identity.
-- [ ] `snow-sensor.service` is active.
+- [ ] `snow-sensor.timer` is active.
+- [ ] `snow-sensor.service` completes successfully when triggered.
 - [ ] `snow-backup-monitor.timer` is active.
 - [ ] Provisioning marker `/var/lib/snow-sensor/provisioned` is present.
 

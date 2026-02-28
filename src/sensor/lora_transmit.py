@@ -1,44 +1,23 @@
-"""
-LoRa transmission module for sending data to base station.
+"""LoRa transmission utilities for sensor node DATA/ACK messaging."""
 
-Uses Adafruit RFM95W module on the LoRa Radio Bonnet.
-Bonnet pinout:
-    - SPI: MOSI=GPIO10, MISO=GPIO9, SCK=GPIO11
-    - CS: CE1 (GPIO7)
-    - RESET: GPIO25
-"""
+from __future__ import annotations
 
+import time
 from typing import Optional
 
+
 class LoRaTransmitter:
-    """LoRa radio transmitter using Adafruit RFM95W on the bonnet."""
+    """Transmit DATA packets and wait for application-level ACK replies."""
 
     def __init__(
         self,
         frequency_mhz: float = 915.0,
         tx_power: int = 23,
-        spreading_factor: int = 7,
-        bandwidth: int = 125000,
-        station_address: int = 1,
-        base_station_address: int = 0
+        timeout_seconds: float = 10.0,
     ):
-        """
-        Initialize LoRa transmitter.
-
-        Args:
-            frequency_mhz: Transmission frequency in MHz (915.0 for US ISM band)
-            tx_power: Transmit power in dBm (5-23)
-            spreading_factor: LoRa spreading factor (7-12)
-            bandwidth: Bandwidth in Hz
-            station_address: This station's address
-            base_station_address: Base station address for transmissions
-        """
         self.frequency_mhz = frequency_mhz
         self.tx_power = tx_power
-        self.spreading_factor = spreading_factor
-        self.bandwidth = bandwidth
-        self.station_address = station_address
-        self.base_station_address = base_station_address
+        self.timeout_seconds = timeout_seconds
 
         self._spi = None
         self._cs = None
@@ -49,27 +28,17 @@ class LoRaTransmitter:
         self._last_error: Optional[str] = None
 
     def initialize(self) -> bool:
-        """
-        Initialize the RFM95W LoRa module on the bonnet.
-
-        Returns:
-            True if initialization successful, False otherwise
-        """
+        """Initialize RFM9x radio hardware."""
         try:
-            # Import lazily so unit tests and non-Pi development machines can import this module.
+            import adafruit_rfm9x
             import board
             import busio
             import digitalio
-            import adafruit_rfm9x
 
-            # Set up SPI
             self._spi = busio.SPI(board.SCK, MOSI=board.MOSI, MISO=board.MISO)
-
-            # Set up CS and Reset pins (bonnet uses CE1 and GPIO25)
             self._cs = digitalio.DigitalInOut(board.CE1)
             self._reset = digitalio.DigitalInOut(board.D25)
 
-            # Initialize the RFM95W (high_power=True enables PA_BOOST for up to 23 dBm)
             self._rfm9x = adafruit_rfm9x.RFM9x(
                 self._spi,
                 self._cs,
@@ -77,117 +46,111 @@ class LoRaTransmitter:
                 self.frequency_mhz,
                 high_power=True,
             )
-
-            # Configure radio parameters
             self._rfm9x.tx_power = self.tx_power
-            self._rfm9x.spreading_factor = self.spreading_factor
-            self._rfm9x.signal_bandwidth = self.bandwidth
-
-            # Set node addresses
-            self._rfm9x.node = self.station_address
-            self._rfm9x.destination = self.base_station_address
-
-            # Enable CRC checking
             self._rfm9x.enable_crc = True
-
             self._initialized = True
             self._last_error = None
-            print(f"LoRa initialized: {self.frequency_mhz}MHz, SF{self.spreading_factor}, {self.tx_power}dBm")
             return True
-
-        except Exception as e:
-            self._last_error = str(e)
-            print(f"LoRa initialization failed: {e}")
+        except Exception as exc:
+            self._last_error = f"lora_init_error:{exc}"
             self.cleanup()
             return False
 
-    def transmit(self, data: dict) -> bool:
-        """
-        Transmit sensor data to base station.
-
-        Args:
-            data: Dictionary containing sensor reading data
-
-        Returns:
-            True if transmission successful, False otherwise
-        """
+    def transmit_with_ack(self, payload: dict, retries: int = 3, timeout_seconds: Optional[float] = None) -> bool:
+        """Transmit payload and wait for matching ACK packet."""
         if not self._initialized or self._rfm9x is None:
-            self._last_error = "LoRa not initialized"
+            self._last_error = "lora_not_initialized"
             return False
 
-        # Format data as compact message
-        message = self._format_message(data)
+        timeout = self.timeout_seconds if timeout_seconds is None else timeout_seconds
+        message = self._format_data_message(payload)
+        expected_station_id = str(payload.get("station_id", ""))
+        expected_timestamp = str(payload.get("timestamp", ""))
 
-        try:
-            # Send the message (with automatic retries)
-            self._rfm9x.send(
-                bytes(message, 'utf-8'),
-                destination=self.base_station_address
-            )
+        for _attempt in range(max(retries, 1)):
+            try:
+                self._rfm9x.send(message.encode("utf-8"))
+            except Exception as exc:
+                self._last_error = f"lora_send_error:{exc}"
+                continue
 
-            # Update last RSSI (from any ACK if enabled)
-            self._last_rssi = self._rfm9x.last_rssi
+            deadline = time.monotonic() + timeout
+            while time.monotonic() < deadline:
+                remaining = max(0.0, deadline - time.monotonic())
+                try:
+                    packet = self._rfm9x.receive(timeout=remaining, with_header=False)
+                except Exception as exc:
+                    self._last_error = f"lora_receive_error:{exc}"
+                    break
+                if packet is None:
+                    continue
 
-            return True
+                self._last_rssi = self._rfm9x.last_rssi
+                text = bytes(packet).decode("utf-8", errors="replace").strip()
+                ack_station, ack_timestamp = self._parse_ack_message(text)
+                if ack_station is None:
+                    continue
+                if ack_station == expected_station_id and ack_timestamp == expected_timestamp:
+                    self._last_error = None
+                    return True
+            self._last_error = "lora_ack_timeout"
+        return False
 
-        except Exception as e:
-            self._last_error = str(e)
-            print(f"Transmission error: {e}")
-            return False
+    def _format_data_message(self, payload: dict) -> str:
+        """Format payload dictionary into protocol v2 DATA packet."""
+        temp = payload.get("temperature_c")
+        temp_text = "-" if temp is None else f"{float(temp):.2f}"
+        error_flags = str(payload.get("error_flags", "")).replace(",", "|")
 
-    def _format_message(self, data: dict) -> str:
-        """
-        Format data dictionary as compact transmission message.
-
-        Format: station_id,timestamp,distance_mm,snow_depth_mm,temp_c,battery_v
-
-        Args:
-            data: Sensor reading data
-
-        Returns:
-            Formatted message string
-        """
         parts = [
-            data.get('station_id', 'UNK'),
-            data.get('timestamp', ''),
-            str(data.get('raw_distance_mm', -1)),
-            str(data.get('snow_depth_mm', -1)),
-            f"{data.get('sensor_temp_c', 0):.1f}" if data.get('sensor_temp_c') is not None else '-',
-            f"{data.get('battery_voltage', 0):.2f}" if data.get('battery_voltage') is not None else '-'
+            "DATA",
+            str(payload.get("station_id", "UNK")),
+            str(payload.get("timestamp", "")),
+            self._format_number(payload.get("snow_depth_cm")),
+            self._format_number(payload.get("distance_raw_cm")),
+            temp_text,
+            self._format_number(payload.get("sensor_height_cm")),
+            error_flags,
         ]
-        return ','.join(parts)
+        return ",".join(parts)
+
+    def _parse_ack_message(self, message: str) -> tuple[Optional[str], Optional[str]]:
+        """Return (station_id, timestamp) for ACK packets, else (None, None)."""
+        parts = [part.strip() for part in message.split(",")]
+        if len(parts) != 3 or parts[0] != "ACK":
+            return None, None
+        station_id = parts[1]
+        timestamp = parts[2]
+        if not station_id or not timestamp:
+            return None, None
+        return station_id, timestamp
+
+    def _format_number(self, value: object) -> str:
+        if value is None:
+            return "-"
+        try:
+            return f"{float(value):.2f}"
+        except (TypeError, ValueError):
+            return "-"
+
+    def sleep(self) -> None:
+        """Put radio in sleep mode where supported."""
+        if self._rfm9x is not None:
+            try:
+                self._rfm9x.sleep()
+            except Exception:
+                pass
 
     def get_last_error(self) -> Optional[str]:
-        """Return last transmit/initialize error string, if any."""
+        """Return most recent initialization/transmit error string."""
         return self._last_error
 
-    def get_signal_quality(self) -> int:
-        """
-        Get current signal quality indicator based on RSSI.
-
-        Returns:
-            Signal quality as percentage (0-100)
-        """
-        if self._last_rssi is None:
-            return 0
-
-        # RSSI typically ranges from -120 dBm (weak) to -30 dBm (strong)
-        # Normalize to 0-100 scale
-        rssi = self._last_rssi
-        quality = int((rssi + 120) * 100 / 90)
-        return max(0, min(100, quality))
-
     def get_last_rssi(self) -> Optional[int]:
-        """
-        Get the RSSI of the last transmission/reception.
-
-        Returns:
-            RSSI in dBm, or None if not available
-        """
+        """Return RSSI captured from the last received ACK packet."""
         return self._last_rssi
 
     def cleanup(self) -> None:
-        """Release LoRa resources."""
+        """Release circuitpython hardware resources."""
         if self._spi is not None:
             try:
                 self._spi.deinit()
@@ -204,8 +167,8 @@ class LoRaTransmitter:
             except Exception:
                 pass
 
-        self._rfm9x = None
         self._spi = None
         self._cs = None
         self._reset = None
+        self._rfm9x = None
         self._initialized = False

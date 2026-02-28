@@ -1,8 +1,6 @@
-"""
-Data aggregation for base station.
+"""Data aggregation for base station LoRa receiver."""
 
-Collects and stores data from all sensor stations.
-"""
+from __future__ import annotations
 
 import csv
 import os
@@ -14,40 +12,33 @@ from .lora_receive import LoRaReceiver
 
 
 class DataAggregator:
-    """Aggregates data from multiple sensor stations."""
+    """Receive sensor packets, ACK them, and persist daily base-station CSVs."""
 
     FIELDS = [
-        'received_at',
-        'station_id',
-        'timestamp',
-        'raw_distance_mm',
-        'snow_depth_mm',
-        'sensor_temp_c',
-        'battery_voltage',
-        'rssi'
+        "received_at",
+        "station_id",
+        "timestamp",
+        "snow_depth_cm",
+        "distance_raw_cm",
+        "temperature_c",
+        "sensor_height_cm",
+        "error_flags",
+        "rssi",
     ]
 
     def __init__(self, storage_path: str):
-        """
-        Initialize data aggregator.
-
-        Args:
-            storage_path: Directory for storing aggregated data
-        """
         self.storage_path = Path(storage_path)
         self.receiver = LoRaReceiver()
         self._current_file: Optional[Path] = None
         self._current_date_key: Optional[str] = None
         self._running = False
 
-        # Runtime counters
         self.total_received = 0
         self.total_saved = 0
         self.last_packet_at: Optional[str] = None
         self.station_counts: dict[str, int] = {}
 
     def initialize(self) -> bool:
-        """Initialize aggregator and receiver."""
         try:
             self.storage_path.mkdir(parents=True, exist_ok=True)
         except Exception as exc:
@@ -61,12 +52,11 @@ class DataAggregator:
         return True
 
     def run(self) -> None:
-        """Run the main receive loop."""
         self._running = True
         print("Base station receive loop started. Press Ctrl+C to stop.")
         try:
             while self._running:
-                data = self.receiver.receive(timeout=1.0)
+                data = self.receiver.receive_data(timeout=1.0)
                 if data is None:
                     continue
                 self._process_reading(data)
@@ -76,12 +66,6 @@ class DataAggregator:
             self.cleanup()
 
     def _process_reading(self, data: dict) -> None:
-        """
-        Process received reading.
-
-        Args:
-            data: Parsed sensor reading
-        """
         received_at = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
         data["received_at"] = received_at
 
@@ -93,27 +77,25 @@ class DataAggregator:
 
         self._save_reading(data)
         print(
-            f"[{received_at}] {station_id}: depth={data.get('snow_depth_mm')}mm "
+            f"[{received_at}] {station_id}: depth={data.get('snow_depth_cm')}cm "
             f"(RSSI={data.get('rssi', 'n/a')})"
         )
 
     def _save_reading(self, data: dict) -> None:
-        """Save reading to daily CSV file."""
         file_path = self._get_current_file()
         file_exists = file_path.exists()
 
         row = {field: data.get(field, "") for field in self.FIELDS}
-        with file_path.open("a", newline="", encoding="utf-8") as f:
-            writer = csv.DictWriter(f, fieldnames=self.FIELDS)
+        with file_path.open("a", newline="", encoding="utf-8") as handle:
+            writer = csv.DictWriter(handle, fieldnames=self.FIELDS)
             if not file_exists:
                 writer.writeheader()
             writer.writerow(row)
-            f.flush()
-            os.fsync(f.fileno())
+            handle.flush()
+            os.fsync(handle.fileno())
         self.total_saved += 1
 
     def _get_current_file(self) -> Path:
-        """Get current day's output file."""
         date_key = datetime.now(timezone.utc).date().isoformat()
         if self._current_date_key != date_key:
             self._current_date_key = date_key
@@ -121,12 +103,6 @@ class DataAggregator:
         return self._current_file
 
     def get_network_status(self) -> dict:
-        """
-        Get current network status.
-
-        Returns:
-            Dictionary with network statistics
-        """
         return {
             "total_received": self.total_received,
             "total_saved": self.total_saved,
@@ -136,6 +112,5 @@ class DataAggregator:
         }
 
     def cleanup(self) -> None:
-        """Clean up resources."""
         self._running = False
         self.receiver.cleanup()

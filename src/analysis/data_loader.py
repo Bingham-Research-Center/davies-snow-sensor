@@ -152,7 +152,7 @@ def load_reference_data(
     return df
 
 
-def resample_to_hourly(df: pl.DataFrame, value_col: str = 'snow_depth_mm') -> pl.DataFrame:
+def resample_to_hourly(df: pl.DataFrame, value_col: str = "snow_depth_cm") -> pl.DataFrame:
     """
     Resample data to hourly averages.
 
@@ -213,7 +213,7 @@ def merge_sensor_and_reference(
     right = _normalize_timestamp(reference_df, "timestamp").sort("timestamp")
 
     # Prevent collisions for commonly shared measurement columns.
-    for col in ["snow_depth_mm", "sensor_temp_c", "battery_voltage"]:
+    for col in ["snow_depth_cm", "temperature_c", "sensor_height_cm"]:
         if col in right.columns:
             right = right.rename({col: f"reference_{col}"})
 

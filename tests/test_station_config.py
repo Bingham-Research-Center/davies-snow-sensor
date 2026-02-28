@@ -9,185 +9,91 @@ def _write_config(path: Path, body: str) -> None:
     path.write_text(body, encoding="utf-8")
 
 
-def test_load_config_applies_defaults_and_expands_storage_path(tmp_path: Path) -> None:
+def _nested_config() -> str:
+    return """
+station:
+  id: DAVIES-01
+  sensor_height_cm: 210.0
+pins:
+  hcsr04_trigger: 23
+  hcsr04_echo: 24
+  hcsr04_power: 27
+  ds18b20_data: 4
+  ds18b20_power: 17
+  lora_cs: 1
+  lora_reset: 25
+  lora_irq: 22
+lora:
+  frequency: 915.0
+  tx_power: 23
+  timeout_seconds: 10
+storage:
+  ssd_mount_path: ~/ssd
+  csv_filename: snow_data.csv
+timing:
+  cycle_interval_minutes: 15
+  sensor_stabilization_seconds: 2
+  hcsr04_num_readings: 5
+""".strip()
+
+
+def test_load_config_supports_nested_schema(tmp_path: Path) -> None:
     config_path = tmp_path / "station.yaml"
-    _write_config(
-        config_path,
-        """
-station_id: STN_01
-latitude: 45.1
-longitude: -111.2
-elevation_m: 1200
-ground_height_mm: 2000
-trigger_pin: 23
-echo_pin: 24
-measurement_interval_seconds: 900
-lora_frequency: 915.0
-primary_storage_path: ~/snow_data
-""".strip(),
-    )
+    _write_config(config_path, _nested_config())
 
     config = load_config(str(config_path))
-    assert config.samples_per_reading == 5
-    assert config.temp_read_timeout_ms == 800
-    assert config.ultrasonic_read_timeout_ms == 1200
-    assert config.sensor_warmup_ms == 500
-    assert config.max_consecutive_sensor_failures == 5
-    assert config.oled_enabled is True
-    assert config.temp_sensor_enabled is True
-    assert config.primary_storage_path == str(Path("~/snow_data").expanduser())
-    assert config.backup_storage_path is None
-    assert config.backup_sync_mode == "immediate"
-    assert config.backup_required is False
+    assert config.station.id == "DAVIES-01"
+    assert config.station.sensor_height_cm == 210.0
+    assert config.pins.hcsr04_power == 27
+    assert config.storage.ssd_mount_path == str(Path("~/ssd").expanduser())
+    assert config.lora.retry_count == 3
 
 
-def test_load_config_maps_legacy_local_storage_path(tmp_path: Path) -> None:
+def test_load_config_rejects_flat_legacy_schema(tmp_path: Path) -> None:
     config_path = tmp_path / "legacy.yaml"
     _write_config(
         config_path,
         """
 station_id: STN_01
-latitude: 45.1
-longitude: -111.2
-elevation_m: 1200
 ground_height_mm: 2000
 trigger_pin: 23
 echo_pin: 24
-measurement_interval_seconds: 900
+temp_sensor_pin: 4
 lora_frequency: 915.0
-local_storage_path: ~/legacy_snow_data
+measurement_interval_seconds: 900
 """.strip(),
     )
 
-    config = load_config(str(config_path))
-    assert config.primary_storage_path == str(Path("~/legacy_snow_data").expanduser())
+    with pytest.raises(ValueError, match="nested schema"):
+        load_config(str(config_path))
 
 
 def test_load_config_rejects_empty_yaml(tmp_path: Path) -> None:
     config_path = tmp_path / "empty.yaml"
     _write_config(config_path, "")
-
     with pytest.raises(ValueError, match="empty"):
         load_config(str(config_path))
 
 
-def test_validate_config_flags_bad_addresses(tmp_path: Path) -> None:
-    config_path = tmp_path / "bad_addr.yaml"
+def test_validate_config_rejects_conflicting_sensor_pins(tmp_path: Path) -> None:
+    config_path = tmp_path / "conflict.yaml"
     _write_config(
         config_path,
-        """
-station_id: STN_02
-latitude: 45.1
-longitude: -111.2
-elevation_m: 1200
-ground_height_mm: 2000
-trigger_pin: 23
-echo_pin: 24
-measurement_interval_seconds: 900
-lora_frequency: 915.0
-base_station_address: 1
-station_address: 1
-""".strip(),
+        _nested_config().replace("hcsr04_echo: 24", "hcsr04_echo: 23"),
     )
 
     config = load_config(str(config_path))
     errors = validate_config(config)
-    assert any("must be different" in error for error in errors)
+    assert any("must all be unique" in e for e in errors)
 
 
-def test_validate_config_rejects_placeholder_station_id(tmp_path: Path) -> None:
-    config_path = tmp_path / "placeholder.yaml"
+def test_validate_config_rejects_reserved_sensor_pin(tmp_path: Path) -> None:
+    config_path = tmp_path / "reserved.yaml"
     _write_config(
         config_path,
-        """
-station_id: STN_XX
-latitude: 45.1
-longitude: -111.2
-elevation_m: 1200
-ground_height_mm: 2000
-trigger_pin: 23
-echo_pin: 24
-measurement_interval_seconds: 900
-lora_frequency: 915.0
-""".strip(),
+        _nested_config().replace("hcsr04_trigger: 23", "hcsr04_trigger: 7"),
     )
 
     config = load_config(str(config_path))
     errors = validate_config(config)
-    assert any("placeholder" in error for error in errors)
-
-
-def test_validate_config_rejects_default_zero_coordinates(tmp_path: Path) -> None:
-    config_path = tmp_path / "zero_coords.yaml"
-    _write_config(
-        config_path,
-        """
-station_id: STN_07
-latitude: 0.0
-longitude: 0.0
-elevation_m: 1200
-ground_height_mm: 2000
-trigger_pin: 23
-echo_pin: 24
-measurement_interval_seconds: 900
-lora_frequency: 915.0
-""".strip(),
-    )
-
-    config = load_config(str(config_path))
-    errors = validate_config(config)
-    assert any("defaults" in error for error in errors)
-
-
-def test_validate_config_rejects_lora_reserved_sensor_pins(tmp_path: Path) -> None:
-    config_path = tmp_path / "reserved_pins.yaml"
-    _write_config(
-        config_path,
-        """
-station_id: STN_03
-latitude: 45.1
-longitude: -111.2
-elevation_m: 1200
-ground_height_mm: 2000
-trigger_pin: 7
-echo_pin: 24
-measurement_interval_seconds: 900
-lora_frequency: 915.0
-temp_sensor_enabled: true
-temp_sensor_pin: 3
-""".strip(),
-    )
-
-    config = load_config(str(config_path))
-    errors = validate_config(config)
-    assert any("trigger_pin 7 conflicts" in error for error in errors)
-    assert any("temp_sensor_pin 3 conflicts" in error for error in errors)
-
-
-def test_validate_config_rejects_invalid_sensor_timeouts(tmp_path: Path) -> None:
-    config_path = tmp_path / "bad_timeouts.yaml"
-    _write_config(
-        config_path,
-        """
-station_id: STN_08
-latitude: 45.1
-longitude: -111.2
-elevation_m: 1200
-ground_height_mm: 2000
-trigger_pin: 23
-echo_pin: 24
-measurement_interval_seconds: 900
-lora_frequency: 915.0
-temp_read_timeout_ms: 50
-ultrasonic_read_timeout_ms: 20000
-sensor_warmup_ms: -1
-max_consecutive_sensor_failures: 0
-""".strip(),
-    )
-
-    config = load_config(str(config_path))
-    errors = validate_config(config)
-    assert any("temp_read_timeout_ms" in error for error in errors)
-    assert any("ultrasonic_read_timeout_ms" in error for error in errors)
-    assert any("sensor_warmup_ms" in error for error in errors)
-    assert any("max_consecutive_sensor_failures" in error for error in errors)
+    assert any("conflicts with reserved LoRa/SPI pins" in e for e in errors)

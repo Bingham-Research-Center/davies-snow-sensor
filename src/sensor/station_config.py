@@ -1,253 +1,220 @@
-"""Station configuration loading and validation."""
+"""Station configuration loading and validation for sensor nodes."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass, fields
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import yaml
 
 
 @dataclass
+class StationSection:
+    """Station identity and static physical metadata."""
+
+    id: str
+    sensor_height_cm: float
+
+
+@dataclass
+class PinsSection:
+    """GPIO/SPI pin assignments."""
+
+    hcsr04_trigger: int
+    hcsr04_echo: int
+    hcsr04_power: int
+    ds18b20_data: int
+    ds18b20_power: int
+    lora_cs: int
+    lora_reset: int
+    lora_irq: int
+
+
+@dataclass
+class LoRaSection:
+    """LoRa transmission settings."""
+
+    frequency: float
+    tx_power: int
+    timeout_seconds: float
+    retry_count: int = 3
+
+
+@dataclass
+class StorageSection:
+    """Local CSV persistence settings."""
+
+    ssd_mount_path: str
+    csv_filename: str
+
+
+@dataclass
+class TimingSection:
+    """Cycle and sensor timing settings."""
+
+    cycle_interval_minutes: int
+    sensor_stabilization_seconds: float
+    hcsr04_num_readings: int
+
+
+@dataclass
 class StationConfig:
-    """Configuration for one sensor station."""
+    """Canonical sensor-station runtime config."""
 
-    # Station identification
-    station_id: str
-
-    # Location
-    latitude: float
-    longitude: float
-    elevation_m: float
-
-    # Ultrasonic sensor configuration
-    ground_height_mm: int
-    trigger_pin: int
-    echo_pin: int
-
-    # Temperature sensor configuration
-    temp_sensor_enabled: bool
-    temp_sensor_pin: int
-
-    # OLED display
-    oled_enabled: bool
-
-    # Measurement settings
-    measurement_interval_seconds: int
-    samples_per_reading: int
-    temp_read_timeout_ms: int
-    ultrasonic_read_timeout_ms: int
-    sensor_warmup_ms: int
-    max_consecutive_sensor_failures: int
-
-    # LoRa configuration
-    lora_frequency: float  # MHz
-    lora_spreading_factor: int
-    lora_bandwidth: int
-    base_station_address: int
-    station_address: int
-
-    # Storage settings
-    primary_storage_path: str
-    backup_storage_path: Optional[str]
-    backup_sync_mode: str
-    backup_required: bool
-    max_local_files: int
-
-    # Optional metadata
-    install_date: Optional[str] = None
-    notes: Optional[str] = None
+    station: StationSection
+    pins: PinsSection
+    lora: LoRaSection
+    storage: StorageSection
+    timing: TimingSection
 
 
 _DEFAULTS: dict[str, Any] = {
-    "temp_sensor_enabled": True,
-    "temp_sensor_pin": 4,
-    "oled_enabled": True,
-    "samples_per_reading": 5,
-    "temp_read_timeout_ms": 800,
-    "ultrasonic_read_timeout_ms": 1200,
-    "sensor_warmup_ms": 500,
-    "max_consecutive_sensor_failures": 5,
-    "lora_spreading_factor": 7,
-    "lora_bandwidth": 125000,
-    "base_station_address": 0,
-    "station_address": 1,
-    "primary_storage_path": "/home/pi/snow_data",
-    "backup_storage_path": None,
-    "backup_sync_mode": "immediate",
-    "backup_required": False,
-    "max_local_files": 30,
+    "station": {
+        "sensor_height_cm": 200.0,
+    },
+    "pins": {
+        "hcsr04_trigger": 23,
+        "hcsr04_echo": 24,
+        "hcsr04_power": 27,
+        "ds18b20_data": 4,
+        "ds18b20_power": 17,
+        "lora_cs": 1,
+        "lora_reset": 25,
+        "lora_irq": 22,
+    },
+    "lora": {
+        "frequency": 915.0,
+        "tx_power": 23,
+        "timeout_seconds": 10,
+        "retry_count": 3,
+    },
+    "storage": {
+        "ssd_mount_path": "/mnt/ssd",
+        "csv_filename": "snow_data.csv",
+    },
+    "timing": {
+        "cycle_interval_minutes": 15,
+        "sensor_stabilization_seconds": 2,
+        "hcsr04_num_readings": 5,
+    },
 }
 
-_REQUIRED_FIELDS = {
-    "station_id",
-    "latitude",
-    "longitude",
-    "elevation_m",
-    "ground_height_mm",
-    "trigger_pin",
-    "echo_pin",
-    "measurement_interval_seconds",
-    "lora_frequency",
-}
+_REQUIRED_TOP_LEVEL = {"station", "pins", "lora", "storage", "timing"}
+_LORA_RESERVED_SENSOR_PINS = {7, 8, 9, 10, 11, 25}
 
-_VALID_LORA_BANDWIDTHS = {7800, 10400, 15600, 20800, 31250, 41700, 62500, 125000, 250000, 500000}
-_PLACEHOLDER_STATION_IDS = {"STN_XX", "TEMPLATE", "CHANGE_ME"}
 
-# Pins used by the LoRa bonnet + onboard OLED on the "LoRa row" of the
-# 52Pi Easy Multiplexing Board. Avoid assigning sensors to these pins.
-_LORA_RESERVED_PINS = {2, 3, 7, 8, 9, 10, 11, 25}
+def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
+    out = dict(base)
+    for key, value in override.items():
+        if isinstance(value, dict) and isinstance(out.get(key), dict):
+            out[key] = _deep_merge(out[key], value)
+        else:
+            out[key] = value
+    return out
 
 
 def load_config(config_path: str) -> StationConfig:
-    """
-    Load station configuration from YAML.
-
-    Raises:
-        FileNotFoundError: if file does not exist.
-        ValueError: if content is malformed.
-    """
+    """Load station configuration from canonical nested YAML schema."""
     path = Path(config_path)
     if not path.exists():
         raise FileNotFoundError(f"Configuration file not found: {config_path}")
 
-    with path.open("r", encoding="utf-8") as f:
-        data = yaml.safe_load(f)
-
-    if data is None:
+    with path.open("r", encoding="utf-8") as handle:
+        raw = yaml.safe_load(handle)
+    if raw is None:
         raise ValueError(f"Configuration file is empty: {config_path}")
-    if not isinstance(data, dict):
+    if not isinstance(raw, dict):
         raise ValueError(f"Configuration file must contain a YAML object: {config_path}")
 
-    missing = sorted(field for field in _REQUIRED_FIELDS if field not in data)
-    if missing:
-        raise ValueError(f"Missing required configuration fields: {', '.join(missing)}")
+    missing_sections = sorted(section for section in _REQUIRED_TOP_LEVEL if section not in raw)
+    if missing_sections:
+        raise ValueError(
+            "Configuration must use nested schema with sections: "
+            f"{', '.join(sorted(_REQUIRED_TOP_LEVEL))}. Missing: {', '.join(missing_sections)}"
+        )
 
-    merged = dict(_DEFAULTS)
-    merged.update(data)
-
-    # Backward compatibility for older configs.
-    if "primary_storage_path" not in data and "local_storage_path" in data:
-        merged["primary_storage_path"] = merged["local_storage_path"]
-    merged.pop("local_storage_path", None)
-
-    valid_fields = {f.name for f in fields(StationConfig)}
-    unknown = sorted(key for key in merged.keys() if key not in valid_fields)
-    if unknown:
-        raise ValueError(f"Unknown configuration fields: {', '.join(unknown)}")
-
-    merged["primary_storage_path"] = str(Path(str(merged["primary_storage_path"])).expanduser())
-    if merged.get("backup_storage_path"):
-        merged["backup_storage_path"] = str(Path(str(merged["backup_storage_path"])).expanduser())
-    else:
-        merged["backup_storage_path"] = None
+    merged = _deep_merge(_DEFAULTS, raw)
 
     try:
-        return StationConfig(**merged)
-    except TypeError as exc:
+        return StationConfig(
+            station=StationSection(**merged["station"]),
+            pins=PinsSection(**merged["pins"]),
+            lora=LoRaSection(**merged["lora"]),
+            storage=StorageSection(
+                ssd_mount_path=str(Path(str(merged["storage"]["ssd_mount_path"])).expanduser()),
+                csv_filename=str(merged["storage"]["csv_filename"]),
+            ),
+            timing=TimingSection(**merged["timing"]),
+        )
+    except Exception as exc:
         raise ValueError(f"Invalid configuration format: {exc}") from exc
 
 
 def validate_config(config: StationConfig) -> list[str]:
-    """Validate configuration values and return a list of error messages."""
+    """Validate configuration values and return user-actionable errors."""
     errors: list[str] = []
 
-    if not config.station_id.strip():
-        errors.append("station_id cannot be empty")
-    if config.station_id.strip().upper() in _PLACEHOLDER_STATION_IDS:
-        errors.append(
-            f"station_id '{config.station_id}' is a placeholder. "
-            "Set a unique station ID before deployment."
-        )
+    if not config.station.id.strip():
+        errors.append("station.id cannot be empty")
 
-    # Validate coordinates
-    if not -90 <= config.latitude <= 90:
-        errors.append(f"Invalid latitude: {config.latitude}")
-    if not -180 <= config.longitude <= 180:
-        errors.append(f"Invalid longitude: {config.longitude}")
-    if config.latitude == 0.0 and config.longitude == 0.0:
-        errors.append("latitude/longitude are still defaults (0.0, 0.0); set real station coordinates")
+    if not 50.0 <= config.station.sensor_height_cm <= 500.0:
+        errors.append("station.sensor_height_cm should be between 50 and 500")
 
-    # Validate GPIO pins (BCM numbering, valid range 2-27)
-    valid_gpio = range(2, 28)
-    if config.trigger_pin not in valid_gpio:
-        errors.append(f"Invalid trigger pin: {config.trigger_pin}")
-    if config.echo_pin not in valid_gpio:
-        errors.append(f"Invalid echo pin: {config.echo_pin}")
-    if config.trigger_pin == config.echo_pin:
-        errors.append("Trigger and echo pins must be different")
-    if config.temp_sensor_enabled and config.temp_sensor_pin not in valid_gpio:
-        errors.append(f"Invalid temperature sensor pin: {config.temp_sensor_pin}")
+    valid_gpio = set(range(2, 28))
+    sensor_pins = {
+        "pins.hcsr04_trigger": config.pins.hcsr04_trigger,
+        "pins.hcsr04_echo": config.pins.hcsr04_echo,
+        "pins.hcsr04_power": config.pins.hcsr04_power,
+        "pins.ds18b20_data": config.pins.ds18b20_data,
+        "pins.ds18b20_power": config.pins.ds18b20_power,
+        "pins.lora_reset": config.pins.lora_reset,
+        "pins.lora_irq": config.pins.lora_irq,
+    }
+    for name, pin in sensor_pins.items():
+        if pin not in valid_gpio:
+            errors.append(f"{name} must be a BCM GPIO in 2-27, got {pin}")
 
-    # Validate LoRa settings
-    if not 902 <= config.lora_frequency <= 928:
-        errors.append(f"LoRa frequency {config.lora_frequency} MHz outside US ISM band (902-928)")
-    if not 7 <= config.lora_spreading_factor <= 12:
-        errors.append(f"Invalid spreading factor: {config.lora_spreading_factor} (must be 7-12)")
-    if config.lora_bandwidth not in _VALID_LORA_BANDWIDTHS:
-        errors.append(
-            f"Unsupported LoRa bandwidth: {config.lora_bandwidth}. "
-            "Use one of 7800, 10400, 15600, 20800, 31250, 41700, 62500, 125000, 250000, 500000"
-        )
-    if not 0 <= config.base_station_address <= 255:
-        errors.append(f"base_station_address must be 0-255, got {config.base_station_address}")
-    if not 0 <= config.station_address <= 255:
-        errors.append(f"station_address must be 0-255, got {config.station_address}")
-    if config.base_station_address == config.station_address:
-        errors.append("base_station_address and station_address must be different")
+    if config.pins.lora_cs not in {0, 1}:
+        errors.append("pins.lora_cs must be 0 (CE0) or 1 (CE1)")
 
-    # Multiplex board pin reservation checks. On this board, each row is a
-    # mirrored breakout of the same SoC pins, so row placement does not change
-    # BCM numbering. Reserve LoRa/OLED pins globally.
-    if config.trigger_pin in _LORA_RESERVED_PINS:
-        errors.append(
-            f"trigger_pin {config.trigger_pin} conflicts with LoRa/OLED reserved pins "
-            "(2,3,7,8,9,10,11,25)"
-        )
-    if config.echo_pin in _LORA_RESERVED_PINS:
-        errors.append(
-            f"echo_pin {config.echo_pin} conflicts with LoRa/OLED reserved pins "
-            "(2,3,7,8,9,10,11,25)"
-        )
-    if config.temp_sensor_enabled and config.temp_sensor_pin in _LORA_RESERVED_PINS:
-        errors.append(
-            f"temp_sensor_pin {config.temp_sensor_pin} conflicts with LoRa/OLED reserved pins "
-            "(2,3,7,8,9,10,11,25)"
-        )
+    used_sensor_io = [
+        config.pins.hcsr04_trigger,
+        config.pins.hcsr04_echo,
+        config.pins.hcsr04_power,
+        config.pins.ds18b20_data,
+        config.pins.ds18b20_power,
+    ]
+    if len(set(used_sensor_io)) != len(used_sensor_io):
+        errors.append("Sensor pins (HC-SR04 and DS18B20 power/data) must all be unique")
+    for pin in used_sensor_io:
+        if pin in _LORA_RESERVED_SENSOR_PINS:
+            errors.append(
+                f"Sensor pin {pin} conflicts with reserved LoRa/SPI pins "
+                "(7,8,9,10,11,25)"
+            )
 
-    # Validate measurement settings
-    if config.measurement_interval_seconds < 60:
-        errors.append("measurement_interval_seconds should be at least 60")
-    if not 1 <= config.samples_per_reading <= 20:
-        errors.append(f"samples_per_reading should be 1-20, got {config.samples_per_reading}")
-    if not 100 <= config.temp_read_timeout_ms <= 10000:
-        errors.append(f"temp_read_timeout_ms should be 100-10000, got {config.temp_read_timeout_ms}")
-    if not 100 <= config.ultrasonic_read_timeout_ms <= 10000:
-        errors.append(
-            "ultrasonic_read_timeout_ms should be 100-10000, "
-            f"got {config.ultrasonic_read_timeout_ms}"
-        )
-    if not 0 <= config.sensor_warmup_ms <= 10000:
-        errors.append(f"sensor_warmup_ms should be 0-10000, got {config.sensor_warmup_ms}")
-    if not 1 <= config.max_consecutive_sensor_failures <= 100:
-        errors.append(
-            "max_consecutive_sensor_failures should be 1-100, "
-            f"got {config.max_consecutive_sensor_failures}"
-        )
+    if not 902.0 <= config.lora.frequency <= 928.0:
+        errors.append("lora.frequency must be within US ISM band (902-928 MHz)")
+    if not 5 <= config.lora.tx_power <= 23:
+        errors.append("lora.tx_power must be between 5 and 23 dBm")
+    if not 1 <= config.lora.timeout_seconds <= 60:
+        errors.append("lora.timeout_seconds must be between 1 and 60 seconds")
+    if not 1 <= config.lora.retry_count <= 10:
+        errors.append("lora.retry_count must be between 1 and 10")
 
-    # Validate ground height and storage settings
-    if not 500 <= config.ground_height_mm <= 5000:
-        errors.append(f"ground_height_mm {config.ground_height_mm} seems unreasonable (expected 500-5000)")
-    if config.max_local_files < 1:
-        errors.append(f"max_local_files must be >= 1, got {config.max_local_files}")
-    if config.backup_sync_mode not in {"immediate"}:
-        errors.append(
-            f"backup_sync_mode must be 'immediate', got {config.backup_sync_mode}"
-        )
-    if not str(config.primary_storage_path).strip():
-        errors.append("primary_storage_path cannot be empty")
-    if config.backup_storage_path is not None and not str(config.backup_storage_path).strip():
-        errors.append("backup_storage_path cannot be blank when provided")
+    if config.timing.cycle_interval_minutes < 1:
+        errors.append("timing.cycle_interval_minutes must be >= 1")
+    if not 0 <= config.timing.sensor_stabilization_seconds <= 30:
+        errors.append("timing.sensor_stabilization_seconds must be between 0 and 30")
+    if not 1 <= config.timing.hcsr04_num_readings <= 20:
+        errors.append("timing.hcsr04_num_readings must be between 1 and 20")
+
+    if not config.storage.ssd_mount_path.strip():
+        errors.append("storage.ssd_mount_path cannot be empty")
+    if not config.storage.csv_filename.strip():
+        errors.append("storage.csv_filename cannot be empty")
+    elif not config.storage.csv_filename.lower().endswith(".csv"):
+        errors.append("storage.csv_filename must end with .csv")
 
     return errors

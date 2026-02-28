@@ -1,55 +1,30 @@
-# Snow Depth Sensor Station Configuration Template
-# Copy this file and rename to station_XX.yaml for each station
-#
-# 52Pi Easy Multiplexing Board row plan:
-#   - Row 1 (reserved): LoRa plug-and-play board/bonnet
-#   - Other rows: external sensor wiring
-# NOTE: All rows are mirrored breakouts of the same Raspberry Pi GPIO pins.
-# "Row" does not change BCM pin numbers.
-# Do not use LoRa/OLED pins for sensors: GPIO2,3,7,8,9,10,11,25
+# Snow Depth Sensor Station Configuration Template (prompt schema)
 
-# Station Identification
-station_id: "STN_XX"  # Unique identifier for this station (must be changed per Pi)
+station:
+  id: "DAVIES-01"
+  sensor_height_cm: 200.0
 
-# Location (WGS84 coordinates)
-latitude: 0.0         # Decimal degrees
-longitude: 0.0        # Decimal degrees
-elevation_m: 0.0      # Meters above sea level
+pins:
+  hcsr04_trigger: 23
+  hcsr04_echo: 24
+  hcsr04_power: 27
+  ds18b20_data: 4
+  ds18b20_power: 17
+  lora_cs: 1
+  lora_reset: 25
+  lora_irq: 22
 
-# Sensor Configuration
-ground_height_mm: 2000  # Distance from sensor to bare ground (no snow)
-trigger_pin: 23         # HC-SR04 TRIG (BCM GPIO23, physical pin 16)
-echo_pin: 24            # HC-SR04 ECHO input (BCM GPIO24, physical pin 18) via 1k/2k divider
+lora:
+  frequency: 915.0
+  tx_power: 23
+  timeout_seconds: 10
+  retry_count: 3
 
-# Temperature Sensor (DS18B20)
-temp_sensor_enabled: true  # Enable DS18B20 temperature sensor
-temp_sensor_pin: 4         # 1-Wire DATA on BCM GPIO4 (physical pin 7) with 4.7k pull-up to 3.3V
+storage:
+  ssd_mount_path: "/mnt/ssd"
+  csv_filename: "snow_data.csv"
 
-# OLED Display (on LoRa Bonnet)
-oled_enabled: true  # Enable OLED status display
-
-# Measurement Settings
-measurement_interval_seconds: 900  # 15 minutes = 900 seconds
-samples_per_reading: 5             # Number of readings to average
-temp_read_timeout_ms: 800          # DS18B20 read budget per cycle
-ultrasonic_read_timeout_ms: 1200   # HC-SR04 read budget per cycle
-sensor_warmup_ms: 500              # Delay after ultrasonic init
-max_consecutive_sensor_failures: 5 # Escalate warning threshold
-
-# LoRa Configuration
-lora_frequency: 915.0       # MHz (915.0 for US ISM band)
-lora_spreading_factor: 7    # 7-12, higher = longer range, slower
-lora_bandwidth: 125000      # Hz
-base_station_address: 0     # Address of the base station
-station_address: 1          # This station's address (unique per station)
-
-# Local Storage Configuration
-primary_storage_path: "/home/pi/snow_data"         # Primary local storage on SD card
-backup_storage_path: "/mnt/snow_backup/snow_data"  # Optional SSD mirror location
-backup_sync_mode: "immediate"                      # Mirror writes after each reading
-backup_required: false                             # false = continue on SD if SSD is unavailable
-max_local_files: 30                                # Days of local data to keep
-
-# Optional Metadata
-install_date: "2024-01-01"  # Installation date
-notes: ""                    # Any notes about this station location
+timing:
+  cycle_interval_minutes: 15
+  sensor_stabilization_seconds: 2
+  hcsr04_num_readings: 5

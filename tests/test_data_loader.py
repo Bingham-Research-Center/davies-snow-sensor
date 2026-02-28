@@ -20,9 +20,9 @@ def test_load_and_filter_sensor_data(tmp_path: Path) -> None:
     _write_csv(
         tmp_path / "a.csv",
         """
-timestamp,station_id,snow_depth_mm
-2024-01-01T00:00:00Z,STN_01,100
-2024-01-01T01:00:00Z,STN_02,110
+timestamp,station_id,snow_depth_cm
+2024-01-01T00:00:00Z,STN_01,10.0
+2024-01-01T01:00:00Z,STN_02,11.0
 """,
     )
     df = load_sensor_data(str(tmp_path), station_id="STN_01")
@@ -34,15 +34,15 @@ def test_resample_hourly(tmp_path: Path) -> None:
     _write_csv(
         tmp_path / "sensor.csv",
         """
-timestamp,station_id,snow_depth_mm
-2024-01-01T00:00:00Z,STN_01,100
-2024-01-01T00:10:00Z,STN_01,110
-2024-01-01T01:00:00Z,STN_01,120
+timestamp,station_id,snow_depth_cm
+2024-01-01T00:00:00Z,STN_01,10.0
+2024-01-01T00:10:00Z,STN_01,11.0
+2024-01-01T01:00:00Z,STN_01,12.0
 """,
     )
     df = load_sensor_data(str(tmp_path))
-    hourly = resample_to_hourly(df, value_col="snow_depth_mm")
-    assert "snow_depth_mm_mean" in hourly.columns
+    hourly = resample_to_hourly(df, value_col="snow_depth_cm")
+    assert "snow_depth_cm_mean" in hourly.columns
     assert hourly.height >= 2
 
 
@@ -55,15 +55,15 @@ def test_merge_sensor_and_reference(tmp_path: Path) -> None:
     _write_csv(
         sensor_dir / "sensor.csv",
         """
-timestamp,station_id,snow_depth_mm
-2024-01-01T00:00:00Z,STN_01,100
+timestamp,station_id,snow_depth_cm
+2024-01-01T00:00:00Z,STN_01,10.0
 """,
     )
     _write_csv(
         ref_dir / "ref.csv",
         """
-timestamp,station_id,snow_depth_mm
-2024-01-01T00:10:00Z,BINGHAM_1,98
+timestamp,station_id,snow_depth_cm
+2024-01-01T00:10:00Z,BINGHAM_1,9.8
 """,
     )
 
@@ -71,4 +71,4 @@ timestamp,station_id,snow_depth_mm
     ref_df = load_reference_data(str(ref_dir))
     merged = merge_sensor_and_reference(sensor_df, ref_df, tolerance="20m")
     assert merged.height == 1
-    assert "reference_snow_depth_mm" in merged.columns
+    assert "reference_snow_depth_cm" in merged.columns

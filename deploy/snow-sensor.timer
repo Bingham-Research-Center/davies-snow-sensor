@@ -1,0 +1,11 @@
+[Unit]
+Description=Run snow sensor one-shot cycle every 15 minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=15min
+Persistent=true
+Unit=snow-sensor.service
+
+[Install]
+WantedBy=timers.target
