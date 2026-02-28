@@ -12,9 +12,13 @@ class LoRaReceiver:
         self,
         frequency_mhz: float = 915.0,
         base_station_address: int = 0,
+        cs_pin: int = 1,
+        reset_pin: int = 25,
     ):
         self.frequency_mhz = frequency_mhz
         self.base_station_address = base_station_address
+        self.cs_pin = cs_pin
+        self.reset_pin = reset_pin
 
         self._spi = None
         self._cs = None
@@ -33,8 +37,10 @@ class LoRaReceiver:
             import digitalio
 
             self._spi = busio.SPI(board.SCK, MOSI=board.MOSI, MISO=board.MISO)
-            self._cs = digitalio.DigitalInOut(board.CE1)
-            self._reset = digitalio.DigitalInOut(board.D25)
+            cs = getattr(board, self._cs_board_name())
+            reset = getattr(board, self._gpio_board_name(self.reset_pin))
+            self._cs = digitalio.DigitalInOut(cs)
+            self._reset = digitalio.DigitalInOut(reset)
             self._rfm9x = adafruit_rfm9x.RFM9x(
                 self._spi,
                 self._cs,
@@ -49,6 +55,18 @@ class LoRaReceiver:
             self._last_error = f"lora_receiver_init_error:{exc}"
             self.cleanup()
             return False
+
+    def _cs_board_name(self) -> str:
+        if self.cs_pin == 0:
+            return "CE0"
+        if self.cs_pin == 1:
+            return "CE1"
+        raise ValueError(f"Unsupported LoRa CS pin: {self.cs_pin} (use 0 for CE0 or 1 for CE1)")
+
+    def _gpio_board_name(self, pin: int) -> str:
+        if not 0 <= pin <= 27:
+            raise ValueError(f"Unsupported GPIO pin: {pin}")
+        return f"D{pin}"
 
     def receive_data(self, timeout: float = 1.0) -> Optional[dict]:
         """
@@ -73,7 +91,11 @@ class LoRaReceiver:
         if message.startswith("ACK,"):
             # Ignore loopback/broadcast ACK packets if present.
             return None
-        parsed = self._parse_data_message(message)
+        try:
+            parsed = self._parse_data_message(message)
+        except ValueError as exc:
+            self._last_error = f"lora_parse_error:{exc}"
+            return None
         parsed["rssi"] = self._last_rssi
         self._send_ack(parsed["station_id"], parsed["timestamp"])
         return parsed
@@ -102,6 +124,10 @@ class LoRaReceiver:
             raise ValueError(f"Malformed DATA packet: {message!r}")
 
         _tag, station_id, timestamp, snow_depth_cm, distance_raw_cm, temperature_c, sensor_height_cm, error_flags = parts
+        if not station_id:
+            raise ValueError("DATA packet missing station_id")
+        if not timestamp:
+            raise ValueError("DATA packet missing timestamp")
         return {
             "station_id": station_id,
             "timestamp": timestamp,

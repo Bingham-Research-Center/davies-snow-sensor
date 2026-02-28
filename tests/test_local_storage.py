@@ -58,10 +58,16 @@ def test_update_lora_tx_success_rewrites_existing_row(tmp_path: Path, monkeypatc
             "temperature_c": -12.3,
             "sensor_height_cm": 200.0,
             "lora_tx_success": False,
-            "error_flags": "",
+            "error_flags": "temp_unavailable",
         }
     )
-    assert storage.update_lora_tx_success(timestamp, "DAVIES-01", True) is True
+    assert storage.update_lora_tx_success(
+        timestamp,
+        "DAVIES-01",
+        True,
+        error_flags="temp_unavailable|lora_ack_timeout",
+    ) is True
 
     rows = _read_rows(tmp_path / "snow_data.csv")
     assert rows[0]["lora_tx_success"] == "True"
+    assert rows[0]["error_flags"] == "temp_unavailable|lora_ack_timeout"

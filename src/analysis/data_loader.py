@@ -11,23 +11,6 @@ from typing import Optional
 import polars as pl
 
 
-def _parse_iso_utc(value: Optional[str]) -> Optional[datetime]:
-    if value is None:
-        return None
-    text = str(value).strip()
-    if not text:
-        return None
-    try:
-        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
-    except ValueError:
-        return None
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
-    else:
-        parsed = parsed.astimezone(timezone.utc)
-    return parsed
-
-
 def _csv_files(data_dir: str) -> list[Path]:
     path = Path(data_dir)
     if not path.exists():
@@ -38,11 +21,39 @@ def _csv_files(data_dir: str) -> list[Path]:
 def _normalize_timestamp(df: pl.DataFrame, column: str = "timestamp") -> pl.DataFrame:
     if column not in df.columns:
         return df
+    dtype = df.schema[column]
+    if isinstance(dtype, pl.Datetime):
+        if dtype.time_zone == "UTC":
+            return df
+        if dtype.time_zone is None:
+            return df.with_columns(pl.col(column).dt.replace_time_zone("UTC").alias(column))
+        return df.with_columns(pl.col(column).dt.convert_time_zone("UTC").alias(column))
+
+    raw = pl.col(column).cast(pl.Utf8).str.strip_chars()
+    with_z_normalized = raw.str.replace(r"Z$", "+00:00")
     return df.with_columns(
-        pl.col(column)
-        .cast(pl.Utf8)
-        .map_elements(_parse_iso_utc, return_dtype=pl.Datetime(time_zone="UTC"))
-        .alias(column)
+        pl.coalesce(
+            [
+                with_z_normalized.str.to_datetime(
+                    format="%Y-%m-%dT%H:%M:%S%.f%z",
+                    strict=False,
+                    time_zone="UTC",
+                ),
+                with_z_normalized.str.to_datetime(
+                    format="%Y-%m-%dT%H:%M:%S%z",
+                    strict=False,
+                    time_zone="UTC",
+                ),
+                raw.str.to_datetime(
+                    format="%Y-%m-%dT%H:%M:%S%.f",
+                    strict=False,
+                ).dt.replace_time_zone("UTC"),
+                raw.str.to_datetime(
+                    format="%Y-%m-%dT%H:%M:%S",
+                    strict=False,
+                ).dt.replace_time_zone("UTC"),
+            ]
+        ).alias(column)
     )
 
 

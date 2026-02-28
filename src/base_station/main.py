@@ -14,9 +14,25 @@ def main() -> None:
         default="/home/pi/snow_base_data",
         help="Directory for daily aggregated CSV files",
     )
+    parser.add_argument(
+        "--lora-cs-pin",
+        type=int,
+        default=1,
+        help="LoRa chip-select pin (0=CE0, 1=CE1)",
+    )
+    parser.add_argument(
+        "--lora-reset-pin",
+        type=int,
+        default=25,
+        help="LoRa reset GPIO pin (BCM numbering)",
+    )
     args = parser.parse_args()
 
-    aggregator = DataAggregator(storage_path=args.storage_path)
+    aggregator = DataAggregator(
+        storage_path=args.storage_path,
+        lora_cs_pin=args.lora_cs_pin,
+        lora_reset_pin=args.lora_reset_pin,
+    )
 
     def _handle_signal(signum, frame):  # type: ignore[no-untyped-def]
         aggregator.cleanup()

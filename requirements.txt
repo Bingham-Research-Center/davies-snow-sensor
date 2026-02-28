@@ -9,6 +9,9 @@ adafruit-circuitpython-rfm9x>=2.0.0
 # Configuration
 PyYAML>=6.0
 
+# DS18B20 preferred backend
+w1thermsensor>=2.3.0
+
 # Data analysis
 polars>=0.20.0
 numpy>=1.24.0

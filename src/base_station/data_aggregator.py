@@ -26,16 +26,18 @@ class DataAggregator:
         "rssi",
     ]
 
-    def __init__(self, storage_path: str):
+    def __init__(self, storage_path: str, lora_cs_pin: int = 1, lora_reset_pin: int = 25):
         self.storage_path = Path(storage_path)
-        self.receiver = LoRaReceiver()
+        self.receiver = LoRaReceiver(cs_pin=lora_cs_pin, reset_pin=lora_reset_pin)
         self._current_file: Optional[Path] = None
         self._current_date_key: Optional[str] = None
         self._running = False
 
         self.total_received = 0
         self.total_saved = 0
+        self.total_save_errors = 0
         self.last_packet_at: Optional[str] = None
+        self.last_storage_error: Optional[str] = None
         self.station_counts: dict[str, int] = {}
 
     def initialize(self) -> bool:
@@ -75,25 +77,33 @@ class DataAggregator:
         station_id = data.get("station_id", "UNKNOWN")
         self.station_counts[station_id] = self.station_counts.get(station_id, 0) + 1
 
-        self._save_reading(data)
+        if not self._save_reading(data):
+            print(f"[WARN] Failed to persist packet locally: {self.last_storage_error or 'unknown'}")
         print(
             f"[{received_at}] {station_id}: depth={data.get('snow_depth_cm')}cm "
             f"(RSSI={data.get('rssi', 'n/a')})"
         )
 
-    def _save_reading(self, data: dict) -> None:
+    def _save_reading(self, data: dict) -> bool:
         file_path = self._get_current_file()
         file_exists = file_path.exists()
 
         row = {field: data.get(field, "") for field in self.FIELDS}
-        with file_path.open("a", newline="", encoding="utf-8") as handle:
-            writer = csv.DictWriter(handle, fieldnames=self.FIELDS)
-            if not file_exists:
-                writer.writeheader()
-            writer.writerow(row)
-            handle.flush()
-            os.fsync(handle.fileno())
-        self.total_saved += 1
+        try:
+            with file_path.open("a", newline="", encoding="utf-8") as handle:
+                writer = csv.DictWriter(handle, fieldnames=self.FIELDS)
+                if not file_exists:
+                    writer.writeheader()
+                writer.writerow(row)
+                handle.flush()
+                os.fsync(handle.fileno())
+            self.total_saved += 1
+            self.last_storage_error = None
+            return True
+        except OSError as exc:
+            self.total_save_errors += 1
+            self.last_storage_error = f"base_storage_write_error:{exc}"
+            return False
 
     def _get_current_file(self) -> Path:
         date_key = datetime.now(timezone.utc).date().isoformat()
@@ -106,7 +116,9 @@ class DataAggregator:
         return {
             "total_received": self.total_received,
             "total_saved": self.total_saved,
+            "total_save_errors": self.total_save_errors,
             "last_packet_at": self.last_packet_at,
+            "last_storage_error": self.last_storage_error,
             "active_stations": len(self.station_counts),
             "station_counts": dict(self.station_counts),
         }

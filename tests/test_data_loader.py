@@ -72,3 +72,20 @@ timestamp,station_id,snow_depth_cm
     merged = merge_sensor_and_reference(sensor_df, ref_df, tolerance="20m")
     assert merged.height == 1
     assert "reference_snow_depth_cm" in merged.columns
+
+
+def test_load_sensor_data_normalizes_mixed_timestamp_formats_to_utc(tmp_path: Path) -> None:
+    _write_csv(
+        tmp_path / "mixed.csv",
+        """
+timestamp,station_id,snow_depth_cm
+2024-01-01T00:00:00Z,STN_01,10.0
+2024-01-01T00:00:00-05:00,STN_01,11.0
+2024-01-01T00:00:00,STN_01,12.0
+""",
+    )
+    df = load_sensor_data(str(tmp_path))
+    assert str(df["timestamp"].dtype) == "Datetime(time_unit='us', time_zone='UTC')"
+    assert df.height == 3
+    # -05:00 should convert to 05:00 UTC and sort after 00:00 UTC values.
+    assert df["timestamp"][2].hour == 5

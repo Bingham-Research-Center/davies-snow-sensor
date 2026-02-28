@@ -41,6 +41,8 @@ class SensorStation:
             frequency_mhz=config.lora.frequency,
             tx_power=config.lora.tx_power,
             timeout_seconds=config.lora.timeout_seconds,
+            cs_pin=config.pins.lora_cs,
+            reset_pin=config.pins.lora_reset,
         )
 
     def request_stop(self) -> None:
@@ -190,6 +192,7 @@ class SensorStation:
             timestamp=reading["timestamp"],
             station_id=reading["station_id"],
             success=bool(lora_tx_success),
+            error_flags=reading["error_flags"],
         ):
             LOGGER.warning("Failed to update lora_tx_success in CSV: %s", self.storage.get_last_error())
 

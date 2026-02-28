@@ -14,10 +14,14 @@ class LoRaTransmitter:
         frequency_mhz: float = 915.0,
         tx_power: int = 23,
         timeout_seconds: float = 10.0,
+        cs_pin: int = 1,
+        reset_pin: int = 25,
     ):
         self.frequency_mhz = frequency_mhz
         self.tx_power = tx_power
         self.timeout_seconds = timeout_seconds
+        self.cs_pin = cs_pin
+        self.reset_pin = reset_pin
 
         self._spi = None
         self._cs = None
@@ -36,8 +40,10 @@ class LoRaTransmitter:
             import digitalio
 
             self._spi = busio.SPI(board.SCK, MOSI=board.MOSI, MISO=board.MISO)
-            self._cs = digitalio.DigitalInOut(board.CE1)
-            self._reset = digitalio.DigitalInOut(board.D25)
+            cs = getattr(board, self._cs_board_name())
+            reset = getattr(board, self._gpio_board_name(self.reset_pin))
+            self._cs = digitalio.DigitalInOut(cs)
+            self._reset = digitalio.DigitalInOut(reset)
 
             self._rfm9x = adafruit_rfm9x.RFM9x(
                 self._spi,
@@ -55,6 +61,18 @@ class LoRaTransmitter:
             self._last_error = f"lora_init_error:{exc}"
             self.cleanup()
             return False
+
+    def _cs_board_name(self) -> str:
+        if self.cs_pin == 0:
+            return "CE0"
+        if self.cs_pin == 1:
+            return "CE1"
+        raise ValueError(f"Unsupported LoRa CS pin: {self.cs_pin} (use 0 for CE0 or 1 for CE1)")
+
+    def _gpio_board_name(self, pin: int) -> str:
+        if not 0 <= pin <= 27:
+            raise ValueError(f"Unsupported GPIO pin: {pin}")
+        return f"D{pin}"
 
     def transmit_with_ack(self, payload: dict, retries: int = 3, timeout_seconds: Optional[float] = None) -> bool:
         """Transmit payload and wait for matching ACK packet."""

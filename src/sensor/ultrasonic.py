@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import statistics
 import time
-from typing import Optional, Tuple
+from typing import Optional
 
 from gpiozero import DistanceSensor
 
@@ -123,18 +123,16 @@ class UltrasonicSensor:
 
         The raw reading assumes 343.0 m/s in gpiozero; scale by actual speed.
         """
+        # Linear dry-air approximation at ~1 atm:
+        #   c(T) ~= 331.3 + 0.606*T  [m/s], T in Celsius.
+        # This follows the common first-order model used in acoustics and meteorology
+        # (e.g., Cramer 1993, J. Acoust. Soc. Am., 93(5), 2510-2516).
         corrected_speed = 331.3 + (0.606 * temperature_c)
         corrected = distance_cm * (corrected_speed / self.DEFAULT_SPEED_MPS)
         return round(corrected, 2)
 
     def calculate_snow_depth_cm(self, distance_cm: float) -> float:
         return round(self.sensor_height_cm - distance_cm, 2)
-
-    def get_reading(self, num_samples: int = 5) -> Tuple[Optional[float], Optional[float]]:
-        distance = self.read_distance_cm(num_samples=num_samples)
-        if distance is None:
-            return None, None
-        return distance, self.calculate_snow_depth_cm(distance)
 
     def get_last_error_reason(self) -> Optional[str]:
         return self._last_error_reason

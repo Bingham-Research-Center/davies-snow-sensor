@@ -242,7 +242,10 @@ sudo systemctl enable --now snow-backup-monitor.timer
 ```
 
 `snow-firstboot.service` only runs when `/var/lib/snow-sensor/provisioned` is absent.
-`snow-sensor.timer` schedules `snow-sensor.service` every 15 minutes once provisioned.
+`snow-sensor.timer` schedules `snow-sensor.service` using
+`timing.cycle_interval_minutes` from `config/station_01.yaml`.
+Provisioning writes an override at
+`/etc/systemd/system/snow-sensor.timer.d/override.conf`.
 
 On first boot, provisioning runs on console (`tty1`) and prompts for:
 - station ID
@@ -250,6 +253,9 @@ On first boot, provisioning runs on console (`tty1`) and prompts for:
 
 It writes `config/station_01.yaml`, creates `/var/lib/snow-sensor/provisioned`,
 and then enables/starts timers.
+The canonical file is station-specific (for example,
+`config/station_davies_03.yaml`) and `config/station_01.yaml` is updated as a
+stable alias for existing service/scripts.
 
 For headless provisioning, run manually over SSH:
 
@@ -261,6 +267,12 @@ For pre-seeded non-interactive provisioning (advanced):
 
 ```bash
 sudo /home/pi/davies-snow-sensor/venv/bin/python /home/pi/davies-snow-sensor/scripts/first_boot_provision.py --non-interactive
+```
+
+If you later change `timing.cycle_interval_minutes`, resync the timer override:
+
+```bash
+sudo /home/pi/davies-snow-sensor/scripts/sync_timer_interval.py --config /home/pi/davies-snow-sensor/config/station_01.yaml
 ```
 
 View live logs:
