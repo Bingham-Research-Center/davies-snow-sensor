@@ -75,6 +75,33 @@ def test_load_config_rejects_empty_yaml(tmp_path: Path) -> None:
         load_config(str(config_path))
 
 
+def test_load_config_rejects_unknown_section_key_with_typo_hint(tmp_path: Path) -> None:
+    config_path = tmp_path / "unknown_section_key.yaml"
+    _write_config(
+        config_path,
+        _nested_config().replace("frequency: 915.0", "freqency: 915.0"),
+    )
+
+    with pytest.raises(ValueError, match=r"Unknown key\(s\) in section 'lora'.*freqency.*frequency"):
+        load_config(str(config_path))
+
+
+def test_load_config_rejects_unknown_top_level_key(tmp_path: Path) -> None:
+    config_path = tmp_path / "unknown_top.yaml"
+    _write_config(
+        config_path,
+        _nested_config()
+        + """
+
+misc:
+  enabled: true
+""",
+    )
+
+    with pytest.raises(ValueError, match=r"Unknown top-level config key\(s\): misc"):
+        load_config(str(config_path))
+
+
 def test_validate_config_rejects_conflicting_sensor_pins(tmp_path: Path) -> None:
     config_path = tmp_path / "conflict.yaml"
     _write_config(

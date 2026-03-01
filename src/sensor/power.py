@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import time
 from typing import Set
 
 LOGGER = logging.getLogger(__name__)
@@ -46,25 +45,6 @@ def sensor_power_off(pin: int) -> None:
     """Turn a sensor rail off using a GPIO-controlled MOSFET/relay."""
     _ensure_output(pin)
     GPIO.output(pin, GPIO.LOW)
-
-
-def lora_wake(reset_pin: int) -> None:
-    """
-    Wake LoRa module by releasing reset.
-
-    We pulse reset low briefly then drive high to ensure a clean radio state.
-    """
-    _ensure_output(reset_pin)
-    GPIO.output(reset_pin, GPIO.LOW)
-    time.sleep(0.01)
-    GPIO.output(reset_pin, GPIO.HIGH)
-    time.sleep(0.05)
-
-
-def lora_sleep(reset_pin: int) -> None:
-    """Hold LoRa module in reset as a low-power idle state."""
-    _ensure_output(reset_pin)
-    GPIO.output(reset_pin, GPIO.LOW)
 
 
 def cleanup_power_pins() -> None:

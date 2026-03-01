@@ -12,6 +12,8 @@ pins:
   ds18b20_power: 17
   lora_cs: 1
   lora_reset: 25
+  # Reserved for future interrupt-driven LoRa receive support.
+  # Current code path uses polling, so this pin is not required today.
   lora_irq: 22
 
 lora:

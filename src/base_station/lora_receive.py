@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Optional
+from urllib.parse import unquote
 
 
 class LoRaReceiver:
@@ -11,12 +12,10 @@ class LoRaReceiver:
     def __init__(
         self,
         frequency_mhz: float = 915.0,
-        base_station_address: int = 0,
         cs_pin: int = 1,
         reset_pin: int = 25,
     ):
         self.frequency_mhz = frequency_mhz
-        self.base_station_address = base_station_address
         self.cs_pin = cs_pin
         self.reset_pin = reset_pin
 
@@ -135,13 +134,22 @@ class LoRaReceiver:
             "distance_raw_cm": self._parse_optional_float(distance_raw_cm),
             "temperature_c": self._parse_optional_float(temperature_c),
             "sensor_height_cm": self._parse_optional_float(sensor_height_cm),
-            "error_flags": "" if error_flags == "-" else error_flags,
+            "error_flags": self._decode_error_flags(error_flags),
         }
+
+    def _decode_error_flags(self, value: str) -> str:
+        """Decode percent-escaped error flags from DATA packets."""
+        if value in {"", "-"}:
+            return ""
+        return unquote(value)
 
     def _parse_optional_float(self, value: str) -> Optional[float]:
         if value in {"", "-"}:
             return None
-        return float(value)
+        try:
+            return float(value)
+        except ValueError:
+            return None
 
     def get_rssi(self) -> Optional[int]:
         """Return RSSI from the last received packet."""

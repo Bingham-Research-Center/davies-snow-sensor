@@ -113,8 +113,10 @@ cd davies-snow-sensor
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
-pip install gpiozero adafruit-blinka adafruit-circuitpython-rfm9x
 ```
+
+`requirements.txt` installs the project with `dev` extras (`-e .[dev]`).
+For runtime-only installs, use `pip install -e .`.
 
 ## Station Configuration
 
@@ -135,6 +137,8 @@ Key fields to set in `config/station_01.yaml`:
 | `station.sensor_height_cm` | Sensor-to-bare-ground distance in cm | `200.0` |
 | `pins.hcsr04_trigger` / `pins.hcsr04_echo` | HC-SR04 pins | `23 / 24` |
 | `pins.hcsr04_power` / `pins.ds18b20_power` | Sensor power-control pins | `27 / 17` |
+| `pins.lora_cs` / `pins.lora_reset` | LoRa SPI chip-select / reset pins | `1 / 25` |
+| `pins.lora_irq` | Reserved placeholder; currently unused by runtime (polling mode) | `22` |
 | `storage.ssd_mount_path` | SSD mount root | `/mnt/ssd` |
 | `storage.csv_filename` | CSV file written each cycle | `snow_data.csv` |
 | `timing.cycle_interval_minutes` | Timer interval | `15` |
@@ -247,17 +251,23 @@ sudo systemctl enable --now snow-backup-monitor.timer
 Provisioning writes an override at
 `/etc/systemd/system/snow-sensor.timer.d/override.conf`.
 
-On first boot, provisioning runs on console (`tty1`) and prompts for:
-- station ID
-- sensor height
-
+On first boot, `snow-firstboot.service` runs provisioning interactively on
+`tty1` and prompts for station identity values.
 It writes `config/station_01.yaml`, creates `/var/lib/snow-sensor/provisioned`,
 and then enables/starts timers.
 The canonical file is station-specific (for example,
 `config/station_davies_03.yaml`) and `config/station_01.yaml` is updated as a
 stable alias for existing service/scripts.
 
-For headless provisioning, run manually over SSH:
+If no interactive TTY is available, provisioning fails safely and leaves
+`/var/lib/snow-sensor/provisioned` absent, so `snow-sensor.service` stays
+blocked until provisioning is completed.
+
+Note: `snow-firstboot.service` uses `StandardInput=tty-force` on `/dev/tty1`.
+During first-boot provisioning, systemd takes control of `tty1`; avoid using an
+active login session on that console at the same time.
+
+To run provisioning manually (interactive), run over SSH:
 
 ```bash
 sudo /home/pi/davies-snow-sensor/venv/bin/python /home/pi/davies-snow-sensor/scripts/first_boot_provision.py
@@ -325,7 +335,7 @@ sudo systemctl enable snow-firstboot
 ```
 6. Power down and clone the SD card/image.
 7. Flash clones to new Pis.
-8. On each cloned Pi first boot, complete provisioning prompts on attached display/keyboard.
+8. On each cloned Pi first boot, complete provisioning prompts on attached display/keyboard (or run provisioning interactively over SSH).
 9. Validate service health and storage:
 ```bash
 sudo /home/pi/davies-snow-sensor/scripts/station_diagnostics.sh

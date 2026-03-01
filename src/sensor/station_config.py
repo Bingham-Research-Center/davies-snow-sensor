@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
+from difflib import get_close_matches
 from pathlib import Path
 from typing import Any
 
@@ -19,7 +20,7 @@ class StationSection:
 
 @dataclass
 class PinsSection:
-    """GPIO/SPI pin assignments."""
+    """GPIO/SPI pin assignments (lora_irq is reserved for future IRQ-driven LoRa RX)."""
 
     hcsr04_trigger: int
     hcsr04_echo: int
@@ -28,6 +29,7 @@ class PinsSection:
     ds18b20_power: int
     lora_cs: int
     lora_reset: int
+    # Placeholder for future interrupt-driven receive; runtime currently uses polling.
     lora_irq: int
 
 
@@ -102,6 +104,13 @@ _DEFAULTS: dict[str, Any] = {
 
 _REQUIRED_TOP_LEVEL = {"station", "pins", "lora", "storage", "timing"}
 _LORA_RESERVED_SENSOR_PINS = {7, 8, 9, 10, 11, 25}
+_KNOWN_SECTION_KEYS: dict[str, set[str]] = {
+    "station": {item.name for item in fields(StationSection)},
+    "pins": {item.name for item in fields(PinsSection)},
+    "lora": {item.name for item in fields(LoRaSection)},
+    "storage": {item.name for item in fields(StorageSection)},
+    "timing": {item.name for item in fields(TimingSection)},
+}
 
 
 def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
@@ -112,6 +121,44 @@ def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any
         else:
             out[key] = value
     return out
+
+
+def _format_unknown_keys(unknown: list[str], allowed: set[str]) -> str:
+    labeled: list[str] = []
+    choices = sorted(allowed)
+    for key in unknown:
+        suggestion = get_close_matches(key, choices, n=1, cutoff=0.75)
+        if suggestion:
+            labeled.append(f"{key} (did you mean '{suggestion[0]}'?)")
+        else:
+            labeled.append(key)
+    return ", ".join(labeled)
+
+
+def _validate_known_keys(raw: dict[str, Any]) -> None:
+    unknown_top = sorted(key for key in raw if key not in _REQUIRED_TOP_LEVEL)
+    if unknown_top:
+        allowed_top = ", ".join(sorted(_REQUIRED_TOP_LEVEL))
+        raise ValueError(
+            "Unknown top-level config key(s): "
+            f"{_format_unknown_keys(unknown_top, _REQUIRED_TOP_LEVEL)}. "
+            f"Allowed sections: {allowed_top}"
+        )
+
+    for section in sorted(_REQUIRED_TOP_LEVEL):
+        value = raw.get(section)
+        if not isinstance(value, dict):
+            raise ValueError(f"Section '{section}' must be a YAML mapping")
+
+        allowed_keys = _KNOWN_SECTION_KEYS[section]
+        unknown_keys = sorted(key for key in value if key not in allowed_keys)
+        if unknown_keys:
+            allowed_text = ", ".join(sorted(allowed_keys))
+            raise ValueError(
+                f"Unknown key(s) in section '{section}': "
+                f"{_format_unknown_keys(unknown_keys, allowed_keys)}. "
+                f"Allowed keys: {allowed_text}"
+            )
 
 
 def load_config(config_path: str) -> StationConfig:
@@ -133,6 +180,7 @@ def load_config(config_path: str) -> StationConfig:
             "Configuration must use nested schema with sections: "
             f"{', '.join(sorted(_REQUIRED_TOP_LEVEL))}. Missing: {', '.join(missing_sections)}"
         )
+    _validate_known_keys(raw)
 
     merged = _deep_merge(_DEFAULTS, raw)
 

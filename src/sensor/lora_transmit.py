@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import time
 from typing import Optional
+from urllib.parse import quote
 
 
 class LoRaTransmitter:
@@ -116,9 +117,7 @@ class LoRaTransmitter:
 
     def _format_data_message(self, payload: dict) -> str:
         """Format payload dictionary into protocol v2 DATA packet."""
-        temp = payload.get("temperature_c")
-        temp_text = "-" if temp is None else f"{float(temp):.2f}"
-        error_flags = str(payload.get("error_flags", "")).replace(",", "|")
+        error_flags = self._encode_error_flags(payload.get("error_flags", ""))
 
         parts = [
             "DATA",
@@ -126,11 +125,17 @@ class LoRaTransmitter:
             str(payload.get("timestamp", "")),
             self._format_number(payload.get("snow_depth_cm")),
             self._format_number(payload.get("distance_raw_cm")),
-            temp_text,
+            self._format_number(payload.get("temperature_c")),
             self._format_number(payload.get("sensor_height_cm")),
             error_flags,
         ]
         return ",".join(parts)
+
+    def _encode_error_flags(self, value: object) -> str:
+        """Percent-encode error flags so protocol commas/pipes are unambiguous."""
+        if value is None:
+            return ""
+        return quote(str(value), safe="")
 
     def _parse_ack_message(self, message: str) -> tuple[Optional[str], Optional[str]]:
         """Return (station_id, timestamp) for ACK packets, else (None, None)."""

@@ -29,6 +29,66 @@ def test_data_message_format_and_parse_roundtrip() -> None:
     assert parsed["error_flags"] == ""
 
 
+def test_data_message_roundtrip_preserves_escaped_error_flags() -> None:
+    tx = LoRaTransmitter()
+    rx = LoRaReceiver()
+
+    payload = {
+        "station_id": "DAVIES-01",
+        "timestamp": "2026-01-15T08:30:00Z",
+        "snow_depth_cm": 45.2,
+        "distance_raw_cm": 154.8,
+        "temperature_c": -12.3,
+        "sensor_height_cm": 200.0,
+        "error_flags": "temp_unavailable|lora_init_error:SPI|bus_error,storage_write_error:/mnt,ssd",
+    }
+
+    message = tx._format_data_message(payload)
+    assert "%7C" in message
+    assert "%2C" in message
+
+    parsed = rx._parse_data_message(message)
+    assert parsed["error_flags"] == payload["error_flags"]
+
+
+def test_data_message_roundtrip_with_missing_temperature() -> None:
+    tx = LoRaTransmitter()
+    rx = LoRaReceiver()
+
+    payload = {
+        "station_id": "DAVIES-01",
+        "timestamp": "2026-01-15T08:30:00Z",
+        "snow_depth_cm": 45.2,
+        "distance_raw_cm": 154.8,
+        "temperature_c": None,
+        "sensor_height_cm": 200.0,
+        "error_flags": "",
+    }
+
+    message = tx._format_data_message(payload)
+    parsed = rx._parse_data_message(message)
+    assert parsed["temperature_c"] is None
+
+
+def test_receiver_accepts_legacy_unescaped_error_flags() -> None:
+    rx = LoRaReceiver()
+    parsed = rx._parse_data_message(
+        "DATA,DAVIES-01,2026-01-15T08:30:00Z,45.2,154.8,-12.3,200.0,temp_unavailable|lora_ack_timeout"
+    )
+    assert parsed["error_flags"] == "temp_unavailable|lora_ack_timeout"
+
+
+def test_parse_data_message_preserves_partial_data_when_numeric_field_is_invalid() -> None:
+    rx = LoRaReceiver()
+    parsed = rx._parse_data_message("DATA,DAVIES-01,2026-01-15T08:30:00Z,1e.5,154.8,-12.3,200.0,")
+    assert parsed["station_id"] == "DAVIES-01"
+    assert parsed["timestamp"] == "2026-01-15T08:30:00Z"
+    assert parsed["snow_depth_cm"] is None
+    assert parsed["distance_raw_cm"] == 154.8
+    assert parsed["temperature_c"] == -12.3
+    assert parsed["sensor_height_cm"] == 200.0
+
+
 def test_ack_parse_message() -> None:
     tx = LoRaTransmitter()
     station_id, timestamp = tx._parse_ack_message("ACK,DAVIES-01,2026-01-15T08:30:00Z")
@@ -105,3 +165,18 @@ def test_receive_data_drops_packet_with_empty_station_without_ack() -> None:
     assert parsed is None
     assert rx._rfm9x.sent_messages == []
     assert "lora_parse_error" in (rx.get_last_error() or "")
+
+
+def test_receive_data_accepts_invalid_numeric_field_and_still_acks() -> None:
+    rx = LoRaReceiver()
+    rx._initialized = True
+    rx._rfm9x = _FakeRfm(b"DATA,DAVIES-01,2026-01-15T08:30:00Z,1e.5,154.8,-12.3,200.0,")
+
+    parsed = rx.receive_data(timeout=0.1)
+
+    assert parsed is not None
+    assert parsed["snow_depth_cm"] is None
+    assert parsed["distance_raw_cm"] == 154.8
+    assert parsed["temperature_c"] == -12.3
+    assert parsed["sensor_height_cm"] == 200.0
+    assert rx._rfm9x.sent_messages == [b"ACK,DAVIES-01,2026-01-15T08:30:00Z"]

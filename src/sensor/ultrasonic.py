@@ -6,7 +6,10 @@ import statistics
 import time
 from typing import Optional
 
-from gpiozero import DistanceSensor
+try:
+    from gpiozero import DistanceSensor
+except ImportError:  # pragma: no cover - exercised on non-hardware test hosts
+    DistanceSensor = None  # type: ignore[assignment]
 
 
 class UltrasonicSensor:
@@ -37,6 +40,8 @@ class UltrasonicSensor:
         """Initialize gpiozero distance sensor."""
         if self._initialized:
             return
+        if DistanceSensor is None:
+            raise RuntimeError("gpiozero is required for ultrasonic sensor access")
         self._sensor = DistanceSensor(
             echo=self.echo_pin,
             trigger=self.trigger_pin,
@@ -132,7 +137,8 @@ class UltrasonicSensor:
         return round(corrected, 2)
 
     def calculate_snow_depth_cm(self, distance_cm: float) -> float:
-        return round(self.sensor_height_cm - distance_cm, 2)
+        depth_cm = self.sensor_height_cm - distance_cm
+        return round(max(0.0, depth_cm), 2)
 
     def get_last_error_reason(self) -> Optional[str]:
         return self._last_error_reason

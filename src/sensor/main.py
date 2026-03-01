@@ -12,7 +12,7 @@ from typing import Optional
 
 from .local_storage import LocalStorage
 from .lora_transmit import LoRaTransmitter
-from .power import cleanup_power_pins, lora_sleep, lora_wake, sensor_power_off, sensor_power_on
+from .power import cleanup_power_pins, sensor_power_off, sensor_power_on
 from .station_config import StationConfig, load_config, validate_config
 from .temperature import TemperatureSensor
 from .ultrasonic import UltrasonicSensor
@@ -144,10 +144,10 @@ class SensorStation:
             self.cleanup()
             return 0
 
-        # 4) Transmit via LoRa with ACK, then hold radio in reset.
+        # 4) Transmit via LoRa with ACK.
+        # Reset sequencing is handled inside adafruit_rfm9x initialization.
         lora_tx_success = False
         try:
-            lora_wake(self.config.pins.lora_reset)
             if self.lora.initialize():
                 payload = {
                     "station_id": reading["station_id"],
@@ -177,10 +177,6 @@ class SensorStation:
                 pass
             try:
                 self.lora.cleanup()
-            except Exception:
-                pass
-            try:
-                lora_sleep(self.config.pins.lora_reset)
             except Exception:
                 pass
 

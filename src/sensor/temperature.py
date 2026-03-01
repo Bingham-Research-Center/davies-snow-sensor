@@ -12,6 +12,10 @@ class TemperatureSensor:
 
     W1_DEVICES_PATH = "/sys/bus/w1/devices/"
     W1_DEVICE_PREFIX = "28-"
+    MIN_VALID_C = -40.0
+    MAX_VALID_C = 60.0
+    POWER_ON_RESET_C = 85.0
+    POWER_ON_RESET_EPSILON = 0.01
 
     def __init__(self, data_pin: int = 4, read_timeout_ms: int = 800):
         self.data_pin = data_pin
@@ -71,6 +75,7 @@ class TemperatureSensor:
                 value = self._read_sysfs()
 
             if value is not None:
+                self._last_error_reason = None
                 self._last_read_duration_ms = round((time.monotonic() - start) * 1000)
                 return value
 
@@ -86,7 +91,7 @@ class TemperatureSensor:
     def _read_w1thermsensor(self) -> Optional[float]:
         try:
             value = float(self._w1_sensor.get_temperature())  # type: ignore[union-attr]
-            return round(value, 2)
+            return self._validate_temperature_c(value)
         except Exception:
             self._last_error_reason = "temp_w1therm_read_error"
             return None
@@ -115,7 +120,16 @@ class TemperatureSensor:
         except ValueError:
             self._last_error_reason = "temp_parse"
             return None
-        return round(temp_millidegrees / 1000.0, 2)
+        return self._validate_temperature_c(temp_millidegrees / 1000.0)
+
+    def _validate_temperature_c(self, value_c: float) -> Optional[float]:
+        if abs(value_c - self.POWER_ON_RESET_C) <= self.POWER_ON_RESET_EPSILON:
+            self._last_error_reason = "temp_power_on_reset"
+            return None
+        if not (self.MIN_VALID_C <= value_c <= self.MAX_VALID_C):
+            self._last_error_reason = "temp_out_of_range"
+            return None
+        return round(value_c, 2)
 
     def get_last_error_reason(self) -> Optional[str]:
         return self._last_error_reason

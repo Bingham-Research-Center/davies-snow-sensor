@@ -89,3 +89,38 @@ timestamp,station_id,snow_depth_cm
     assert df.height == 3
     # -05:00 should convert to 05:00 UTC and sort after 00:00 UTC values.
     assert df["timestamp"][2].hour == 5
+
+
+def test_load_sensor_data_logs_unparseable_timestamps(tmp_path: Path, caplog) -> None:
+    _write_csv(
+        tmp_path / "bad_ts.csv",
+        """
+timestamp,station_id,snow_depth_cm
+2024-01-01T00:00:00Z,STN_01,10.0
+not-a-timestamp,STN_01,11.0
+""",
+    )
+
+    with caplog.at_level("WARNING", logger="src.analysis.data_loader"):
+        df = load_sensor_data(str(tmp_path))
+
+    assert df.height == 2
+    assert df["timestamp"].null_count() == 1
+    assert any("Timestamp normalization failed for 1 row(s)" in rec.message for rec in caplog.records)
+
+
+def test_load_sensor_data_logs_unreadable_csv_and_continues(tmp_path: Path, caplog) -> None:
+    _write_csv(
+        tmp_path / "good.csv",
+        """
+timestamp,station_id,snow_depth_cm
+2024-01-01T00:00:00Z,STN_01,10.0
+""",
+    )
+    (tmp_path / "broken.csv").mkdir()
+
+    with caplog.at_level("WARNING", logger="src.analysis.data_loader"):
+        df = load_sensor_data(str(tmp_path))
+
+    assert df.height == 1
+    assert any("Skipping unreadable CSV" in rec.message for rec in caplog.records)

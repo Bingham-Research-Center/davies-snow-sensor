@@ -41,7 +41,12 @@ def _require_template() -> dict[str, Any]:
 
 def _prompt(prompt: str, cast=str) -> Any:
     while True:
-        value = input(prompt).strip()
+        try:
+            value = input(prompt).strip()
+        except EOFError as exc:
+            raise RuntimeError("No interactive input is available on stdin") from exc
+        except KeyboardInterrupt as exc:
+            raise RuntimeError("Provisioning cancelled by user") from exc
         if value:
             try:
                 return cast(value)
@@ -82,6 +87,17 @@ def _collect_values(non_interactive: bool, template: dict[str, Any]) -> dict[str
     out["station"]["id"] = _prompt("Station ID (e.g., DAVIES-03): ", str)
     out["station"]["sensor_height_cm"] = _prompt("Sensor height cm: ", float)
     return out
+
+
+def _ensure_interactive_stdin(non_interactive: bool) -> None:
+    if non_interactive:
+        return
+    if not sys.stdin.isatty():
+        raise RuntimeError(
+            "Interactive first-boot provisioning requires a TTY. "
+            "Attach keyboard/display or run manually over SSH; "
+            "for pre-seeded images use --non-interactive explicitly."
+        )
 
 
 def _station_config_path(station_id: str) -> Path:
@@ -183,7 +199,11 @@ def main() -> int:
     except Exception as exc:
         return _fail(str(exc))
 
-    values = _collect_values(args.non_interactive, template)
+    try:
+        _ensure_interactive_stdin(args.non_interactive)
+        values = _collect_values(args.non_interactive, template)
+    except Exception as exc:
+        return _fail(str(exc))
     errors = _validate(values)
     if errors:
         for err in errors:

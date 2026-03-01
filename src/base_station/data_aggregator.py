@@ -107,10 +107,12 @@ class DataAggregator:
 
     def _get_current_file(self) -> Path:
         date_key = datetime.now(timezone.utc).date().isoformat()
-        if self._current_date_key != date_key:
+        current_file = self._current_file
+        if self._current_date_key != date_key or current_file is None:
+            current_file = self.storage_path / f"base_station_{date_key}.csv"
             self._current_date_key = date_key
-            self._current_file = self.storage_path / f"base_station_{date_key}.csv"
-        return self._current_file
+            self._current_file = current_file
+        return current_file
 
     def get_network_status(self) -> dict:
         return {
