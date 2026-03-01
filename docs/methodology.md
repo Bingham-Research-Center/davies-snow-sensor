@@ -37,7 +37,7 @@ A denser network of low-cost sensors will outperform a single expensive station 
 #### Low-Cost Network
 - Measurement frequency: [TBD - e.g., every 15 minutes]
 - Data transmission: LoRa to base station
-- Backup: Local SD card storage
+- Backup: Local CSV persistence on configured storage path (typically SSD mount)
 
 #### Reference Stations
 - Measurement frequency: [Match to existing protocol]

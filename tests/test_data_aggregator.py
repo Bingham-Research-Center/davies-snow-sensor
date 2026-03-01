@@ -1,3 +1,4 @@
+import fcntl
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -29,6 +30,32 @@ def test_save_reading_success_writes_csv(tmp_path: Path) -> None:
     assert "DAVIES-01" in content
 
 
+def test_constructor_passes_lora_frequency_to_receiver(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    class FakeReceiver:
+        def __init__(self, frequency_mhz: float, cs_pin: int, reset_pin: int):
+            captured["frequency_mhz"] = frequency_mhz
+            captured["cs_pin"] = cs_pin
+            captured["reset_pin"] = reset_pin
+
+        def initialize(self) -> bool:
+            return True
+
+        def cleanup(self) -> None:
+            return None
+
+    monkeypatch.setattr("src.base_station.data_aggregator.LoRaReceiver", FakeReceiver)
+
+    _agg = DataAggregator(
+        storage_path="/tmp/base-data",
+        lora_frequency_mhz=917.5,
+        lora_cs_pin=0,
+        lora_reset_pin=22,
+    )
+    assert captured == {"frequency_mhz": 917.5, "cs_pin": 0, "reset_pin": 22}
+
+
 def test_save_reading_handles_write_error_without_raising(tmp_path: Path) -> None:
     agg = DataAggregator(storage_path=str(tmp_path))
     # Force target "file" path to a directory so open(..., "a") fails with OSError.
@@ -47,6 +74,25 @@ def test_save_reading_handles_write_error_without_raising(tmp_path: Path) -> Non
     assert agg.total_saved == 0
     assert agg.total_save_errors == 1
     assert "base_storage_write_error" in (agg.last_storage_error or "")
+
+
+def test_save_reading_uses_file_lock(tmp_path: Path, monkeypatch) -> None:
+    agg = DataAggregator(storage_path=str(tmp_path))
+    lock_ops: list[int] = []
+
+    monkeypatch.setattr(
+        "src.base_station.data_aggregator.fcntl.flock",
+        lambda _fd, op: lock_ops.append(op),
+    )
+
+    reading = {
+        "received_at": "2026-01-15T08:30:05Z",
+        "station_id": "DAVIES-01",
+        "timestamp": "2026-01-15T08:30:00Z",
+    }
+    assert agg._save_reading(reading) is True
+    assert lock_ops[0] == fcntl.LOCK_EX
+    assert lock_ops[-1] == fcntl.LOCK_UN
 
 
 def test_process_reading_continues_on_storage_error(tmp_path: Path, monkeypatch) -> None:

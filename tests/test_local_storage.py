@@ -1,4 +1,5 @@
 from pathlib import Path
+from types import SimpleNamespace
 
 import src.sensor.local_storage as local_storage_module
 from src.sensor.local_storage import LocalStorage
@@ -173,3 +174,36 @@ def test_update_lora_tx_success_sanitizes_newlines_in_error_flags(tmp_path: Path
     rows = read_csv_rows(tmp_path / "snow_data.csv")
     assert rows[0]["error_flags"] == "lora_tx_failed retry_exhausted"
     assert "\n" not in rows[0]["error_flags"]
+
+
+def test_save_reading_fails_when_disk_space_is_low(tmp_path: Path, monkeypatch) -> None:
+    storage = LocalStorage(str(tmp_path), "snow_data.csv")
+    assert storage.initialize() is True
+    monkeypatch.setattr("src.sensor.local_storage.os.path.ismount", lambda _path: True)
+    monkeypatch.setattr(
+        "src.sensor.local_storage.os.statvfs",
+        lambda _path: SimpleNamespace(f_bavail=0, f_frsize=4096),
+    )
+
+    assert storage.save_reading({"timestamp": "2026-01-15T08:30:00Z"}) is False
+    assert "ssd_low_space" in (storage.get_last_error() or "")
+
+
+def test_update_lora_tx_success_fails_when_disk_space_is_low(tmp_path: Path, monkeypatch) -> None:
+    storage = LocalStorage(str(tmp_path), "snow_data.csv")
+    assert storage.initialize() is True
+
+    monkeypatch.setattr("src.sensor.local_storage.os.path.ismount", lambda _path: True)
+    monkeypatch.setattr(
+        "src.sensor.local_storage.os.statvfs",
+        lambda _path: SimpleNamespace(f_bavail=1024, f_frsize=4096),
+    )
+    ts = "2026-01-15T08:30:00Z"
+    assert storage.save_reading({"timestamp": ts, "station_id": "DAVIES-01", "lora_tx_success": False})
+
+    monkeypatch.setattr(
+        "src.sensor.local_storage.os.statvfs",
+        lambda _path: SimpleNamespace(f_bavail=0, f_frsize=4096),
+    )
+    assert storage.update_lora_tx_success(ts, "DAVIES-01", True) is False
+    assert "ssd_low_space" in (storage.get_last_error() or "")

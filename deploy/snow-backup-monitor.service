@@ -6,3 +6,6 @@ After=local-fs.target
 Type=oneshot
 User=root
 ExecStart=/bin/bash -lc 'if mountpoint -q /mnt/ssd && test -w /mnt/ssd; then logger -t snow-backup-monitor "backup mount healthy at /mnt/ssd"; else logger -p user.warning -t snow-backup-monitor "backup mount missing or not writable at /mnt/ssd"; fi'
+
+[Install]
+WantedBy=multi-user.target

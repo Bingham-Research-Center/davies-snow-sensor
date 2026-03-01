@@ -115,8 +115,17 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-`requirements.txt` installs the project with `dev` extras (`-e .[dev]`).
+`requirements.txt` installs the project with `dev` extras (`-e .[dev]`) for
+non-Pi development hosts.
+On Raspberry Pi nodes, install with:
+
+```bash
+pip install -r requirements.pi.txt
+```
+
 For runtime-only installs, use `pip install -e .`.
+On Raspberry Pi sensor/base-station nodes, install hardware dependencies with:
+`pip install -e .[hardware]` (or `pip install -e .[dev,hardware]`).
 
 ## Station Configuration
 
@@ -298,7 +307,19 @@ Start the base station receiver on the central uplink Pi:
 ```bash
 cd /home/pi/davies-snow-sensor
 source venv/bin/activate
-sudo venv/bin/python -m src.base_station.main --storage-path /home/pi/snow_base_data
+sudo venv/bin/python -m src.base_station.main \
+  --storage-path /home/pi/snow_base_data \
+  --lora-frequency 915.0 \
+  --lora-cs-pin 1 \
+  --lora-reset-pin 25
+```
+
+To run as a persistent boot service on the base-station Pi:
+
+```bash
+sudo cp deploy/snow-base-station.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now snow-base-station.service
 ```
 
 ## Systemd Service Reference
@@ -316,6 +337,8 @@ sudo venv/bin/python -m src.base_station.main --storage-path /home/pi/snow_base_
 | First-boot provision logs | `journalctl -u snow-firstboot -f` |
 | Backup monitor status | `sudo systemctl status snow-backup-monitor.timer` |
 | Backup monitor logs | `journalctl -t snow-backup-monitor -f` |
+| Base station status | `sudo systemctl status snow-base-station.service` |
+| Base station logs | `journalctl -u snow-base-station.service -f` |
 
 The one-shot sensor service runs as root from `/home/pi/davies-snow-sensor` using the project venv and is scheduled by `snow-sensor.timer`.
 

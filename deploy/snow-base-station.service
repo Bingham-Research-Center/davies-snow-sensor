@@ -1,0 +1,17 @@
+[Unit]
+Description=Snow Sensor Base Station Receiver
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/davies-snow-sensor
+ExecStart=/home/pi/davies-snow-sensor/venv/bin/python -m src.base_station.main --storage-path /home/pi/snow_base_data --lora-frequency 915.0 --lora-cs-pin 1 --lora-reset-pin 25
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

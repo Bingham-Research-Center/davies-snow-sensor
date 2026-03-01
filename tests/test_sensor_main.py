@@ -269,6 +269,37 @@ def test_run_cycle_applies_temperature_compensation_before_persist_and_transmit(
     assert updated["error_flags"] == ""
 
 
+def test_run_cycle_stops_after_ultrasonic_when_stop_requested_mid_cycle(
+    patched_sensor_runtime,
+    monkeypatch,
+) -> None:
+    runtime = patched_sensor_runtime
+    station = sensor_main.SensorStation(_make_config())
+
+    original_power_off = sensor_main.sensor_power_off
+
+    def _power_off_and_request_stop(pin: int) -> None:
+        original_power_off(pin)
+        if pin == station.config.pins.hcsr04_power:
+            station.request_stop()
+
+    monkeypatch.setattr(sensor_main, "sensor_power_off", _power_off_and_request_stop)
+
+    code = station.run_cycle()
+
+    storage = runtime.FakeStorage.instances[0]
+    lora = runtime.FakeLoRa.instances[0]
+    assert code == 0
+    assert storage.saved == []
+    assert storage.updated == []
+    assert lora.payloads == []
+    assert runtime.power_events == [
+        ("on", 27),
+        ("off", 27),
+        ("cleanup", None),
+    ]
+
+
 def test_main_runs_cycle_and_exits_with_station_code(monkeypatch) -> None:
     config = _make_config()
     calls: dict[str, object] = {}

@@ -112,3 +112,36 @@ def test_main_non_interactive_succeeds_without_tty(tmp_path: Path, monkeypatch) 
     assert code == 0
     assert provision.MARKER_PATH.exists()
     assert (provision.CONFIG_DIR / "station_davies_55.yaml").exists()
+
+
+def test_main_fails_when_template_missing(tmp_path: Path, monkeypatch, capsys) -> None:
+    _patch_paths(monkeypatch, tmp_path)
+    missing = tmp_path / "config" / "missing_template.yaml"
+    monkeypatch.setattr(provision, "TEMPLATE_PATH", missing)
+    monkeypatch.setattr(
+        provision.sys,
+        "argv",
+        ["first_boot_provision.py", "--non-interactive", "--no-start-service"],
+    )
+    monkeypatch.setattr(provision.sys, "stdin", SimpleNamespace(isatty=lambda: False))
+
+    code = provision.main()
+    captured = capsys.readouterr()
+
+    assert code == 1
+    assert "Template not found" in captured.err
+    assert not provision.MARKER_PATH.exists()
+
+
+def test_main_rejects_invalid_values_and_does_not_write_marker(tmp_path: Path, monkeypatch) -> None:
+    _patch_paths(monkeypatch, tmp_path)
+    monkeypatch.setattr(provision.sys, "argv", ["first_boot_provision.py", "--no-start-service"])
+    monkeypatch.setattr(provision.sys, "stdin", SimpleNamespace(isatty=lambda: True))
+    answers = iter(["DAVIES-04", "10.0"])  # invalid sensor height
+    monkeypatch.setattr(provision, "_prompt", lambda _prompt, cast=str: cast(next(answers)))
+
+    code = provision.main()
+
+    assert code == 2
+    assert not provision.MARKER_PATH.exists()
+    assert not any(provision.CONFIG_DIR.glob("station_*.yaml"))

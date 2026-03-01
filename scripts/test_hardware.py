@@ -160,7 +160,7 @@ class HardwareTestRunner:
             from src.sensor.ultrasonic import UltrasonicSensor
         except ImportError as e:
             print_fail(f"Could not import UltrasonicSensor: {e}")
-            print_info("Run: pip install -r requirements.txt")
+            print_info("Run on Pi: pip install -r requirements.pi.txt")
             return False
 
         sensor = None
@@ -385,7 +385,7 @@ class HardwareTestRunner:
             from src.sensor.lora_transmit import LoRaTransmitter
         except ImportError as e:
             print_fail(f"Could not import LoRaTransmitter: {e}")
-            print_info("Run: pip install -r requirements.txt")
+            print_info("Run on Pi: pip install -r requirements.pi.txt")
             return False
 
         transmitter = None

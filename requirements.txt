@@ -1,2 +1,3 @@
-# Install the package and full development extras from pyproject.toml.
+# Default development install for non-Pi environments.
+# Raspberry Pi sensor/base-station nodes should use requirements.pi.txt.
 -e .[dev]

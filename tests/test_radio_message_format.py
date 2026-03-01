@@ -100,6 +100,103 @@ def test_ack_parse_message() -> None:
     assert timestamp is None
 
 
+class _FakeTxRfm:
+    def __init__(
+        self,
+        send_outcomes: list[object] | None = None,
+        receive_outcomes: list[object] | None = None,
+        last_rssi: int = -70,
+    ):
+        self._send_outcomes = list(send_outcomes or [])
+        self._receive_outcomes = list(receive_outcomes or [])
+        self.send_calls = 0
+        self.receive_calls = 0
+        self.last_rssi = last_rssi
+
+    def send(self, _payload: bytes) -> None:
+        self.send_calls += 1
+        if self._send_outcomes:
+            outcome = self._send_outcomes.pop(0)
+            if isinstance(outcome, Exception):
+                raise outcome
+
+    def receive(self, timeout: float = 1.0, with_header: bool = False):  # noqa: ARG002
+        self.receive_calls += 1
+        if self._receive_outcomes:
+            outcome = self._receive_outcomes.pop(0)
+            if isinstance(outcome, Exception):
+                raise outcome
+            return outcome
+        return None
+
+
+def _patch_tx_clock(monkeypatch, *, start: float = 0.0, tick: float = 0.05) -> None:
+    state = {"t": start}
+
+    def fake_monotonic() -> float:
+        state["t"] += tick
+        return state["t"]
+
+    monkeypatch.setattr("src.sensor.lora_transmit.time.monotonic", fake_monotonic)
+
+
+def test_transmit_with_ack_exhausts_retries(monkeypatch) -> None:
+    tx = LoRaTransmitter(timeout_seconds=0.1)
+    tx._initialized = True
+    tx._rfm9x = _FakeTxRfm(send_outcomes=[None, None, None], receive_outcomes=[None, None, None])
+    _patch_tx_clock(monkeypatch, tick=0.1)
+
+    ok = tx.transmit_with_ack(
+        {"station_id": "DAVIES-01", "timestamp": "2026-01-15T08:30:00Z"},
+        retries=3,
+        timeout_seconds=0.1,
+    )
+
+    assert ok is False
+    assert tx._rfm9x.send_calls == 3
+    assert tx.get_last_error() == "lora_ack_timeout"
+
+
+def test_transmit_with_ack_recovers_from_initial_send_exception(monkeypatch) -> None:
+    tx = LoRaTransmitter(timeout_seconds=0.2)
+    tx._initialized = True
+    tx._rfm9x = _FakeTxRfm(
+        send_outcomes=[RuntimeError("spi transient"), None],
+        receive_outcomes=[b"ACK,DAVIES-01,2026-01-15T08:30:00Z"],
+    )
+    _patch_tx_clock(monkeypatch, tick=0.01)
+
+    ok = tx.transmit_with_ack(
+        {"station_id": "DAVIES-01", "timestamp": "2026-01-15T08:30:00Z"},
+        retries=2,
+        timeout_seconds=0.2,
+    )
+
+    assert ok is True
+    assert tx._rfm9x.send_calls == 2
+    assert tx.get_last_error() is None
+
+
+def test_transmit_with_ack_captures_rssi_on_matching_ack(monkeypatch) -> None:
+    tx = LoRaTransmitter(timeout_seconds=0.2)
+    tx._initialized = True
+    tx._rfm9x = _FakeTxRfm(
+        send_outcomes=[None],
+        receive_outcomes=[b"ACK,OTHER,2026-01-15T08:30:00Z", b"ACK,DAVIES-01,2026-01-15T08:30:00Z"],
+        last_rssi=-88,
+    )
+    _patch_tx_clock(monkeypatch, tick=0.01)
+
+    ok = tx.transmit_with_ack(
+        {"station_id": "DAVIES-01", "timestamp": "2026-01-15T08:30:00Z"},
+        retries=1,
+        timeout_seconds=0.2,
+    )
+
+    assert ok is True
+    assert tx.get_last_rssi() == -88
+
+
 def test_lora_transmitter_pin_name_resolution() -> None:
     tx = LoRaTransmitter(cs_pin=0, reset_pin=22)
     assert tx._cs_board_name() == "CE0"

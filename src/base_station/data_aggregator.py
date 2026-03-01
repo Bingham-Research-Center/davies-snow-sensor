@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import fcntl
 import os
 from datetime import datetime, timezone
 from pathlib import Path
@@ -26,9 +27,20 @@ class DataAggregator:
         "rssi",
     ]
 
-    def __init__(self, storage_path: str, lora_cs_pin: int = 1, lora_reset_pin: int = 25):
+    def __init__(
+        self,
+        storage_path: str,
+        lora_frequency_mhz: float = 915.0,
+        lora_cs_pin: int = 1,
+        lora_reset_pin: int = 25,
+    ):
         self.storage_path = Path(storage_path)
-        self.receiver = LoRaReceiver(cs_pin=lora_cs_pin, reset_pin=lora_reset_pin)
+        self.receiver = LoRaReceiver(
+            frequency_mhz=lora_frequency_mhz,
+            cs_pin=lora_cs_pin,
+            reset_pin=lora_reset_pin,
+        )
+        self._lock_path = self.storage_path / ".base_station_csv.lock"
         self._current_file: Optional[Path] = None
         self._current_date_key: Optional[str] = None
         self._running = False
@@ -86,17 +98,23 @@ class DataAggregator:
 
     def _save_reading(self, data: dict) -> bool:
         file_path = self._get_current_file()
-        file_exists = file_path.exists()
 
         row = {field: data.get(field, "") for field in self.FIELDS}
         try:
-            with file_path.open("a", newline="", encoding="utf-8") as handle:
-                writer = csv.DictWriter(handle, fieldnames=self.FIELDS)
-                if not file_exists:
-                    writer.writeheader()
-                writer.writerow(row)
-                handle.flush()
-                os.fsync(handle.fileno())
+            self._lock_path.parent.mkdir(parents=True, exist_ok=True)
+            with self._lock_path.open("a", encoding="utf-8") as lock_handle:
+                fcntl.flock(lock_handle.fileno(), fcntl.LOCK_EX)
+                try:
+                    file_exists = file_path.exists()
+                    with file_path.open("a", newline="", encoding="utf-8") as handle:
+                        writer = csv.DictWriter(handle, fieldnames=self.FIELDS)
+                        if not file_exists:
+                            writer.writeheader()
+                        writer.writerow(row)
+                        handle.flush()
+                        os.fsync(handle.fileno())
+                finally:
+                    fcntl.flock(lock_handle.fileno(), fcntl.LOCK_UN)
             self.total_saved += 1
             self.last_storage_error = None
             return True

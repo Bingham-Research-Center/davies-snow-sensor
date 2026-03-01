@@ -15,7 +15,7 @@ Default soak is 4 hours (`14400` seconds). Increase to 8+ hours when possible.
 ## Pre-Validation Setup
 
 - [ ] `config/station_01.yaml` has a real station ID (not `STN_XX`).
-- [ ] `latitude` and `longitude` are real values (not `0.0, 0.0`).
+- [ ] `station.sensor_height_cm` is set to the measured install height.
 - [ ] SSD mounted at `/mnt/ssd`.
 - [ ] LoRa receiver/base endpoint available for success-path checks.
 
@@ -79,6 +79,8 @@ Notes:
 ### Phase 5: Services + Diagnostics
 
 - [ ] `scripts/station_diagnostics.sh` reports expected station identity.
+- [ ] Diagnostics output includes CSV row count and last timestamp.
+- [ ] Diagnostics output includes recent `lora_tx_success=False` count.
 - [ ] `snow-sensor.timer` is active.
 - [ ] `snow-sensor.service` completes successfully when triggered.
 - [ ] `snow-backup-monitor.timer` is active.

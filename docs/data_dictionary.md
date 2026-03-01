@@ -46,6 +46,27 @@ timestamp,station_id,snow_depth_cm,distance_raw_cm,temperature_c,sensor_height_c
 | `interpolated` | boolean | - | Whether value was interpolated |
 | `correction_applied` | float | mm | Temperature correction applied |
 
+## Base Station Aggregated Data
+
+### File Format
+- Format: CSV
+- Location: base-station storage path (default `/home/pi/snow_base_data`)
+- File naming: `base_station_{YYYY-MM-DD}.csv`
+
+### Fields
+
+| Field | Type | Unit | Description |
+|-------|------|------|-------------|
+| `received_at` | ISO 8601 | UTC | Base-station receive timestamp |
+| `station_id` | string | - | Origin sensor station identifier |
+| `timestamp` | ISO 8601 | UTC | Sensor-side measurement timestamp |
+| `snow_depth_cm` | float | cm | Sensor-reported depth |
+| `distance_raw_cm` | float | cm | Sensor-reported distance |
+| `temperature_c` | float | °C | Sensor-reported ambient temperature |
+| `sensor_height_cm` | float | cm | Sensor-reported mount height |
+| `error_flags` | string | - | Sensor-side cycle flags (pipe-delimited) |
+| `rssi` | integer | dBm | LoRa RSSI observed by base station |
+
 ## Station Metadata
 
 ### File Format

@@ -15,6 +15,8 @@ from typing import Iterator, Optional
 class LocalStorage:
     """Append cycle readings to a single CSV file on mounted SSD storage."""
 
+    MIN_FREE_BYTES = 1 * 1024 * 1024
+
     FIELDS = [
         "timestamp",
         "station_id",
@@ -77,6 +79,8 @@ class LocalStorage:
         if not self.is_mounted():
             self._last_error = f"ssd_not_mounted:{self.ssd_mount_path}"
             return False
+        if not self._has_min_free_space():
+            return False
 
         try:
             with self._exclusive_lock():
@@ -112,6 +116,8 @@ class LocalStorage:
         self._last_error = None
         if not self.is_mounted():
             self._last_error = f"ssd_not_mounted:{self.ssd_mount_path}"
+            return False
+        if not self._has_min_free_space():
             return False
 
         try:
@@ -279,3 +285,17 @@ class LocalStorage:
             return ""
         text = str(value)
         return text.replace("\r", " ").replace("\n", " ")
+
+    def _has_min_free_space(self, min_free_bytes: int = MIN_FREE_BYTES) -> bool:
+        """Ensure the target filesystem has a small reserve before write operations."""
+        try:
+            stats = os.statvfs(self.ssd_mount_path)
+            free_bytes = int(stats.f_bavail) * int(stats.f_frsize)
+        except OSError as exc:
+            self._last_error = f"ssd_stat_error:{exc}"
+            return False
+
+        if free_bytes < int(min_free_bytes):
+            self._last_error = f"ssd_low_space:{free_bytes}B<{min_free_bytes}B"
+            return False
+        return True

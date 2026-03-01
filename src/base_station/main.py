@@ -15,6 +15,12 @@ def main() -> None:
         help="Directory for daily aggregated CSV files",
     )
     parser.add_argument(
+        "--lora-frequency",
+        type=float,
+        default=915.0,
+        help="LoRa frequency in MHz",
+    )
+    parser.add_argument(
         "--lora-cs-pin",
         type=int,
         default=1,
@@ -30,6 +36,7 @@ def main() -> None:
 
     aggregator = DataAggregator(
         storage_path=args.storage_path,
+        lora_frequency_mhz=args.lora_frequency,
         lora_cs_pin=args.lora_cs_pin,
         lora_reset_pin=args.lora_reset_pin,
     )
