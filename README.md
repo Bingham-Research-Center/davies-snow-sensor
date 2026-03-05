@@ -112,20 +112,14 @@ git clone <repository-url>
 cd davies-snow-sensor
 python3 -m venv venv
 source venv/bin/activate
-pip install -r requirements.txt
+pip install -e .
 ```
 
-`requirements.txt` installs the project with `dev` extras (`-e .[dev]`) for
-non-Pi development hosts.
-On Raspberry Pi nodes, install with:
+On Raspberry Pi sensor nodes, install with hardware dependencies:
 
 ```bash
-pip install -r requirements.pi.txt
+pip install -e .[hardware]
 ```
-
-For runtime-only installs, use `pip install -e .`.
-On Raspberry Pi sensor/base-station nodes, install hardware dependencies with:
-`pip install -e .[hardware]` (or `pip install -e .[dev,hardware]`).
 
 ## Station Configuration
 
@@ -142,19 +136,19 @@ Key fields to set in `config/station_01.yaml`:
 
 | Field | Description | Default |
 |-------|-------------|---------|
-| `station.id` | Unique station identifier | `DAVIES-01` |
-| `station.sensor_height_cm` | Sensor-to-bare-ground distance in cm | `200.0` |
-| `pins.hcsr04_trigger` / `pins.hcsr04_echo` | HC-SR04 pins | `23 / 24` |
-| `pins.hcsr04_power` / `pins.ds18b20_power` | Sensor power-control pins | `27 / 17` |
-| `pins.lora_cs` / `pins.lora_reset` | LoRa SPI chip-select / reset pins | `1 / 25` |
-| `pins.lora_irq` | Reserved placeholder; currently unused by runtime (polling mode) | `22` |
-| `storage.ssd_mount_path` | SSD mount root | `/mnt/ssd` |
-| `storage.csv_filename` | CSV file written each cycle | `snow_data.csv` |
-| `timing.cycle_interval_minutes` | Timer interval | `15` |
+| `station.id` | Unique station identifier | *(required)* |
+| `station.sensor_height_cm` | Sensor-to-bare-ground distance in cm | *(required)* |
+| `pins.hcsr04_trigger` | HC-SR04 trigger GPIO | *(required)* |
+| `pins.hcsr04_echo` | HC-SR04 echo GPIO | *(required)* |
+| `pins.ds18b20_data` | DS18B20 1-Wire data GPIO | *(required)* |
+| `pins.lora_cs` | LoRa SPI chip-select GPIO | *(required)* |
+| `pins.lora_reset` | LoRa reset GPIO | *(required)* |
+| `lora.frequency` | LoRa frequency in MHz | `915.0` |
+| `lora.tx_power` | LoRa transmit power in dBm | `23` |
+| `storage.csv_path` | Path to CSV data file | `/home/pi/data/snow_data.csv` |
+| `timing.cycle_interval_minutes` | Minutes between readings | `15` |
 
 Pin assignments and LoRa settings have sensible defaults; see the template comments for details.
-
-Legacy flat config keys are still accepted and mapped into the nested schema.
 
 ## SSD Backup Mount Setup (Sensor Node Pi)
 
@@ -414,8 +408,8 @@ Reserved for future sensors. Do not reuse LoRa bonnet pins.
 
 ## Further Documentation
 
-- [docs/data_dictionary.md](docs/data_dictionary.md) — data format specifications
-- [docs/methodology.md](docs/methodology.md) — research methodology and experimental design
+- [docs/software_architecture.md](docs/software_architecture.md) — sensor software module reference and error codes
+- [docs/ds18b20_datasheet_reference.md](docs/ds18b20_datasheet_reference.md) — DS18B20 datasheet notes
 - [hardware/bill_of_materials.md](hardware/bill_of_materials.md) — full component list with specs and costs
 - [hardware/multiplexing_board_wiring.md](hardware/multiplexing_board_wiring.md) — GPIO breakout board row assignments
 
