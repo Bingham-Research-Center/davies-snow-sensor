@@ -104,7 +104,15 @@ pip install -e .[hardware]
 
 ## Station Configuration
 
-Edit `config/station.yaml` to configure your station.
+Run the interactive setup script to create `config/station.yaml`:
+
+```bash
+bash scripts/station_setup.sh
+```
+
+The script walks you through station ID, sensor height, and (optionally) pin assignments and other advanced settings via whiptail dialog boxes. You can re-run it at any time to reconfigure.
+
+To edit the config manually instead, open `config/station.yaml` directly.
 
 Key fields:
 
