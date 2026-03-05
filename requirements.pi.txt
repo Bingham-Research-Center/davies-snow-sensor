@@ -1,2 +1,0 @@
-# Raspberry Pi development/runtime install with hardware dependencies.
--e .[dev,hardware]

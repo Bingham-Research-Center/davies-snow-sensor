@@ -1,3 +1,0 @@
-# Example entry for Raspberry Pi sensor node SSD mount.
-# Replace UUID with your SSD filesystem UUID from: sudo blkid
-UUID=REPLACE_WITH_SSD_UUID  /mnt/ssd  ext4  defaults,nofail,x-systemd.device-timeout=10  0  2

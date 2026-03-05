@@ -1,1 +1,0 @@
-# Snow Depth Sensor Network
