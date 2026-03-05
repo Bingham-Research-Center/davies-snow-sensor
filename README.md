@@ -33,14 +33,11 @@ For 52Pi Easy Multiplexing Board row-by-row wiring, see:
 
 ```
 ├── src/
-│   ├── sensor/          # Code running on each sensor station
-│   ├── base_station/    # Central data receiver
-│   └── analysis/        # Data analysis and comparison scripts
+│   └── sensor/          # Code running on each sensor station
+├── config/              # Station configuration
 ├── docs/                # Research methodology and documentation
 ├── hardware/            # Bill of materials, wiring diagrams
-├── config/              # Station configuration templates
 ├── data/                # Collected data (gitignored)
-├── notebooks/           # Jupyter notebooks for analysis
 └── tests/               # Unit tests
 ```
 
@@ -50,37 +47,11 @@ For 52Pi Easy Multiplexing Board row-by-row wiring, see:
 - Python 3.11+
 - Components from the [bill of materials](hardware/bill_of_materials.md)
 
-## Operator Quickstart
-
-If you are preparing the **reference Pi** right now, use this sequence:
-
-1. Install dependencies and hardware interface settings (SPI/I2C/1-Wire).
-2. Set real station values in `config/station_01.yaml` (`station.id`, `station.sensor_height_cm`).
-3. Mount SSD at `/mnt/ssd`.
-4. Run hardware tests:
-```bash
-cd /home/pi/davies-snow-sensor
-sudo ./venv/bin/python scripts/test_hardware.py --all --config config/station_01.yaml
-```
-5. Run validation soak and checklist gate:
-```bash
-SOAK_SECONDS=14400 ./scripts/reference_pi_validation.sh
-```
-6. Only after `docs/reference_validation.md` is fully passed, create the golden image.
-
-If you are bringing up a **cloned Pi**, install/enable services and let first-boot provisioning create its unique config.
-
 ## Raspberry Pi Setup
 
 Enable the hardware interfaces needed by the LoRa bonnet (SPI) and DS18B20 temperature sensor (1-Wire).
 
-Run the interface setup script (checks and adds any missing lines to `/boot/firmware/config.txt`):
-
-```bash
-sudo ./scripts/enable_interfaces.sh
-```
-
-Or add/uncomment these lines manually in `/boot/firmware/config.txt`:
+Add/uncomment these lines in `/boot/firmware/config.txt`:
 
 ```
 dtparam=spi=on
@@ -123,16 +94,9 @@ pip install -e .[hardware]
 
 ## Station Configuration
 
-This repository is designed to be cloned as a golden image. Each cloned Pi gets
-its own station identity at first boot.
+Edit `config/station.yaml` to configure your station.
 
-If you need to configure manually, copy the template and edit it:
-
-```bash
-cp config/station_template.yaml config/station_01.yaml
-```
-
-Key fields to set in `config/station_01.yaml`:
+Key fields:
 
 | Field | Description | Default |
 |-------|-------------|---------|
@@ -148,69 +112,7 @@ Key fields to set in `config/station_01.yaml`:
 | `storage.csv_path` | Path to CSV data file | `/home/pi/data/snow_data.csv` |
 | `timing.cycle_interval_minutes` | Minutes between readings | `15` |
 
-Pin assignments and LoRa settings have sensible defaults; see the template comments for details.
-
-## SSD Backup Mount Setup (Sensor Node Pi)
-
-This repo assumes the external SSD is mounted at `/mnt/ssd`.
-
-Create mountpoint and configure `/etc/fstab`:
-
-```bash
-sudo mkdir -p /mnt/ssd
-sudo cp deploy/fstab.example /tmp/fstab.example
-# Edit /tmp/fstab.example and replace UUID, then append to /etc/fstab
-sudo nano /etc/fstab
-sudo mount -a
-mount | grep /mnt/ssd
-```
-
-Set mount ownership so the runtime user can write CSV:
-
-```bash
-sudo chown -R pi:pi /mnt/ssd
-```
-
-## Hardware Testing
-
-After wiring, verify each component with the interactive test script:
-
-```bash
-source venv/bin/activate
-sudo venv/bin/python scripts/test_hardware.py --all
-```
-
-Individual component tests:
-
-```bash
-sudo venv/bin/python scripts/test_hardware.py -u   # Ultrasonic only
-sudo venv/bin/python scripts/test_hardware.py -t   # Temperature only
-sudo venv/bin/python scripts/test_hardware.py -l   # LoRa radio only
-```
-
-To use your station config for pin assignments:
-
-```bash
-sudo venv/bin/python scripts/test_hardware.py --all --config config/station_01.yaml
-```
-
-## Reference Pi Validation (Do This Before Cloning)
-
-Your current milestone is to validate this reference Pi's sensors and runtime
-before creating a golden image.
-
-Run the guided validator:
-
-```bash
-cd /home/pi/davies-snow-sensor
-SOAK_SECONDS=14400 ./scripts/reference_pi_validation.sh
-```
-
-Then complete the checklist in:
-
-`docs/reference_validation.md`
-
-Do not clone this image until all checklist gates pass.
+Pin assignments and LoRa settings have sensible defaults; see the config file comments for details.
 
 ## Running the Sensor
 
@@ -219,154 +121,16 @@ Do not clone this image until all checklist gates pass.
 Take one reading and exit — useful for verifying the full pipeline:
 
 ```bash
-sudo venv/bin/python -m src.sensor.main --config config/station_01.yaml --test
+sudo venv/bin/python -m src.sensor.main --config config/station.yaml --test
 ```
 
 ### Manual one-shot cycle
 
 ```bash
-sudo venv/bin/python -m src.sensor.main --config config/station_01.yaml --verbose
+sudo venv/bin/python -m src.sensor.main --config config/station.yaml --verbose
 ```
 
 This performs exactly one cycle and exits.
-
-### Systemd service (auto-start on boot)
-
-Install service units from `deploy/`:
-
-```bash
-sudo cp deploy/snow-firstboot.service /etc/systemd/system/
-sudo cp deploy/snow-sensor.service /etc/systemd/system/
-sudo cp deploy/snow-sensor.timer /etc/systemd/system/
-sudo cp deploy/snow-backup-monitor.service /etc/systemd/system/
-sudo cp deploy/snow-backup-monitor.timer /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable snow-firstboot
-sudo systemctl enable snow-sensor.timer
-sudo systemctl start snow-firstboot
-sudo systemctl enable --now snow-sensor.timer
-sudo systemctl enable --now snow-backup-monitor.timer
-```
-
-`snow-firstboot.service` only runs when `/var/lib/snow-sensor/provisioned` is absent.
-`snow-sensor.timer` schedules `snow-sensor.service` using
-`timing.cycle_interval_minutes` from `config/station_01.yaml`.
-Provisioning writes an override at
-`/etc/systemd/system/snow-sensor.timer.d/override.conf`.
-
-On first boot, `snow-firstboot.service` runs provisioning interactively on
-`tty1` and prompts for station identity values.
-It writes `config/station_01.yaml`, creates `/var/lib/snow-sensor/provisioned`,
-and then enables/starts timers.
-The canonical file is station-specific (for example,
-`config/station_davies_03.yaml`) and `config/station_01.yaml` is updated as a
-stable alias for existing service/scripts.
-
-If no interactive TTY is available, provisioning fails safely and leaves
-`/var/lib/snow-sensor/provisioned` absent, so `snow-sensor.service` stays
-blocked until provisioning is completed.
-
-Note: `snow-firstboot.service` uses `StandardInput=tty-force` on `/dev/tty1`.
-During first-boot provisioning, systemd takes control of `tty1`; avoid using an
-active login session on that console at the same time.
-
-To run provisioning manually (interactive), run over SSH:
-
-```bash
-sudo /home/pi/davies-snow-sensor/venv/bin/python /home/pi/davies-snow-sensor/scripts/first_boot_provision.py
-```
-
-For pre-seeded non-interactive provisioning (advanced):
-
-```bash
-sudo /home/pi/davies-snow-sensor/venv/bin/python /home/pi/davies-snow-sensor/scripts/first_boot_provision.py --non-interactive
-```
-
-If you later change `timing.cycle_interval_minutes`, resync the timer override:
-
-```bash
-sudo /home/pi/davies-snow-sensor/scripts/sync_timer_interval.py --config /home/pi/davies-snow-sensor/config/station_01.yaml
-```
-
-View live logs:
-
-```bash
-journalctl -u snow-sensor.service -f
-```
-
-## Running the Base Station (Separate Central Pi)
-
-Start the base station receiver on the central uplink Pi:
-
-```bash
-cd /home/pi/davies-snow-sensor
-source venv/bin/activate
-sudo venv/bin/python -m src.base_station.main \
-  --storage-path /home/pi/snow_base_data \
-  --lora-frequency 915.0 \
-  --lora-cs-pin 1 \
-  --lora-reset-pin 25
-```
-
-To run as a persistent boot service on the base-station Pi:
-
-```bash
-sudo cp deploy/snow-base-station.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now snow-base-station.service
-```
-
-## Systemd Service Reference
-
-| Action | Command |
-|--------|---------|
-| Enable schedule on boot | `sudo systemctl enable snow-sensor.timer` |
-| Start schedule | `sudo systemctl start snow-sensor.timer` |
-| Stop schedule | `sudo systemctl stop snow-sensor.timer` |
-| Run one cycle now | `sudo systemctl start snow-sensor.service` |
-| Service status | `sudo systemctl status snow-sensor.service` |
-| Timer status | `sudo systemctl status snow-sensor.timer` |
-| Follow logs | `journalctl -u snow-sensor.service -f` |
-| Last 50 log lines | `journalctl -u snow-sensor.service -n 50` |
-| First-boot provision logs | `journalctl -u snow-firstboot -f` |
-| Backup monitor status | `sudo systemctl status snow-backup-monitor.timer` |
-| Backup monitor logs | `journalctl -t snow-backup-monitor -f` |
-| Base station status | `sudo systemctl status snow-base-station.service` |
-| Base station logs | `journalctl -u snow-base-station.service -f` |
-
-The one-shot sensor service runs as root from `/home/pi/davies-snow-sensor` using the project venv and is scheduled by `snow-sensor.timer`.
-
-## Golden Image Workflow
-
-1. Build and verify one reference Pi.
-2. Run the reference validation workflow:
-```bash
-cd /home/pi/davies-snow-sensor
-SOAK_SECONDS=14400 ./scripts/reference_pi_validation.sh
-```
-3. Complete and archive `docs/reference_validation.md`.
-4. Only after all gates pass, create the SD image.
-5. Ensure first-boot provisioning is enabled:
-```bash
-sudo systemctl enable snow-firstboot
-```
-6. Power down and clone the SD card/image.
-7. Flash clones to new Pis.
-8. On each cloned Pi first boot, complete provisioning prompts on attached display/keyboard (or run provisioning interactively over SSH).
-9. Validate service health and storage:
-```bash
-sudo /home/pi/davies-snow-sensor/scripts/station_diagnostics.sh
-```
-
-## Immediate Next Commands
-
-If you are validating right now, run these in order:
-
-```bash
-cd /home/pi/davies-snow-sensor
-sudo ./venv/bin/python scripts/test_hardware.py --all --config config/station_01.yaml
-SOAK_SECONDS=14400 ./scripts/reference_pi_validation.sh
-```
 
 ## Wiring Quick Reference
 
