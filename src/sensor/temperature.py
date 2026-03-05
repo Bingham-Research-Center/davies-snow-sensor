@@ -12,7 +12,9 @@ class TemperatureSensor:
     MIN_VALID_C = -40.0
     MAX_VALID_C = 60.0
 
-    def __init__(self, read_timeout_ms: int = 800) -> None:
+    RESET_VALUE_C = 85.0
+
+    def __init__(self, read_timeout_ms: int = 2000) -> None:
         self._read_timeout_ms = read_timeout_ms
         self._sensor = None
         self._initialized = False
@@ -30,6 +32,14 @@ class TemperatureSensor:
 
         try:
             self._sensor = W1ThermSensor()
+            # Discard first reading — DS18B20 powers on with +85°C reset value
+            # and needs one conversion cycle (up to 750ms at 12-bit) before
+            # returning real data. This kicks off that first conversion.
+            try:
+                self._sensor.get_temperature()
+            except Exception:
+                pass  # sensor may return reset value or not be ready; that's expected
+            time.sleep(0.1)
             self._initialized = True
             self._last_error = None
             return True
@@ -64,11 +74,7 @@ class TemperatureSensor:
                 )
                 return self._validate_temperature_c(raw)
             except ResetValueError:
-                self._last_read_duration_ms = int(
-                    (time.monotonic() - start) * 1000
-                )
-                self._last_error = "temp_power_on_reset"
-                return None
+                continue  # sensor still has reset value, retry
             except SensorNotReadyError:
                 continue
             except (W1ThermSensorError, Exception):
@@ -84,6 +90,9 @@ class TemperatureSensor:
 
     def _validate_temperature_c(self, value: float) -> Optional[float]:
         """Reject readings outside the valid range, round to 2 decimals."""
+        if value == self.RESET_VALUE_C:
+            self._last_error = "temp_power_on_reset"
+            return None
         if value < self.MIN_VALID_C or value > self.MAX_VALID_C:
             self._last_error = "temp_out_of_range"
             return None
