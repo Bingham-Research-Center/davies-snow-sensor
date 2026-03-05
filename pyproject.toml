@@ -18,7 +18,7 @@ hardware = [
     "gpiozero>=2.0",
     "adafruit-blinka>=8.0.0",
     "adafruit-circuitpython-rfm9x>=2.0.0",
-
+    "w1thermsensor>=2.0",
 ]
 
 [tool.pytest.ini_options]
