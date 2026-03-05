@@ -39,6 +39,7 @@ class TimingConfig:
 @dataclass(frozen=True)
 class StationConfig:
     station_id: str
+    sensor_height_cm: float
     pins: PinsConfig
     lora: LoraConfig
     storage: StorageConfig
@@ -152,6 +153,14 @@ def load_config(path: str | Path) -> StationConfig:
             f"Field 'id' in 'station' must be a string, got {type(station_id).__name__}"
         )
 
+    sensor_height_raw = _require(station_raw, "sensor_height_cm", "station")
+    if not isinstance(sensor_height_raw, (int, float)):
+        raise ConfigError(
+            f"Field 'sensor_height_cm' in 'station' must be a number, "
+            f"got {type(sensor_height_raw).__name__}"
+        )
+    sensor_height_cm = float(sensor_height_raw)
+
     # Pins section (required — no safe defaults for hardware pins)
     pins_raw = _require(raw, "pins", "root")
     pins = _parse_pins(pins_raw)
@@ -163,6 +172,7 @@ def load_config(path: str | Path) -> StationConfig:
 
     return StationConfig(
         station_id=station_id,
+        sensor_height_cm=sensor_height_cm,
         pins=pins,
         lora=lora,
         storage=storage,

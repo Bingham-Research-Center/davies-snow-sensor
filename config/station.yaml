@@ -1,5 +1,6 @@
 station:
   id: "DAVIES-XX"          # unique per station
+  sensor_height_cm: 200.0  # height of ultrasonic sensor above ground, in cm
 
 pins:
   hcsr04_trigger: 23

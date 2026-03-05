@@ -15,7 +15,7 @@ from sensor.config import (
 )
 
 VALID_CONFIG = {
-    "station": {"id": "DAVIES-01"},
+    "station": {"id": "DAVIES-01", "sensor_height_cm": 200.0},
     "pins": {
         "hcsr04_trigger": 23,
         "hcsr04_echo": 24,
@@ -40,6 +40,7 @@ class TestLoadConfigValid:
         cfg = load_config(_write_yaml(tmp_path, VALID_CONFIG))
         assert isinstance(cfg, StationConfig)
         assert cfg.station_id == "DAVIES-01"
+        assert cfg.sensor_height_cm == 200.0
         assert cfg.pins.hcsr04_trigger == 23
         assert cfg.pins.hcsr04_echo == 24
         assert cfg.pins.ds18b20_data == 4
@@ -52,7 +53,7 @@ class TestLoadConfigValid:
 
     def test_defaults_for_optional_sections(self, tmp_path):
         minimal = {
-            "station": {"id": "DAVIES-02"},
+            "station": {"id": "DAVIES-02", "sensor_height_cm": 150},
             "pins": {
                 "hcsr04_trigger": 1,
                 "hcsr04_echo": 2,
@@ -81,8 +82,13 @@ class TestLoadConfigMissingFields:
             load_config(_write_yaml(tmp_path, data))
 
     def test_missing_station_id(self, tmp_path):
-        data = {**VALID_CONFIG, "station": {}}
+        data = {**VALID_CONFIG, "station": {"sensor_height_cm": 200.0}}
         with pytest.raises(ConfigError, match="id"):
+            load_config(_write_yaml(tmp_path, data))
+
+    def test_missing_sensor_height_cm(self, tmp_path):
+        data = {**VALID_CONFIG, "station": {"id": "DAVIES-01"}}
+        with pytest.raises(ConfigError, match="sensor_height_cm"):
             load_config(_write_yaml(tmp_path, data))
 
     def test_missing_pins(self, tmp_path):
@@ -105,9 +111,20 @@ class TestLoadConfigInvalidTypes:
             load_config(_write_yaml(tmp_path, data))
 
     def test_station_id_as_number(self, tmp_path):
-        data = {**VALID_CONFIG, "station": {"id": 123}}
+        data = {**VALID_CONFIG, "station": {"id": 123, "sensor_height_cm": 200.0}}
         with pytest.raises(ConfigError, match="string"):
             load_config(_write_yaml(tmp_path, data))
+
+    def test_sensor_height_cm_as_string(self, tmp_path):
+        data = {**VALID_CONFIG, "station": {"id": "DAVIES-01", "sensor_height_cm": "tall"}}
+        with pytest.raises(ConfigError, match="number"):
+            load_config(_write_yaml(tmp_path, data))
+
+    def test_sensor_height_cm_as_int(self, tmp_path):
+        data = {**VALID_CONFIG, "station": {"id": "DAVIES-01", "sensor_height_cm": 200}}
+        cfg = load_config(_write_yaml(tmp_path, data))
+        assert cfg.sensor_height_cm == 200.0
+        assert isinstance(cfg.sensor_height_cm, float)
 
     def test_frequency_as_string(self, tmp_path):
         data = {**VALID_CONFIG, "lora": {"frequency": "fast"}}
@@ -142,3 +159,4 @@ class TestLoadConfigWithRealFile:
         """The config/station.yaml template should load without errors."""
         cfg = load_config(Path(__file__).parent.parent / "config" / "station.yaml")
         assert cfg.station_id == "DAVIES-XX"
+        assert cfg.sensor_height_cm == 200.0
