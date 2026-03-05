@@ -1,0 +1,43 @@
+# Raspberry Pi 4 /boot/firmware/config.txt
+# Drop-in replacement for Raspberry Pi OS (Debian trixie)
+#
+# Install:
+#   sudo cp config/config.txt /boot/firmware/config.txt
+#   sudo reboot
+
+# --- Standard Raspberry Pi OS defaults ---
+
+# Automatically detect and load overlays for connected cameras/displays
+camera_auto_detect=1
+display_auto_detect=1
+
+# Disable black borders on HDMI output
+disable_overscan=1
+
+# Enable onboard audio (loads snd_bcm2835)
+dtparam=audio=on
+
+# Enable 64-bit kernel
+arm_64bit=1
+
+# Automatically load initramfs files if found
+auto_initramfs=1
+
+# Disable compensation for displays with overscan
+disable_fw_kms_setup=1
+
+# Use the vc4-kms-v3d full-KMS graphics driver
+[pi4]
+dtoverlay=vc4-kms-v3d
+max_framebuffers=2
+
+[cm4]
+otg_mode=1
+
+[all]
+
+# --- Snow Sensor Project ---
+# SPI bus for Adafruit RFM95W LoRa module
+dtparam=spi=on
+# 1-Wire on GPIO4 for DS18B20 temperature sensor
+dtoverlay=w1-gpio,gpiopin=4

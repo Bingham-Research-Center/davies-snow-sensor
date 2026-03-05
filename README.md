@@ -51,6 +51,16 @@ For 52Pi Easy Multiplexing Board row-by-row wiring, see:
 
 Enable the hardware interfaces needed by the LoRa bonnet (SPI) and DS18B20 temperature sensor (1-Wire).
 
+**Option A — Drop-in config (recommended):**
+
+Copy the project's pre-configured file over the default:
+
+```bash
+sudo cp config/config.txt /boot/firmware/config.txt
+```
+
+**Option B — Manual edit:**
+
 Add/uncomment these lines in `/boot/firmware/config.txt`:
 
 ```
