@@ -126,6 +126,7 @@ class SensorStation:
             temperature_c=temperature_c,
             sensor_height_cm=self._config.sensor_height_cm,
             lora_tx_success=lora_tx_success,
+            lora_rssi=self._lora.get_last_rssi() if lora_tx_success else None,
             error_flags=error_flags_csv,
         )
         try:
@@ -134,7 +135,7 @@ class SensorStation:
             logger.warning("CSV append failed", exc_info=True)
 
         logger.info(
-            "Cycle complete: snow=%.1s cm, temp=%s, lora=%s, errors=%s",
+            "Cycle complete: snow=%s cm, temp=%s, lora=%s, errors=%s",
             snow_depth_cm,
             temperature_c,
             lora_tx_success,

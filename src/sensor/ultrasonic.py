@@ -55,7 +55,7 @@ class UltrasonicSensor:
 
     def read_distance_cm(
         self,
-        num_samples: int = 11,
+        num_samples: int = 31,
         temperature_c: Optional[float] = None,
     ) -> Optional[float]:
         """Take multiple readings, return median distance in cm.

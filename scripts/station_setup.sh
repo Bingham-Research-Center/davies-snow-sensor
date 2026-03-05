@@ -90,41 +90,73 @@ if whiptail --title "Advanced Settings" --yesno \
 "Customize pin assignments and other settings?\n\n\
 Select No to use sensible defaults." $LINES $COLS; then
 
-    TRIG=$(whiptail --title "HC-SR04 Trigger Pin" --inputbox \
+    while true; do
+        TRIG=$(whiptail --title "HC-SR04 Trigger Pin" --inputbox \
 "GPIO pin for HC-SR04 TRIG:" $LINES $COLS "$DEF_TRIG" \
 3>&1 1>&2 2>&3) || { echo "Setup cancelled."; exit 0; }
+        echo "$TRIG" | grep -qE '^[0-9]+$' && break
+        whiptail --title "Error" --msgbox "GPIO pin must be a positive integer." 8 $COLS
+    done
 
-    ECHO_PIN=$(whiptail --title "HC-SR04 Echo Pin" --inputbox \
+    while true; do
+        ECHO_PIN=$(whiptail --title "HC-SR04 Echo Pin" --inputbox \
 "GPIO pin for HC-SR04 ECHO:" $LINES $COLS "$DEF_ECHO" \
 3>&1 1>&2 2>&3) || { echo "Setup cancelled."; exit 0; }
+        echo "$ECHO_PIN" | grep -qE '^[0-9]+$' && break
+        whiptail --title "Error" --msgbox "GPIO pin must be a positive integer." 8 $COLS
+    done
 
-    DS18=$(whiptail --title "DS18B20 Data Pin" --inputbox \
+    while true; do
+        DS18=$(whiptail --title "DS18B20 Data Pin" --inputbox \
 "GPIO pin for DS18B20 1-Wire data:" $LINES $COLS "$DEF_DS18" \
 3>&1 1>&2 2>&3) || { echo "Setup cancelled."; exit 0; }
+        echo "$DS18" | grep -qE '^[0-9]+$' && break
+        whiptail --title "Error" --msgbox "GPIO pin must be a positive integer." 8 $COLS
+    done
 
-    LORA_CS=$(whiptail --title "LoRa CS Pin" --inputbox \
+    while true; do
+        LORA_CS=$(whiptail --title "LoRa CS Pin" --inputbox \
 "GPIO pin for LoRa SPI chip-select:" $LINES $COLS "$DEF_LORA_CS" \
 3>&1 1>&2 2>&3) || { echo "Setup cancelled."; exit 0; }
+        echo "$LORA_CS" | grep -qE '^[0-9]+$' && break
+        whiptail --title "Error" --msgbox "GPIO pin must be a positive integer." 8 $COLS
+    done
 
-    LORA_RST=$(whiptail --title "LoRa Reset Pin" --inputbox \
+    while true; do
+        LORA_RST=$(whiptail --title "LoRa Reset Pin" --inputbox \
 "GPIO pin for LoRa reset:" $LINES $COLS "$DEF_LORA_RST" \
 3>&1 1>&2 2>&3) || { echo "Setup cancelled."; exit 0; }
+        echo "$LORA_RST" | grep -qE '^[0-9]+$' && break
+        whiptail --title "Error" --msgbox "GPIO pin must be a positive integer." 8 $COLS
+    done
 
-    FREQ=$(whiptail --title "LoRa Frequency" --inputbox \
+    while true; do
+        FREQ=$(whiptail --title "LoRa Frequency" --inputbox \
 "LoRa frequency in MHz:" $LINES $COLS "$DEF_FREQ" \
 3>&1 1>&2 2>&3) || { echo "Setup cancelled."; exit 0; }
+        echo "$FREQ" | grep -qE '^[0-9]+\.?[0-9]*$' && break
+        whiptail --title "Error" --msgbox "Frequency must be a positive number." 8 $COLS
+    done
 
-    TX=$(whiptail --title "LoRa TX Power" --inputbox \
+    while true; do
+        TX=$(whiptail --title "LoRa TX Power" --inputbox \
 "LoRa transmit power in dBm:" $LINES $COLS "$DEF_TX" \
 3>&1 1>&2 2>&3) || { echo "Setup cancelled."; exit 0; }
+        echo "$TX" | grep -qE '^[0-9]+\.?[0-9]*$' && break
+        whiptail --title "Error" --msgbox "TX power must be a positive number." 8 $COLS
+    done
 
     CSV=$(whiptail --title "CSV Storage Path" --inputbox \
 "Path to CSV data file:" $LINES $COLS "$DEF_CSV" \
 3>&1 1>&2 2>&3) || { echo "Setup cancelled."; exit 0; }
 
-    INTERVAL=$(whiptail --title "Cycle Interval" --inputbox \
+    while true; do
+        INTERVAL=$(whiptail --title "Cycle Interval" --inputbox \
 "Minutes between measurement cycles:" $LINES $COLS "$DEF_INTERVAL" \
 3>&1 1>&2 2>&3) || { echo "Setup cancelled."; exit 0; }
+        echo "$INTERVAL" | grep -qE '^[0-9]+$' && break
+        whiptail --title "Error" --msgbox "Interval must be a positive integer." 8 $COLS
+    done
 fi
 
 # ---------------------------------------------------------------

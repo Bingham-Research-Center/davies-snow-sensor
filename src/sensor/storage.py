@@ -20,6 +20,7 @@ COLUMNS = (
     "temperature_c",
     "sensor_height_cm",
     "lora_tx_success",
+    "lora_rssi",
     "error_flags",
 )
 
@@ -33,13 +34,14 @@ class Reading:
     temperature_c: Optional[float] = None
     sensor_height_cm: Optional[float] = None
     lora_tx_success: bool = False
+    lora_rssi: Optional[int] = None
     error_flags: str = ""
 
     def to_row(self) -> dict:
         """Convert to a dict suitable for csv.DictWriter."""
         row = asdict(self)
         # Serialize None as empty string for CSV blanks
-        for key in ("snow_depth_cm", "distance_raw_cm", "temperature_c", "sensor_height_cm"):
+        for key in ("snow_depth_cm", "distance_raw_cm", "temperature_c", "sensor_height_cm", "lora_rssi"):
             if row[key] is None:
                 row[key] = ""
         return row
@@ -98,6 +100,7 @@ def _row_to_reading(row: dict) -> Reading:
         temperature_c=_parse_optional_float(row["temperature_c"]),
         sensor_height_cm=_parse_optional_float(row["sensor_height_cm"]),
         lora_tx_success=row["lora_tx_success"] == "True",
+        lora_rssi=_parse_optional_int(row.get("lora_rssi", "")),
         error_flags=row["error_flags"],
     )
 
@@ -106,3 +109,9 @@ def _parse_optional_float(value: str) -> Optional[float]:
     if value == "":
         return None
     return float(value)
+
+
+def _parse_optional_int(value: str) -> Optional[int]:
+    if value == "":
+        return None
+    return int(value)
