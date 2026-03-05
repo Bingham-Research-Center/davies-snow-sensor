@@ -1,0 +1,19 @@
+station:
+  id: "DAVIES-XX"          # unique per station
+
+pins:
+  hcsr04_trigger: 23
+  hcsr04_echo: 24
+  ds18b20_data: 4           # 1-Wire bus
+  lora_cs: 7                # SPI CE1
+  lora_reset: 25
+
+lora:
+  frequency: 915.0
+  tx_power: 23
+
+storage:
+  csv_path: "/home/pi/data/snow_data.csv"
+
+timing:
+  cycle_interval_minutes: 15
