@@ -4,7 +4,7 @@ import pytest
 import yaml
 from pathlib import Path
 
-from sensor.config import (
+from src.sensor.config import (
     ConfigError,
     StationConfig,
     PinsConfig,
@@ -152,6 +152,108 @@ class TestLoadConfigFileErrors:
         p.write_text("")
         with pytest.raises(ConfigError, match="mapping"):
             load_config(p)
+
+
+class TestLoadConfigValueValidation:
+    def test_pin_out_of_range_negative(self, tmp_path):
+        pins = {**VALID_CONFIG["pins"], "hcsr04_trigger": -1}
+        data = {**VALID_CONFIG, "pins": pins}
+        with pytest.raises(ConfigError, match="out of range"):
+            load_config(_write_yaml(tmp_path, data))
+
+    def test_pin_out_of_range_high(self, tmp_path):
+        pins = {**VALID_CONFIG["pins"], "hcsr04_trigger": 28}
+        data = {**VALID_CONFIG, "pins": pins}
+        with pytest.raises(ConfigError, match="out of range"):
+            load_config(_write_yaml(tmp_path, data))
+
+    def test_pin_boundary_zero(self, tmp_path):
+        pins = {**VALID_CONFIG["pins"], "hcsr04_trigger": 0}
+        data = {**VALID_CONFIG, "pins": pins}
+        cfg = load_config(_write_yaml(tmp_path, data))
+        assert cfg.pins.hcsr04_trigger == 0
+
+    def test_pin_boundary_27(self, tmp_path):
+        pins = {**VALID_CONFIG["pins"], "hcsr04_trigger": 27}
+        data = {**VALID_CONFIG, "pins": pins}
+        cfg = load_config(_write_yaml(tmp_path, data))
+        assert cfg.pins.hcsr04_trigger == 27
+
+    def test_pin_collision(self, tmp_path):
+        pins = {**VALID_CONFIG["pins"], "hcsr04_echo": 23}  # same as trigger
+        data = {**VALID_CONFIG, "pins": pins}
+        with pytest.raises(ConfigError, match="collision"):
+            load_config(_write_yaml(tmp_path, data))
+
+    def test_invalid_frequency(self, tmp_path):
+        data = {**VALID_CONFIG, "lora": {"frequency": 800.0, "tx_power": 23}}
+        with pytest.raises(ConfigError, match="ISM band"):
+            load_config(_write_yaml(tmp_path, data))
+
+    def test_valid_frequency_169(self, tmp_path):
+        data = {**VALID_CONFIG, "lora": {"frequency": 169.45, "tx_power": 10}}
+        cfg = load_config(_write_yaml(tmp_path, data))
+        assert cfg.lora.frequency == 169.45
+
+    def test_valid_frequency_433(self, tmp_path):
+        data = {**VALID_CONFIG, "lora": {"frequency": 433.5, "tx_power": 10}}
+        cfg = load_config(_write_yaml(tmp_path, data))
+        assert cfg.lora.frequency == 433.5
+
+    def test_valid_frequency_868(self, tmp_path):
+        data = {**VALID_CONFIG, "lora": {"frequency": 868.0, "tx_power": 10}}
+        cfg = load_config(_write_yaml(tmp_path, data))
+        assert cfg.lora.frequency == 868.0
+
+    def test_valid_frequency_915(self, tmp_path):
+        data = {**VALID_CONFIG, "lora": {"frequency": 915.0, "tx_power": 10}}
+        cfg = load_config(_write_yaml(tmp_path, data))
+        assert cfg.lora.frequency == 915.0
+
+    def test_tx_power_too_low(self, tmp_path):
+        data = {**VALID_CONFIG, "lora": {"frequency": 915.0, "tx_power": 4}}
+        with pytest.raises(ConfigError, match="out of range"):
+            load_config(_write_yaml(tmp_path, data))
+
+    def test_tx_power_too_high(self, tmp_path):
+        data = {**VALID_CONFIG, "lora": {"frequency": 915.0, "tx_power": 24}}
+        with pytest.raises(ConfigError, match="out of range"):
+            load_config(_write_yaml(tmp_path, data))
+
+    def test_tx_power_boundary_low(self, tmp_path):
+        data = {**VALID_CONFIG, "lora": {"frequency": 915.0, "tx_power": 5}}
+        cfg = load_config(_write_yaml(tmp_path, data))
+        assert cfg.lora.tx_power == 5
+
+    def test_tx_power_boundary_high(self, tmp_path):
+        data = {**VALID_CONFIG, "lora": {"frequency": 915.0, "tx_power": 23}}
+        cfg = load_config(_write_yaml(tmp_path, data))
+        assert cfg.lora.tx_power == 23
+
+    def test_sensor_height_zero(self, tmp_path):
+        data = {**VALID_CONFIG, "station": {"id": "X", "sensor_height_cm": 0}}
+        with pytest.raises(ConfigError, match="sensor_height_cm"):
+            load_config(_write_yaml(tmp_path, data))
+
+    def test_sensor_height_negative(self, tmp_path):
+        data = {**VALID_CONFIG, "station": {"id": "X", "sensor_height_cm": -10}}
+        with pytest.raises(ConfigError, match="sensor_height_cm"):
+            load_config(_write_yaml(tmp_path, data))
+
+    def test_cycle_interval_zero(self, tmp_path):
+        data = {**VALID_CONFIG, "timing": {"cycle_interval_minutes": 0}}
+        with pytest.raises(ConfigError, match="cycle_interval_minutes"):
+            load_config(_write_yaml(tmp_path, data))
+
+    def test_cycle_interval_negative(self, tmp_path):
+        data = {**VALID_CONFIG, "timing": {"cycle_interval_minutes": -5}}
+        with pytest.raises(ConfigError, match="cycle_interval_minutes"):
+            load_config(_write_yaml(tmp_path, data))
+
+    def test_cycle_interval_one_valid(self, tmp_path):
+        data = {**VALID_CONFIG, "timing": {"cycle_interval_minutes": 1}}
+        cfg = load_config(_write_yaml(tmp_path, data))
+        assert cfg.timing.cycle_interval_minutes == 1
 
 
 class TestLoadConfigWithRealFile:

@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from sensor.storage import COLUMNS, Reading, Storage, StorageError
+from src.sensor.storage import COLUMNS, Reading, Storage, StorageError
 
 
 @pytest.fixture
@@ -96,3 +96,23 @@ class TestSerialization:
         storage.append(_sample_reading(error_flags="SENSOR_FAIL|LOW_BATT"))
         result = storage.read_all()[0]
         assert result.error_flags == "SENSOR_FAIL|LOW_BATT"
+
+
+class TestDeserializationErrors:
+    def test_malformed_float_in_csv(self, csv_path):
+        header = ",".join(COLUMNS)
+        row = "2025-01-15T12:00:00Z,DAVIES-01,not_a_number,157.5,-5.3,200.0,True,-45,"
+        csv_path.parent.mkdir(parents=True, exist_ok=True)
+        csv_path.write_text(f"{header}\n{row}\n")
+        storage = Storage(csv_path)
+        with pytest.raises(ValueError):
+            storage.read_all()
+
+    def test_malformed_int_in_csv(self, csv_path):
+        header = ",".join(COLUMNS)
+        row = "2025-01-15T12:00:00Z,DAVIES-01,42.5,157.5,-5.3,200.0,True,bad_rssi,"
+        csv_path.parent.mkdir(parents=True, exist_ok=True)
+        csv_path.write_text(f"{header}\n{row}\n")
+        storage = Storage(csv_path)
+        with pytest.raises(ValueError):
+            storage.read_all()

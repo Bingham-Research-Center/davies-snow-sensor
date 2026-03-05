@@ -102,6 +102,16 @@ class TestReadTemperature:
         result = sensor.read_temperature_c()
 
         assert result is None
+        assert sensor.get_last_error_reason() == "temp_unavailable"
+
+    def test_reset_value_returned_as_number(self):
+        mock_hw = MagicMock()
+        mock_hw.get_temperature.return_value = 85.0
+        sensor = self._make_initialized_sensor(mock_hw)
+
+        result = sensor.read_temperature_c()
+
+        assert result is None
         assert sensor.get_last_error_reason() == "temp_power_on_reset"
 
     def test_sensor_not_ready_then_success(self):

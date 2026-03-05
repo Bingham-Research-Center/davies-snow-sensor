@@ -397,3 +397,21 @@ pins:
             main(["--config", str(config_file), "--verbose"])
             mock_basic.assert_called_once()
             assert mock_basic.call_args[1]["level"] == logging.DEBUG
+
+
+class TestRunCycleEdgeCases:
+    def test_negative_snow_depth_when_distance_exceeds_height(self, mock_deps):
+        mock_deps["ultra"].read_distance_cm.return_value = 250.0
+        station = SensorStation(_make_config(sensor_height_cm=200.0))
+        station.run_cycle()
+
+        reading = mock_deps["storage"].append.call_args[0][0]
+        assert reading.snow_depth_cm == -50.0
+
+    def test_zero_snow_depth(self, mock_deps):
+        mock_deps["ultra"].read_distance_cm.return_value = 200.0
+        station = SensorStation(_make_config(sensor_height_cm=200.0))
+        station.run_cycle()
+
+        reading = mock_deps["storage"].append.call_args[0][0]
+        assert reading.snow_depth_cm == 0.0

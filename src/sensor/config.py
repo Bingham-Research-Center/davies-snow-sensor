@@ -11,6 +11,15 @@ class ConfigError(Exception):
     """Raised when station configuration is missing or invalid."""
 
 
+# Valid ISM frequency bands in MHz (lo, hi) inclusive.
+_ISM_BANDS = (
+    (169.4, 169.475),
+    (433.05, 434.79),
+    (863.0, 870.0),
+    (902.0, 928.0),
+)
+
+
 @dataclass(frozen=True)
 class PinsConfig:
     hcsr04_trigger: int
@@ -66,13 +75,33 @@ def _parse_pins(raw: dict) -> PinsConfig:
     section = "pins"
     if not isinstance(raw, dict):
         raise ConfigError(f"'{section}' must be a mapping")
-    return PinsConfig(
+    pins = PinsConfig(
         hcsr04_trigger=_require_int(raw, "hcsr04_trigger", section),
         hcsr04_echo=_require_int(raw, "hcsr04_echo", section),
         ds18b20_data=_require_int(raw, "ds18b20_data", section),
         lora_cs=_require_int(raw, "lora_cs", section),
         lora_reset=_require_int(raw, "lora_reset", section),
     )
+    pin_fields = {
+        "hcsr04_trigger": pins.hcsr04_trigger,
+        "hcsr04_echo": pins.hcsr04_echo,
+        "ds18b20_data": pins.ds18b20_data,
+        "lora_cs": pins.lora_cs,
+        "lora_reset": pins.lora_reset,
+    }
+    for name, val in pin_fields.items():
+        if val < 0 or val > 27:
+            raise ConfigError(
+                f"Pin '{name}' value {val} is out of range (must be 0-27)"
+            )
+    seen: dict[int, str] = {}
+    for name, val in pin_fields.items():
+        if val in seen:
+            raise ConfigError(
+                f"Pin collision: '{seen[val]}' and '{name}' both use GPIO {val}"
+            )
+        seen[val] = name
+    return pins
 
 
 def _parse_lora(raw: dict | None) -> LoraConfig:
@@ -90,7 +119,16 @@ def _parse_lora(raw: dict | None) -> LoraConfig:
         raise ConfigError(
             f"Field 'tx_power' in 'lora' must be an integer, got {type(tx).__name__}"
         )
-    return LoraConfig(frequency=float(freq), tx_power=tx)
+    freq = float(freq)
+    if not any(lo <= freq <= hi for lo, hi in _ISM_BANDS):
+        raise ConfigError(
+            f"Frequency {freq} MHz is not in a valid ISM band"
+        )
+    if tx < 5 or tx > 23:
+        raise ConfigError(
+            f"TX power {tx} dBm is out of range (must be 5-23)"
+        )
+    return LoraConfig(frequency=freq, tx_power=tx)
 
 
 def _parse_storage(raw: dict | None) -> StorageConfig:
@@ -116,6 +154,10 @@ def _parse_timing(raw: dict | None) -> TimingConfig:
         raise ConfigError(
             f"Field 'cycle_interval_minutes' in 'timing' must be an integer, "
             f"got {type(interval).__name__}"
+        )
+    if interval < 1:
+        raise ConfigError(
+            f"cycle_interval_minutes must be >= 1, got {interval}"
         )
     return TimingConfig(cycle_interval_minutes=interval)
 
@@ -160,6 +202,10 @@ def load_config(path: str | Path) -> StationConfig:
             f"got {type(sensor_height_raw).__name__}"
         )
     sensor_height_cm = float(sensor_height_raw)
+    if sensor_height_cm <= 0:
+        raise ConfigError(
+            f"sensor_height_cm must be > 0, got {sensor_height_cm}"
+        )
 
     # Pins section (required — no safe defaults for hardware pins)
     pins_raw = _require(raw, "pins", "root")
