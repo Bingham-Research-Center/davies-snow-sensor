@@ -60,13 +60,14 @@ Avoid list (in addition to LoRa/SPI reserved pins above):
 
 ## Software Pin Mapping
 
-Set these in `config/station_XX.yaml`:
+Set these in `config/station.yaml`:
 
 ```yaml
-trigger_pin: 5
-echo_pin: 6
-temp_sensor_pin: 4
+pins:
+  hcsr04_trigger: 5
+  hcsr04_echo: 6
+  ds18b20_data: 4
 ```
 
-Validation in `src/sensor/station_config.py` will reject LoRa/OLED reserved pins
-for `trigger_pin`, `echo_pin`, and `temp_sensor_pin`.
+Validation in `src/sensor/config.py` will reject LoRa/OLED reserved pins
+for `hcsr04_trigger`, `hcsr04_echo`, and `ds18b20_data`.
