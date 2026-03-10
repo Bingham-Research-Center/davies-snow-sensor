@@ -1,0 +1,13 @@
+[Unit]
+Description=Davies snow-sensor reading
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/admin/davies-snow-sensor
+ExecStart=/home/admin/davies-snow-sensor/venv/bin/python -m src.sensor.main --config /home/admin/davies-snow-sensor/config/station.yaml
+User=admin
+
+[Install]
+WantedBy=multi-user.target
