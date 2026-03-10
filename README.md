@@ -198,7 +198,9 @@ See [docs/software_architecture.md](docs/software_architecture.md) for full modu
 All components connect through the [52Pi Easy Multiplexing Board](hardware/multiplexing_board_wiring.md), which mirrors the Pi GPIO header across multiple rows. Each row uses the same BCM pin numbers — the row just provides physical separation.
 
 - **Row 1 — LoRa Bonnet:** Seat the Adafruit LoRa bonnet directly onto Row 1. Reserved pins (do not use for sensors): GPIO 2, 3, 7, 8, 9, 10, 11, 25.
-- **Row 2 — Sensors:** HC-SR04 TRIG → GPIO23, ECHO → GPIO24 via voltage divider (1k top / 2k bottom); DS18B20 DATA → GPIO4 with 4.7k pull-up to 3.3V.
+- **Row 2 — Sensors:** HC-SR04 TRIG → GPIO 5, ECHO → GPIO 6 via voltage divider (1k top / 2k bottom); DS18B20 DATA → GPIO 4 with 4.7k pull-up to 3.3V.
+
+> **Warning — 52Pi EP-0123 board pulls pins LOW:** When the LoRa bonnet is seated on Row 1, GPIO 17, 22, 23, and 24 are all clamped to ground by the multiplexing board. Do not use these pins for sensors.
 
 See [hardware/multiplexing_board_wiring.md](hardware/multiplexing_board_wiring.md) for full pin tables and divider diagrams.
 
