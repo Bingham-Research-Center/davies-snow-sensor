@@ -10,9 +10,11 @@ import pytest
 from src.sensor.config import (
     LoraConfig,
     PinsConfig,
+    SensorsConfig,
     StationConfig,
     StorageConfig,
     TimingConfig,
+    UltrasonicSensorConfig,
 )
 from src.sensor.main import SensorStation, main
 from src.sensor.storage import Reading
@@ -23,15 +25,18 @@ def _make_config(**overrides) -> StationConfig:
         station_id="TEST01",
         sensor_height_cm=200.0,
         pins=PinsConfig(
-            hcsr04_trigger=23,
-            hcsr04_echo=24,
             ds18b20_data=4,
             lora_cs=5,
             lora_reset=25,
+            hcsr04_trigger=23,
+            hcsr04_echo=24,
         ),
         lora=LoraConfig(frequency=915.0, tx_power=23),
         storage=StorageConfig(csv_path="/tmp/test_snow.csv"),
         timing=TimingConfig(cycle_interval_minutes=15),
+        sensors=SensorsConfig(ultrasonic=[
+            UltrasonicSensorConfig(id="default", trigger_pin=23, echo_pin=24),
+        ]),
     )
     defaults.update(overrides)
     return StationConfig(**defaults)
@@ -289,7 +294,7 @@ class TestRunCycleErrorFlags:
         reading = mock_deps["storage"].append.call_args[0][0]
         flags = reading.error_flags.split("|")
         assert "temp_no_device" in flags
-        assert "ultrasonic_read_error" in flags
+        assert "default:ultrasonic_read_error" in flags
 
     def test_no_errors_gives_empty_string(self, mock_deps):
         station = SensorStation(_make_config())
@@ -374,7 +379,7 @@ pins:
 """
         )
         with patch("src.sensor.main.logging.basicConfig") as mock_basic:
-            main(["--config", str(config_file), "--test"])
+            main(["--config", str(config_file), "--verbose"])
             mock_basic.assert_called_once()
             assert mock_basic.call_args[1]["level"] == logging.DEBUG
 
@@ -415,3 +420,150 @@ class TestRunCycleEdgeCases:
 
         reading = mock_deps["storage"].append.call_args[0][0]
         assert reading.snow_depth_cm == 0.0
+
+
+# ── Multi-sensor orchestration ───────────────────────────────────
+
+
+def _make_multi_sensor_config():
+    return _make_config(
+        sensors=SensorsConfig(ultrasonic=[
+            UltrasonicSensorConfig(id="north", trigger_pin=5, echo_pin=6),
+            UltrasonicSensorConfig(id="south", trigger_pin=13, echo_pin=19),
+        ]),
+    )
+
+
+@pytest.fixture()
+def mock_multi_deps():
+    """Patch deps, returning separate mock for each UltrasonicSensor call."""
+    with (
+        patch("src.sensor.main.TemperatureSensor") as MockTemp,
+        patch("src.sensor.main.UltrasonicSensor") as MockUltra,
+        patch("src.sensor.main.LoRaTransmitter") as MockLora,
+        patch("src.sensor.main.Storage") as MockStorage,
+    ):
+        temp = MockTemp.return_value
+        temp.initialize.return_value = True
+        temp.read_temperature_c.return_value = 5.0
+        temp.get_last_error_reason.return_value = None
+
+        # Create separate mock for each sensor instance
+        ultra_north = MagicMock()
+        ultra_north.initialize.return_value = True
+        ultra_north.read_distance_cm.return_value = 150.0
+        ultra_north.get_last_error_reason.return_value = None
+
+        ultra_south = MagicMock()
+        ultra_south.initialize.return_value = True
+        ultra_south.read_distance_cm.return_value = 148.0
+        ultra_south.get_last_error_reason.return_value = None
+
+        MockUltra.side_effect = [ultra_north, ultra_south]
+
+        lora = MockLora.return_value
+        lora.initialize.return_value = True
+        lora.transmit_with_ack.return_value = True
+        lora.get_last_error_reason.return_value = None
+        lora.get_last_rssi.return_value = -45
+
+        storage = MockStorage.return_value
+        storage.initialize.return_value = None
+        storage.append.return_value = None
+
+        yield {
+            "MockUltra": MockUltra,
+            "ultra_north": ultra_north,
+            "ultra_south": ultra_south,
+            "temp": temp,
+            "lora": lora,
+            "storage": storage,
+        }
+
+
+class TestMultiSensorOrchestration:
+    def test_creates_sensor_per_config(self, mock_multi_deps):
+        station = SensorStation(_make_multi_sensor_config())
+        assert mock_multi_deps["MockUltra"].call_count == 2
+
+    def test_reads_all_sensors(self, mock_multi_deps):
+        station = SensorStation(_make_multi_sensor_config())
+        station.run_cycle()
+
+        mock_multi_deps["ultra_north"].read_distance_cm.assert_called_once()
+        mock_multi_deps["ultra_south"].read_distance_cm.assert_called_once()
+
+    def test_uses_first_successful_reading(self, mock_multi_deps):
+        station = SensorStation(_make_multi_sensor_config())
+        station.run_cycle()
+
+        reading = mock_multi_deps["storage"].append.call_args[0][0]
+        assert reading.distance_raw_cm == 150.0  # north's reading
+
+    def test_skips_failed_sensor_uses_next(self, mock_multi_deps):
+        mock_multi_deps["ultra_north"].read_distance_cm.return_value = None
+        mock_multi_deps["ultra_north"].get_last_error_reason.return_value = "ultrasonic_read_error"
+
+        station = SensorStation(_make_multi_sensor_config())
+        station.run_cycle()
+
+        reading = mock_multi_deps["storage"].append.call_args[0][0]
+        assert reading.distance_raw_cm == 148.0  # south's reading
+
+    def test_all_sensors_fail(self, mock_multi_deps):
+        mock_multi_deps["ultra_north"].read_distance_cm.return_value = None
+        mock_multi_deps["ultra_north"].get_last_error_reason.return_value = "ultrasonic_read_error"
+        mock_multi_deps["ultra_south"].read_distance_cm.return_value = None
+        mock_multi_deps["ultra_south"].get_last_error_reason.return_value = "ultrasonic_read_error"
+
+        station = SensorStation(_make_multi_sensor_config())
+        station.run_cycle()
+
+        reading = mock_multi_deps["storage"].append.call_args[0][0]
+        assert reading.distance_raw_cm is None
+        assert reading.snow_depth_cm is None
+
+    def test_error_flags_include_sensor_id(self, mock_multi_deps):
+        mock_multi_deps["ultra_north"].initialize.return_value = False
+        mock_multi_deps["ultra_north"].get_last_error_reason.return_value = "ultrasonic_no_device"
+
+        station = SensorStation(_make_multi_sensor_config())
+        station.run_cycle()
+
+        reading = mock_multi_deps["storage"].append.call_args[0][0]
+        assert "north:ultrasonic_no_device" in reading.error_flags
+
+    def test_cleanup_all_sensors(self, mock_multi_deps):
+        station = SensorStation(_make_multi_sensor_config())
+        station.cleanup()
+
+        mock_multi_deps["ultra_north"].cleanup.assert_called_once()
+        mock_multi_deps["ultra_south"].cleanup.assert_called_once()
+
+
+# ── sensors=None fallback ────────────────────────────────────────
+
+
+class TestSensorsNoneFallback:
+    def test_single_sensor_works(self, mock_deps):
+        cfg = _make_config(
+            sensors=SensorsConfig(ultrasonic=[
+                UltrasonicSensorConfig(id="only", trigger_pin=23, echo_pin=24),
+            ]),
+        )
+        station = SensorStation(cfg)
+        station.run_cycle()
+
+        reading = mock_deps["storage"].append.call_args[0][0]
+        assert reading.distance_raw_cm == 150.0
+        assert reading.snow_depth_cm == 50.0
+
+    def test_sensors_none_no_crash(self, mock_deps):
+        cfg = _make_config(sensors=None)
+        station = SensorStation(cfg)
+        station.run_cycle()
+
+        mock_deps["MockUltra"].assert_not_called()
+        reading = mock_deps["storage"].append.call_args[0][0]
+        assert reading.distance_raw_cm is None
+        assert reading.snow_depth_cm is None

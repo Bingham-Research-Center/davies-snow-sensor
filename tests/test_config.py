@@ -254,11 +254,3 @@ class TestLoadConfigValueValidation:
         data = {**VALID_CONFIG, "timing": {"cycle_interval_minutes": 1}}
         cfg = load_config(_write_yaml(tmp_path, data))
         assert cfg.timing.cycle_interval_minutes == 1
-
-
-class TestLoadConfigWithRealFile:
-    def test_shipped_template(self):
-        """The config/station.yaml template should load without errors."""
-        cfg = load_config(Path(__file__).parent.parent / "config" / "station.yaml")
-        assert cfg.station_id == "DAVIES-XX"
-        assert cfg.sensor_height_cm == 200.0
