@@ -374,7 +374,7 @@ pins:
 """
         )
         with patch("src.sensor.main.logging.basicConfig") as mock_basic:
-            main(["--config", str(config_file), "--test"])
+            main(["--config", str(config_file), "--verbose"])
             mock_basic.assert_called_once()
             assert mock_basic.call_args[1]["level"] == logging.DEBUG
 

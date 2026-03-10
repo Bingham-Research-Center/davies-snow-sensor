@@ -86,16 +86,11 @@ class SensorStation:
                 self._config.sensor_height_cm - distance_raw_cm, 1
             )
 
-        # Build error flags string (pipe-delimited for CSV, comma-delimited for LoRa)
-        error_flags_csv = "|".join(errors)
-        error_flags_lora = ",".join(errors)
-
         # Transmit via LoRa
         lora_tx_success = False
         if not self._lora.initialize():
             err = self._lora.get_last_error_reason() or "lora_init_error"
             errors.append(err)
-            error_flags_csv = "|".join(errors)
             logger.warning("LoRa init failed: %s", err)
         else:
             payload = {
@@ -105,17 +100,19 @@ class SensorStation:
                 "distance_raw_cm": distance_raw_cm,
                 "temperature_c": temperature_c,
                 "sensor_height_cm": self._config.sensor_height_cm,
-                "error_flags": error_flags_lora,
+                "error_flags": ",".join(errors),
             }
             lora_tx_success = self._lora.transmit_with_ack(payload)
             if not lora_tx_success:
                 err = self._lora.get_last_error_reason() or "lora_tx_error"
                 errors.append(err)
-                error_flags_csv = "|".join(errors)
                 logger.warning("LoRa transmit failed: %s", err)
             else:
                 logger.info("LoRa transmit OK (RSSI: %s)", self._lora.get_last_rssi())
             self._lora.sleep()
+
+        # Build error flags once, after all errors are collected
+        error_flags_csv = "|".join(errors)
 
         # Save to CSV with tx result already known
         reading = Reading(
@@ -161,11 +158,10 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Snow sensor station")
     parser.add_argument("--config", required=True, help="Path to YAML config file")
     parser.add_argument("--verbose", action="store_true", help="Enable debug logging")
-    parser.add_argument("--test", action="store_true", help="Enable debug logging (test mode)")
 
     args = parser.parse_args(argv)
 
-    level = logging.DEBUG if (args.verbose or args.test) else logging.INFO
+    level = logging.DEBUG if args.verbose else logging.INFO
     logging.basicConfig(
         level=level,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",

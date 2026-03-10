@@ -39,12 +39,7 @@ class Reading:
 
     def to_row(self) -> dict:
         """Convert to a dict suitable for csv.DictWriter."""
-        row = asdict(self)
-        # Serialize None as empty string for CSV blanks
-        for key in ("snow_depth_cm", "distance_raw_cm", "temperature_c", "sensor_height_cm", "lora_rssi"):
-            if row[key] is None:
-                row[key] = ""
-        return row
+        return {k: ("" if v is None else v) for k, v in asdict(self).items()}
 
 
 class Storage:
@@ -84,10 +79,7 @@ class Storage:
             return []
         with open(self._path, newline="") as f:
             reader = csv.DictReader(f)
-            readings = []
-            for row in reader:
-                readings.append(_row_to_reading(row))
-            return readings
+            return [_row_to_reading(row) for row in reader]
 
 
 def _row_to_reading(row: dict) -> Reading:
