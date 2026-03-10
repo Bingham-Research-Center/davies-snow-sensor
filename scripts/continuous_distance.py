@@ -1,28 +1,33 @@
 """Continuous HC-SR04 distance readings for hardware verification."""
 
-import RPi.GPIO as GPIO
+import lgpio
 import time
 
-TRIG = 23
-ECHO = 24
+TRIG = 5
+ECHO = 6
 
-GPIO.setmode(GPIO.BCM)
-GPIO.setup(TRIG, GPIO.OUT)
-GPIO.setup(ECHO, GPIO.IN)
+h = lgpio.gpiochip_open(0)
+lgpio.gpio_claim_output(h, TRIG)
+lgpio.gpio_claim_input(h, ECHO)
 
 
 def get_distance():
-    GPIO.output(TRIG, False)
+    lgpio.gpio_write(h, TRIG, 0)
     time.sleep(0.1)
 
-    GPIO.output(TRIG, True)
+    lgpio.gpio_write(h, TRIG, 1)
     time.sleep(0.00001)
-    GPIO.output(TRIG, False)
+    lgpio.gpio_write(h, TRIG, 0)
 
-    while GPIO.input(ECHO) == 0:
+    timeout = time.time() + 0.04  # 40ms timeout
+    while lgpio.gpio_read(h, ECHO) == 0:
         pulse_start = time.time()
-    while GPIO.input(ECHO) == 1:
+        if pulse_start > timeout:
+            return None
+    while lgpio.gpio_read(h, ECHO) == 1:
         pulse_end = time.time()
+        if pulse_end > timeout:
+            return None
 
     duration = pulse_end - pulse_start
     distance = duration * 17150  # cm
@@ -32,7 +37,10 @@ def get_distance():
 try:
     while True:
         dist = get_distance()
-        print(f"Distance: {dist} cm")
+        if dist is not None:
+            print(f"Distance: {dist} cm")
+        else:
+            print("Timeout - no echo received")
         time.sleep(1)
 except KeyboardInterrupt:
-    GPIO.cleanup()
+    lgpio.gpiochip_close(h)

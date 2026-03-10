@@ -21,5 +21,9 @@ hardware = [
     "w1thermsensor>=2.0",
 ]
 
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
