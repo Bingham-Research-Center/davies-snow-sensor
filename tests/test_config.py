@@ -254,3 +254,10 @@ class TestLoadConfigValueValidation:
         data = {**VALID_CONFIG, "timing": {"cycle_interval_minutes": 1}}
         cfg = load_config(_write_yaml(tmp_path, data))
         assert cfg.timing.cycle_interval_minutes == 1
+
+
+def test_shipped_template_loads():
+    """Ensure the shipped config template remains loadable."""
+    template_path = Path(__file__).resolve().parent.parent / "config" / "station.yaml"
+    cfg = load_config(template_path)
+    assert isinstance(cfg, StationConfig)

@@ -5,6 +5,7 @@ from __future__ import annotations
 import yaml
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Optional
 
 
 class ConfigError(Exception):
@@ -46,6 +47,18 @@ class TimingConfig:
 
 
 @dataclass(frozen=True)
+class UltrasonicSensorConfig:
+    id: str
+    trigger_pin: int
+    echo_pin: int
+
+
+@dataclass(frozen=True)
+class SensorsConfig:
+    ultrasonic: list[UltrasonicSensorConfig]
+
+
+@dataclass(frozen=True)
 class StationConfig:
     station_id: str
     sensor_height_cm: float
@@ -53,6 +66,7 @@ class StationConfig:
     lora: LoraConfig
     storage: StorageConfig
     timing: TimingConfig
+    sensors: Optional[SensorsConfig] = None
 
 
 def _require(data: dict, key: str, section: str) -> object:
@@ -162,6 +176,38 @@ def _parse_timing(raw: dict | None) -> TimingConfig:
     return TimingConfig(cycle_interval_minutes=interval)
 
 
+def _parse_sensors(raw: dict | None) -> SensorsConfig | None:
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise ConfigError("'sensors' must be a mapping")
+    ultrasonic_raw = raw.get("ultrasonic", [])
+    if not isinstance(ultrasonic_raw, list):
+        raise ConfigError("'sensors.ultrasonic' must be a list")
+    seen_ids: set[str] = set()
+    ultrasonic_list: list[UltrasonicSensorConfig] = []
+    for i, s in enumerate(ultrasonic_raw):
+        if not isinstance(s, dict):
+            raise ConfigError(f"sensors.ultrasonic[{i}] must be a mapping")
+        sensor_id = _require(s, "id", f"sensors.ultrasonic[{i}]")
+        if not isinstance(sensor_id, str):
+            raise ConfigError(
+                f"Field 'id' in 'sensors.ultrasonic[{i}]' must be a string, "
+                f"got {type(sensor_id).__name__}"
+            )
+        if sensor_id in seen_ids:
+            raise ConfigError(
+                f"Duplicate sensor ID '{sensor_id}' in sensors.ultrasonic"
+            )
+        seen_ids.add(sensor_id)
+        trigger_pin = _require_int(s, "trigger_pin", f"sensors.ultrasonic[{i}]")
+        echo_pin = _require_int(s, "echo_pin", f"sensors.ultrasonic[{i}]")
+        ultrasonic_list.append(
+            UltrasonicSensorConfig(id=sensor_id, trigger_pin=trigger_pin, echo_pin=echo_pin)
+        )
+    return SensorsConfig(ultrasonic=ultrasonic_list)
+
+
 def load_config(path: str | Path) -> StationConfig:
     """Load and validate station configuration from a YAML file.
 
@@ -215,6 +261,7 @@ def load_config(path: str | Path) -> StationConfig:
     lora = _parse_lora(raw.get("lora"))
     storage = _parse_storage(raw.get("storage"))
     timing = _parse_timing(raw.get("timing"))
+    sensors = _parse_sensors(raw.get("sensors"))
 
     return StationConfig(
         station_id=station_id,
@@ -223,4 +270,5 @@ def load_config(path: str | Path) -> StationConfig:
         lora=lora,
         storage=storage,
         timing=timing,
+        sensors=sensors,
     )
