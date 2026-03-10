@@ -7,7 +7,7 @@ Important behavior:
 - Each row on the multiplexing board is a mirrored breakout of the same
   Raspberry Pi GPIO header.
 - Moving a wire to another row does **not** change the GPIO number in software.
-- Use BCM numbering in config/code (`GPIO23`, `GPIO24`, etc.).
+- Use BCM numbering in config/code (`GPIO5`, `GPIO6`, etc.).
 
 ## Row Assignment (Recommended)
 
@@ -31,10 +31,10 @@ Important behavior:
   - GND -> `GND`
   - Add 4.7k pull-up between DATA and 3.3V
 - Ultrasonic (HC-SR04):
-  - TRIG -> `GPIO23`
-  - TRIG physical pin -> `Pin 16` (`GPIO23`)
-  - ECHO -> `GPIO24` (through voltage divider to 3.3V-safe input)
-  - ECHO physical pin -> `Pin 18` (`GPIO24`)
+  - TRIG -> `GPIO5`
+  - TRIG physical pin -> `Pin 29` (`GPIO5`)
+  - ECHO -> `GPIO6` (through voltage divider to 3.3V-safe input)
+  - ECHO physical pin -> `Pin 31` (`GPIO6`)
   - VCC -> `5V`
   - GND -> `GND`
   - Divider values (from your diagram):
@@ -42,17 +42,29 @@ Important behavior:
     - Bottom resistor: `2k` from divider junction to GND
     - Pi GPIO reads divider junction (~3.3V when ECHO is high)
 
+### Known Issues — GPIO pins pulled LOW
+
+When the LoRa bonnet is seated on Row 1, the 52Pi EP-0123 multiplexing board
+pulls **GPIO 17, 22, 23, and 24 LOW** (clamped to ground). These pins cannot be
+used for sensor input or output while the LoRa bonnet is connected.
+
+Avoid list (in addition to LoRa/SPI reserved pins above):
+- `GPIO17` — pulled LOW by multiplexing board
+- `GPIO22` — pulled LOW by multiplexing board
+- `GPIO23` — pulled LOW by multiplexing board
+- `GPIO24` — pulled LOW by multiplexing board
+
 ### Row 3 / Row 4
 - Spare for future sensors or maintenance access.
-- Do not reuse reserved LoRa/OLED pins.
+- Do not reuse reserved LoRa/OLED pins or the pulled-LOW pins listed above.
 
 ## Software Pin Mapping
 
 Set these in `config/station_XX.yaml`:
 
 ```yaml
-trigger_pin: 23
-echo_pin: 24
+trigger_pin: 5
+echo_pin: 6
 temp_sensor_pin: 4
 ```
 

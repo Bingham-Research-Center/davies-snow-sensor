@@ -12,8 +12,8 @@ LINES=20
 COLS=70
 
 # --- Defaults for advanced settings ---
-DEF_TRIG=23
-DEF_ECHO=24
+DEF_TRIG=5
+DEF_ECHO=6
 DEF_DS18=4
 DEF_LORA_CS=7
 DEF_LORA_RST=25
