@@ -84,7 +84,7 @@ class SensorStation:
                 if reading is not None:
                     logger.info("Ultrasonic %s distance: %.1f cm", sensor_id, reading)
 
-        # Use first successful reading (PR 2 will add proper combining)
+        # Use first successful reading; TODO: consider combining multiple sensor readings.
         distance_raw_cm: Optional[float] = next(
             (v for v in sensor_readings.values() if v is not None), None
         )
