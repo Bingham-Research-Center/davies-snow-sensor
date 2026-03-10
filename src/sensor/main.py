@@ -24,10 +24,14 @@ class SensorStation:
     def __init__(self, config: StationConfig) -> None:
         self._config = config
         self._temp = TemperatureSensor()
-        self._ultrasonic = UltrasonicSensor(
-            trigger_pin=config.pins.hcsr04_trigger,
-            echo_pin=config.pins.hcsr04_echo,
-        )
+        sensor_list = config.sensors.ultrasonic if config.sensors is not None else []
+        self._ultrasonics: dict[str, UltrasonicSensor] = {
+            s.id: UltrasonicSensor(
+                trigger_pin=s.trigger_pin,
+                echo_pin=s.echo_pin,
+            )
+            for s in sensor_list
+        }
         self._lora = LoRaTransmitter(
             cs_pin=config.pins.lora_cs,
             reset_pin=config.pins.lora_reset,
@@ -62,22 +66,28 @@ class SensorStation:
             else:
                 logger.info("Temperature: %.2f °C", temperature_c)
 
-        # Read ultrasonic with temperature compensation
-        distance_raw_cm: Optional[float] = None
-        if not self._ultrasonic.initialize():
-            err = self._ultrasonic.get_last_error_reason() or "ultrasonic_init_error"
-            errors.append(err)
-            logger.warning("Ultrasonic sensor init failed: %s", err)
-        else:
-            distance_raw_cm = self._ultrasonic.read_distance_cm(
-                temperature_c=temperature_c,
-            )
-            if distance_raw_cm is None:
-                err = self._ultrasonic.get_last_error_reason() or "ultrasonic_read_error"
-                errors.append(err)
-                logger.warning("Ultrasonic read failed: %s", err)
+        # Read ultrasonic sensors sequentially
+        sensor_readings: dict[str, Optional[float]] = {}
+        for sensor_id, sensor in self._ultrasonics.items():
+            if not sensor.initialize():
+                err = sensor.get_last_error_reason() or "ultrasonic_init_error"
+                errors.append(f"{sensor_id}:{err}")
+                logger.warning("Ultrasonic %s init failed: %s", sensor_id, err)
+                sensor_readings[sensor_id] = None
             else:
-                logger.info("Distance: %.1f cm", distance_raw_cm)
+                reading = sensor.read_distance_cm(temperature_c=temperature_c)
+                if reading is None:
+                    err = sensor.get_last_error_reason() or "ultrasonic_read_error"
+                    errors.append(f"{sensor_id}:{err}")
+                    logger.warning("Ultrasonic %s read failed: %s", sensor_id, err)
+                sensor_readings[sensor_id] = reading
+                if reading is not None:
+                    logger.info("Ultrasonic %s distance: %.1f cm", sensor_id, reading)
+
+        # Use first successful reading (PR 2 will add proper combining)
+        distance_raw_cm: Optional[float] = next(
+            (v for v in sensor_readings.values() if v is not None), None
+        )
 
         # Compute snow depth
         snow_depth_cm: Optional[float] = None
@@ -142,11 +152,11 @@ class SensorStation:
 
     def cleanup(self) -> None:
         """Release all hardware resources."""
-        for name, resource in [
-            ("temperature", self._temp),
-            ("ultrasonic", self._ultrasonic),
-            ("lora", self._lora),
-        ]:
+        resources: list[tuple[str, object]] = [("temperature", self._temp)]
+        for sid, sensor in self._ultrasonics.items():
+            resources.append((f"ultrasonic:{sid}", sensor))
+        resources.append(("lora", self._lora))
+        for name, resource in resources:
             try:
                 resource.cleanup()
             except Exception:
