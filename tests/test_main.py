@@ -119,6 +119,7 @@ class TestRunCycleHappyPath:
         call_kwargs = mock_deps["ultra"].read_distance_cm.call_args
         assert call_kwargs == call(
             num_samples=31, temperature_c=5.0, inter_pulse_delay_ms=60,
+            min_valid_fraction=0.5,
         )
 
     def test_snow_depth_computed(self, mock_deps):
@@ -193,6 +194,7 @@ class TestRunCycleTemperatureFailure:
         call_kwargs = mock_deps["ultra"].read_distance_cm.call_args
         assert call_kwargs == call(
             num_samples=31, temperature_c=None, inter_pulse_delay_ms=60,
+            min_valid_fraction=0.5,
         )
 
 
@@ -233,6 +235,44 @@ class TestRunCycleUltrasonicFailure:
 
         reading = mock_deps["storage"].append.call_args[0][0]
         assert reading.snow_depth_cm is None
+
+    def test_excessive_spread_adds_error(self, mock_deps):
+        mock_deps["ultra"].read_distance_cm.return_value = SensorResult(
+            distance_cm=150.0, num_samples=31, num_valid=31,
+            spread_cm=10.0, error=None,
+        )
+
+        station = SensorStation(_make_config(qc=QCConfig(max_spread_cm=5.0)))
+        station.run_cycle()
+
+        reading = mock_deps["storage"].append.call_args[0][0]
+        assert "ultrasonic_spread_exceeded" in reading.error_flags
+
+    def test_excessive_spread_nullifies_distance(self, mock_deps):
+        mock_deps["ultra"].read_distance_cm.return_value = SensorResult(
+            distance_cm=150.0, num_samples=31, num_valid=31,
+            spread_cm=10.0, error=None,
+        )
+
+        station = SensorStation(_make_config(qc=QCConfig(max_spread_cm=5.0)))
+        station.run_cycle()
+
+        reading = mock_deps["storage"].append.call_args[0][0]
+        assert reading.snow_depth_cm is None
+        assert reading.distance_raw_cm is None
+
+    def test_spread_within_limit_is_accepted(self, mock_deps):
+        mock_deps["ultra"].read_distance_cm.return_value = SensorResult(
+            distance_cm=150.0, num_samples=31, num_valid=31,
+            spread_cm=4.9, error=None,
+        )
+
+        station = SensorStation(_make_config(qc=QCConfig(max_spread_cm=5.0)))
+        station.run_cycle()
+
+        reading = mock_deps["storage"].append.call_args[0][0]
+        assert "ultrasonic_spread_exceeded" not in reading.error_flags
+        assert reading.distance_raw_cm == 150.0
 
 
 # ── LoRa failure ──────────────────────────────────────────────────

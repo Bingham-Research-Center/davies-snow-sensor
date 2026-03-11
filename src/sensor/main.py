@@ -80,17 +80,27 @@ class SensorStation:
                     num_samples=qc.num_samples,
                     temperature_c=temperature_c,
                     inter_pulse_delay_ms=qc.inter_pulse_delay_ms,
+                    min_valid_fraction=qc.min_valid_fraction,
                 )
-                if result.distance_cm is None:
+                distance_cm = result.distance_cm
+                if distance_cm is None:
                     err = result.error or "ultrasonic_read_error"
                     errors.append(f"{sensor_id}:{err}")
                     logger.warning("Ultrasonic %s read failed: %s", sensor_id, err)
+                elif result.spread_cm is not None and result.spread_cm > qc.max_spread_cm:
+                    err = "ultrasonic_spread_exceeded"
+                    errors.append(f"{sensor_id}:{err}")
+                    logger.warning(
+                        "Ultrasonic %s spread %.2f cm exceeds max %.2f cm",
+                        sensor_id, result.spread_cm, qc.max_spread_cm,
+                    )
+                    distance_cm = None
                 else:
                     logger.info(
                         "Ultrasonic %s distance: %.1f cm (spread: %s)",
                         sensor_id, result.distance_cm, result.spread_cm,
                     )
-                sensor_distances[sensor_id] = result.distance_cm
+                sensor_distances[sensor_id] = distance_cm
 
         # Use first successful reading
         distance_raw_cm: Optional[float] = next(

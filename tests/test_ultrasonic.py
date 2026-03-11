@@ -235,7 +235,7 @@ class TestReadDistance:
     def test_single_valid_reading_spread_zero(self):
         mock_hw = MagicMock()
         # 3 readings: 2 None, 1 valid — not enough for majority with num_samples=3
-        # Need >= 2 valid (3//2 + 1 = 2)
+        # Default min_valid_fraction=0.5 → ceil(0.5*3)=2 required, only 1 valid
         type(mock_hw).distance = PropertyMock(
             side_effect=[None, 1.50, None]
         )
@@ -246,6 +246,35 @@ class TestReadDistance:
 
         assert result.distance_cm is None  # only 1 valid, need 2
         assert result.num_valid == 1
+
+    def test_min_valid_fraction_custom(self):
+        mock_hw = MagicMock()
+        # 5 readings, only 1 valid — passes with min_valid_fraction=0.1 (ceil(0.1*5)=1)
+        type(mock_hw).distance = PropertyMock(
+            side_effect=[None, None, None, None, 1.5]
+        )
+        mock_hw.speed_of_sound = 343.26
+        sensor = self._make_initialized_sensor(mock_hw)
+
+        result = sensor.read_distance_cm(num_samples=5, min_valid_fraction=0.1)
+
+        assert result.distance_cm == 150.0
+        assert result.num_valid == 1
+
+    def test_min_valid_fraction_strict(self):
+        mock_hw = MagicMock()
+        # 5 readings, 3 valid — fails with min_valid_fraction=0.9 (ceil(4.5)=5 required)
+        type(mock_hw).distance = PropertyMock(
+            side_effect=[1.50, None, 1.52, None, 1.48]
+        )
+        mock_hw.speed_of_sound = 343.26
+        sensor = self._make_initialized_sensor(mock_hw)
+
+        result = sensor.read_distance_cm(num_samples=5, min_valid_fraction=0.9)
+
+        assert result.distance_cm is None
+        assert result.error == "ultrasonic_unavailable"
+        assert result.num_valid == 3
 
 
 class TestCleanup:

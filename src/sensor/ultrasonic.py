@@ -74,6 +74,7 @@ class UltrasonicSensor:
         num_samples: int = 31,
         temperature_c: Optional[float] = None,
         inter_pulse_delay_ms: int = 60,
+        min_valid_fraction: float = 0.5,
     ) -> SensorResult:
         """Take multiple readings, return SensorResult with median and stats.
 
@@ -81,6 +82,8 @@ class UltrasonicSensor:
             num_samples: Number of pulses to fire (odd recommended for median).
             temperature_c: Ambient temperature for speed-of-sound compensation.
             inter_pulse_delay_ms: Delay between pulses in milliseconds.
+            min_valid_fraction: Minimum fraction of samples that must be valid
+                (0, 1]. Defaults to 0.5 (strict majority).
 
         Returns:
             SensorResult with distance, sample counts, spread, and error.
@@ -124,8 +127,9 @@ class UltrasonicSensor:
         self._last_read_duration_ms = int((time.monotonic() - start) * 1000)
         num_valid = len(valid_readings)
 
-        # Need majority of samples to be valid
-        if num_valid < num_samples // 2 + 1:
+        # Need at least min_valid_fraction of samples to be valid
+        required_valid = max(1, math.ceil(min_valid_fraction * num_samples))
+        if num_valid < required_valid:
             self._last_error = "ultrasonic_unavailable"
             return SensorResult(
                 distance_cm=None, num_samples=num_samples,
