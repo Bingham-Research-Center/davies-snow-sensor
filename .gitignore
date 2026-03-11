@@ -46,6 +46,10 @@ data/bingham_reference/*
 data/exports/*
 !data/exports/.gitkeep
 
+# Operational station data (tracked for publications)
+!data/operational/
+!data/operational/*
+
 # Local configuration (may contain sensitive info)
 config/station_*.yaml
 !config/station_template.yaml
