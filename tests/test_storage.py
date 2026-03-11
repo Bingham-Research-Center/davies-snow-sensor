@@ -255,3 +255,29 @@ class TestReadingNewFields:
         assert result.software_version == "v1.0"
         assert result.config_id == "deadbeef"
         assert result.quality_flag == 5
+
+
+class TestFsync:
+    def test_fsync_false_writes_correctly(self, csv_path):
+        s = Storage(csv_path, fsync=False)
+        s.append(_sample_reading())
+        rows = s.read_all()
+        assert len(rows) == 1
+
+    def test_fsync_true_writes_correctly(self, csv_path):
+        s = Storage(csv_path, fsync=True)
+        s.append(_sample_reading())
+        rows = s.read_all()
+        assert len(rows) == 1
+
+    def test_sensor_storage_fsync_writes_correctly(self, tmp_path):
+        path = tmp_path / "sensors.csv"
+        ss = SensorStorage(path, fsync=True)
+        sr = SensorReading(
+            timestamp="2025-01-15T12:00:00Z", cycle_id=1, sensor_id="north",
+            distance_cm=150.0, num_samples=31, num_valid=31, spread_cm=0.5,
+        )
+        ss.append(sr)
+        rows = ss.read_all()
+        assert len(rows) == 1
+        assert rows[0] == sr

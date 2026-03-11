@@ -70,9 +70,9 @@ class SensorStation:
             frequency_mhz=config.lora.frequency,
             tx_power=config.lora.tx_power,
         )
-        self._storage = Storage(config.storage.csv_path)
+        self._storage = Storage(config.storage.csv_path, fsync=config.storage.fsync)
         self._sensor_storage = SensorStorage(
-            _sensor_csv_path(config.storage.csv_path)
+            _sensor_csv_path(config.storage.csv_path), fsync=config.storage.fsync
         )
 
     def run_cycle(self) -> bool:

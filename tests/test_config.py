@@ -140,6 +140,21 @@ class TestLoadConfigInvalidTypes:
         with pytest.raises(ConfigError, match="string"):
             load_config(_write_yaml(tmp_path, data))
 
+    def test_fsync_parsed(self, tmp_path):
+        data = {**VALID_CONFIG, "storage": {"csv_path": "/tmp/t.csv", "fsync": True}}
+        cfg = load_config(_write_yaml(tmp_path, data))
+        assert cfg.storage.fsync is True
+
+    def test_fsync_default_false(self, tmp_path):
+        data = {**VALID_CONFIG}
+        cfg = load_config(_write_yaml(tmp_path, data))
+        assert cfg.storage.fsync is False
+
+    def test_fsync_non_bool_raises(self, tmp_path):
+        data = {**VALID_CONFIG, "storage": {"fsync": "yes"}}
+        with pytest.raises(ConfigError, match="boolean"):
+            load_config(_write_yaml(tmp_path, data))
+
     def test_interval_as_float(self, tmp_path):
         data = {**VALID_CONFIG, "timing": {"cycle_interval_minutes": 1.5}}
         with pytest.raises(ConfigError, match="integer"):
