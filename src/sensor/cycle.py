@@ -20,11 +20,10 @@ def read_and_increment_cycle_id(csv_path: str | Path) -> int:
     """
     p = Path(csv_path).parent / "cycle_id.txt"
     current = 0
-    if p.exists():
-        try:
-            current = int(p.read_text().strip())
-        except (ValueError, OSError):
-            current = 0
+    try:
+        current = int(p.read_text().strip())
+    except (ValueError, OSError):
+        current = 0
     next_id = current + 1
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(str(next_id))

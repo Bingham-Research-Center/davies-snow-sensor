@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import time
-from typing import Optional
 
 
 class LoRaTransmitter:
@@ -28,8 +27,8 @@ class LoRaTransmitter:
         self._reset = None
         self._rfm9x = None
         self._initialized = False
-        self._last_error: Optional[str] = None
-        self._last_rssi: Optional[int] = None
+        self._last_error: str | None = None
+        self._last_rssi: int | None = None
         self._last_transmit_duration_ms: int = 0
 
     def initialize(self) -> bool:
@@ -73,7 +72,7 @@ class LoRaTransmitter:
         self,
         payload: dict,
         retries: int = 3,
-        timeout_seconds: Optional[float] = None,
+        timeout_seconds: float | None = None,
     ) -> bool:
         """Transmit DATA message and wait for matching ACK."""
         if not self._initialized or self._rfm9x is None:
@@ -141,11 +140,11 @@ class LoRaTransmitter:
             except Exception:
                 pass
 
-    def get_last_error_reason(self) -> Optional[str]:
+    def get_last_error_reason(self) -> str | None:
         """Return the error code from the last operation, if any."""
         return self._last_error
 
-    def get_last_rssi(self) -> Optional[int]:
+    def get_last_rssi(self) -> int | None:
         """Return RSSI from the last received ACK packet."""
         return self._last_rssi
 
@@ -193,7 +192,7 @@ class LoRaTransmitter:
 
     def _parse_ack_message(
         self, message: str,
-    ) -> tuple[Optional[str], Optional[str]]:
+    ) -> tuple[str | None, str | None]:
         """Return (station_id, timestamp) for ACK packets, else (None, None)."""
         parts = [part.strip() for part in message.split(",")]
         if len(parts) != 3 or parts[0] != "ACK":

@@ -19,6 +19,11 @@ LORA_TX_FAILED = 1 << 8
 STORAGE_WRITE_FAILED = 1 << 9
 
 
+def min_valid_samples(qc: QCConfig) -> int:
+    """Minimum number of valid samples required by QC config."""
+    return math.ceil(qc.num_samples * qc.min_valid_fraction)
+
+
 def compute_quality_flag(
     *,
     temperature_c: float | None,
@@ -41,7 +46,7 @@ def compute_quality_flag(
         flag |= ALL_ULTRASONIC_FAILED
 
     if selected_result is not None:
-        min_valid = math.ceil(qc.num_samples * qc.min_valid_fraction)
+        min_valid = min_valid_samples(qc)
         if selected_result.num_valid < min_valid:
             flag |= SELECTED_TOO_FEW_VALID
         if selected_result.spread_cm is not None and selected_result.spread_cm > qc.max_spread_cm:

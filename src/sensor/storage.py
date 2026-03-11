@@ -88,7 +88,6 @@ class Storage:
     def __init__(self, csv_path: str | Path, fsync: bool = False) -> None:
         self._path = Path(csv_path)
         self._fsync = fsync
-        self._initialized = False
 
     def initialize(self) -> None:
         """Create parent dirs and write CSV header if the file doesn't exist or is empty.
@@ -115,7 +114,6 @@ class Storage:
                     writer.writeheader()
             except OSError as e:
                 raise StorageError(f"Failed to initialize CSV: {e}") from e
-        self._initialized = True
 
     def append(self, reading: Reading) -> None:
         """Append a single reading to the CSV file.
@@ -149,7 +147,6 @@ class SensorStorage:
     def __init__(self, csv_path: str | Path, fsync: bool = False) -> None:
         self._path = Path(csv_path)
         self._fsync = fsync
-        self._initialized = False
 
     def initialize(self) -> None:
         """Create parent dirs and write CSV header if the file doesn't exist or is empty."""
@@ -161,7 +158,6 @@ class SensorStorage:
                     writer.writeheader()
             except OSError as e:
                 raise StorageError(f"Failed to initialize sensor CSV: {e}") from e
-        self._initialized = True
 
     def append(self, reading: SensorReading) -> None:
         """Append a single sensor reading to the CSV file."""
