@@ -52,6 +52,7 @@ class LoraConfig:
 @dataclass(frozen=True)
 class StorageConfig:
     csv_path: str = "/home/pi/data/snow_data.csv"
+    fsync: bool = False
 
 
 @dataclass(frozen=True)
@@ -261,7 +262,12 @@ def _parse_storage(raw: dict | None) -> StorageConfig:
         raise ConfigError(
             f"Field 'csv_path' in 'storage' must be a string, got {type(csv_path).__name__}"
         )
-    return StorageConfig(csv_path=csv_path)
+    fsync = raw.get("fsync", False)
+    if not isinstance(fsync, bool):
+        raise ConfigError(
+            f"Field 'fsync' in 'storage' must be a boolean, got {type(fsync).__name__}"
+        )
+    return StorageConfig(csv_path=csv_path, fsync=fsync)
 
 
 def _parse_timing(raw: dict | None) -> TimingConfig:

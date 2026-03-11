@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import os
 from dataclasses import dataclass, asdict
 from pathlib import Path
 from typing import Optional
@@ -85,8 +86,9 @@ class SensorReading:
 class Storage:
     """Append-only CSV storage for sensor readings."""
 
-    def __init__(self, csv_path: str | Path) -> None:
+    def __init__(self, csv_path: str | Path, fsync: bool = False) -> None:
         self._path = Path(csv_path)
+        self._fsync = fsync
 
     def initialize(self) -> None:
         """Create parent dirs and write CSV header if the file doesn't exist or is empty.
@@ -125,6 +127,9 @@ class Storage:
             with open(self._path, "a", newline="") as f:
                 writer = csv.DictWriter(f, fieldnames=COLUMNS)
                 writer.writerow(reading.to_row())
+                f.flush()
+                if self._fsync:
+                    os.fsync(f.fileno())
         except OSError as e:
             raise StorageError(f"Failed to append reading: {e}") from e
 
@@ -140,8 +145,9 @@ class Storage:
 class SensorStorage:
     """Append-only CSV storage for per-sensor readings."""
 
-    def __init__(self, csv_path: str | Path) -> None:
+    def __init__(self, csv_path: str | Path, fsync: bool = False) -> None:
         self._path = Path(csv_path)
+        self._fsync = fsync
 
     def initialize(self) -> None:
         """Create parent dirs and write CSV header if the file doesn't exist or is empty."""
@@ -162,6 +168,9 @@ class SensorStorage:
             with open(self._path, "a", newline="") as f:
                 writer = csv.DictWriter(f, fieldnames=SENSOR_COLUMNS)
                 writer.writerow(reading.to_row())
+                f.flush()
+                if self._fsync:
+                    os.fsync(f.fileno())
         except OSError as e:
             raise StorageError(f"Failed to append sensor reading: {e}") from e
 
