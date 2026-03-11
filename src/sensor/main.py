@@ -5,14 +5,17 @@ from __future__ import annotations
 import argparse
 import logging
 import math
+import os
 import signal
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
-from src.sensor.config import QCConfig, StationConfig, load_config
+from src.sensor.config import QCConfig, StationConfig, config_id, load_config
+from src.sensor.cycle import get_boot_id, read_and_increment_cycle_id
 from src.sensor.lora import LoRaTransmitter
+from src.sensor.qc import compute_quality_flag
 from src.sensor.storage import Reading, SensorReading, SensorStorage, Storage
 from src.sensor.temperature import TemperatureSensor
 from src.sensor.ultrasonic import SensorResult, UltrasonicSensor
@@ -49,8 +52,9 @@ def _sensor_csv_path(main_csv_path: str | Path) -> Path:
 class SensorStation:
     """Orchestrates a single measurement cycle: read → transmit → save."""
 
-    def __init__(self, config: StationConfig) -> None:
+    def __init__(self, config: StationConfig, config_path: str | Path | None = None) -> None:
         self._config = config
+        self._config_path = config_path
         self._temp = TemperatureSensor()
         sensor_list = config.sensors.ultrasonic if config.sensors is not None else []
         self._ultrasonics: dict[str, UltrasonicSensor] = {
@@ -127,8 +131,13 @@ class SensorStation:
                     )
                 sensor_results[sensor_id] = result
 
+        # Reproducibility fields
+        cycle_id = read_and_increment_cycle_id(self._config.storage.csv_path)
+        boot_id = get_boot_id()
+        software_version = os.environ.get("SNOW_SENSOR_VERSION", "unknown")
+        cfg_id = config_id(self._config_path) if self._config_path else ""
+
         # Write per-sensor rows
-        cycle_id = 0  # placeholder until PR3
         for sensor_id, result in sensor_results.items():
             sr = SensorReading(
                 timestamp=timestamp,
@@ -185,15 +194,34 @@ class SensorStation:
         # Build error flags once, after all errors are collected
         error_flags_csv = "|".join(errors)
 
+        # Compute QC bitmask
+        selected_result = best[1] if best else None
+        quality_flag = compute_quality_flag(
+            temperature_c=temperature_c,
+            sensor_results=sensor_results,
+            selected_id=selected_ultrasonic_id,
+            selected_result=selected_result,
+            snow_depth_cm=snow_depth_cm,
+            sensor_height_cm=self._config.sensor_height_cm,
+            lora_tx_success=lora_tx_success,
+            storage_failed=False,
+            qc=qc,
+        )
+
         # Save to CSV with tx result already known
         reading = Reading(
             timestamp=timestamp,
             station_id=self._config.station_id,
+            cycle_id=cycle_id,
+            boot_id=boot_id,
+            software_version=software_version,
+            config_id=cfg_id,
             snow_depth_cm=snow_depth_cm,
             distance_raw_cm=distance_raw_cm,
             temperature_c=temperature_c,
             sensor_height_cm=self._config.sensor_height_cm,
             selected_ultrasonic_id=selected_ultrasonic_id,
+            quality_flag=quality_flag,
             lora_tx_success=lora_tx_success,
             lora_rssi=self._lora.get_last_rssi() if lora_tx_success else None,
             error_flags=error_flags_csv,
@@ -245,7 +273,7 @@ def main(argv: list[str] | None = None) -> int:
         logger.error("Failed to load config: %s", exc)
         return 1
 
-    station = SensorStation(config)
+    station = SensorStation(config, config_path=args.config)
 
     # Register signal handlers for graceful shutdown
     def handle_signal(signum: int, frame: object) -> None:

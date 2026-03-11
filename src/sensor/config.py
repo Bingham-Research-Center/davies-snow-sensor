@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import yaml
 from dataclasses import dataclass
 from pathlib import Path
@@ -399,3 +400,9 @@ def load_config(path: str | Path) -> StationConfig:
         sensors=sensors,
         qc=qc,
     )
+
+
+def config_id(path: str | Path) -> str:
+    """Return SHA-256 hash of the config file content, truncated to 8 hex chars."""
+    data = Path(path).read_bytes()
+    return hashlib.sha256(data).hexdigest()[:8]

@@ -14,6 +14,7 @@ from src.sensor.config import (
     StorageConfig,
     TimingConfig,
     UltrasonicSensorConfig,
+    config_id,
     load_config,
 )
 
@@ -486,3 +487,27 @@ class TestMultiSensorValidation:
         }
         with pytest.raises(ConfigError, match="id"):
             load_config(_write_yaml(tmp_path, data))
+
+
+class TestConfigId:
+    def test_returns_8_hex_chars(self, tmp_path):
+        p = tmp_path / "test.yaml"
+        p.write_text("station:\n  id: TEST\n")
+        result = config_id(p)
+        assert len(result) == 8
+        assert all(c in "0123456789abcdef" for c in result)
+
+    def test_same_content_same_hash(self, tmp_path):
+        p1 = tmp_path / "a.yaml"
+        p2 = tmp_path / "b.yaml"
+        content = "station:\n  id: TEST\n"
+        p1.write_text(content)
+        p2.write_text(content)
+        assert config_id(p1) == config_id(p2)
+
+    def test_different_content_different_hash(self, tmp_path):
+        p1 = tmp_path / "a.yaml"
+        p2 = tmp_path / "b.yaml"
+        p1.write_text("station:\n  id: A\n")
+        p2.write_text("station:\n  id: B\n")
+        assert config_id(p1) != config_id(p2)

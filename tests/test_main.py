@@ -53,6 +53,10 @@ def mock_deps():
         patch("src.sensor.main.LoRaTransmitter") as MockLora,
         patch("src.sensor.main.Storage") as MockStorage,
         patch("src.sensor.main.SensorStorage") as MockSensorStorage,
+        patch("src.sensor.main.read_and_increment_cycle_id", return_value=1),
+        patch("src.sensor.main.get_boot_id", return_value="test-boot-id"),
+        patch("src.sensor.main.config_id", return_value="abcd1234"),
+        patch("src.sensor.main.compute_quality_flag", return_value=0),
     ):
         temp = MockTemp.return_value
         ultra = MockUltra.return_value
@@ -473,6 +477,10 @@ def mock_multi_deps():
         patch("src.sensor.main.LoRaTransmitter") as MockLora,
         patch("src.sensor.main.Storage") as MockStorage,
         patch("src.sensor.main.SensorStorage") as MockSensorStorage,
+        patch("src.sensor.main.read_and_increment_cycle_id", return_value=1),
+        patch("src.sensor.main.get_boot_id", return_value="test-boot-id"),
+        patch("src.sensor.main.config_id", return_value="abcd1234"),
+        patch("src.sensor.main.compute_quality_flag", return_value=0),
     ):
         temp = MockTemp.return_value
         temp.initialize.return_value = True
