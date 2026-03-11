@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import logging
-import math
 import os
 import signal
 import sys
@@ -14,7 +13,7 @@ from pathlib import Path
 from src.sensor.config import QCConfig, StationConfig, config_id, load_config
 from src.sensor.cycle import get_boot_id, read_and_increment_cycle_id
 from src.sensor.lora import LoRaTransmitter
-from src.sensor.qc import compute_quality_flag
+from src.sensor.qc import compute_quality_flag, min_valid_samples
 from src.sensor.storage import Reading, SensorReading, SensorStorage, Storage
 from src.sensor.temperature import TemperatureSensor
 from src.sensor.ultrasonic import SensorResult, UltrasonicSensor
@@ -26,7 +25,7 @@ def _select_best_sensor(
     results: dict[str, SensorResult], qc: QCConfig
 ) -> tuple[str, SensorResult] | None:
     """Pick the best sensor by QC criteria. Returns (sensor_id, result) or None."""
-    min_valid = math.ceil(qc.num_samples * qc.min_valid_fraction)
+    min_valid = min_valid_samples(qc)
     candidates: list[tuple[str, SensorResult]] = []
     for sid, r in results.items():
         if r.distance_cm is None:

@@ -200,12 +200,13 @@ class TestTransmitWithAck:
         assert tx.get_last_transmit_duration_ms() >= 0
 
 
-class TestFormatDataMessage:
-    def _make_tx(self):
-        return LoRaTransmitter(cs_pin=7, reset_pin=25)
+def _make_tx():
+    return LoRaTransmitter(cs_pin=7, reset_pin=25)
 
+
+class TestFormatDataMessage:
     def test_full_payload(self):
-        tx = self._make_tx()
+        tx = _make_tx()
         payload = {
             "station_id": "SNOW01",
             "timestamp": "20260304T120000Z",
@@ -219,7 +220,7 @@ class TestFormatDataMessage:
         assert result == "DATA,SNOW01,20260304T120000Z,42.50,157.50,-5.32,200.00,"
 
     def test_none_fields_become_dash(self):
-        tx = self._make_tx()
+        tx = _make_tx()
         payload = {
             "station_id": "SNOW01",
             "timestamp": "20260304T120000Z",
@@ -233,7 +234,7 @@ class TestFormatDataMessage:
         assert result == "DATA,SNOW01,20260304T120000Z,-,-,-,200.00,"
 
     def test_error_flags_comma_to_pipe(self):
-        tx = self._make_tx()
+        tx = _make_tx()
         payload = {
             "station_id": "SNOW01",
             "timestamp": "20260304T120000Z",
@@ -247,7 +248,7 @@ class TestFormatDataMessage:
         assert "temp_read_error|ultrasonic_unavailable" in result
 
     def test_temperature_two_decimal_places(self):
-        tx = self._make_tx()
+        tx = _make_tx()
         payload = {
             "station_id": "SNOW01",
             "timestamp": "20260304T120000Z",
@@ -262,29 +263,26 @@ class TestFormatDataMessage:
 
 
 class TestParseAckMessage:
-    def _make_tx(self):
-        return LoRaTransmitter(cs_pin=7, reset_pin=25)
-
     def test_valid_ack(self):
-        tx = self._make_tx()
+        tx = _make_tx()
         station, ts = tx._parse_ack_message("ACK,SNOW01,20260304T120000Z")
         assert station == "SNOW01"
         assert ts == "20260304T120000Z"
 
     def test_wrong_prefix(self):
-        tx = self._make_tx()
+        tx = _make_tx()
         station, ts = tx._parse_ack_message("DATA,SNOW01,20260304T120000Z")
         assert station is None
         assert ts is None
 
     def test_wrong_field_count(self):
-        tx = self._make_tx()
+        tx = _make_tx()
         station, ts = tx._parse_ack_message("ACK,SNOW01")
         assert station is None
         assert ts is None
 
     def test_empty_fields(self):
-        tx = self._make_tx()
+        tx = _make_tx()
         station, ts = tx._parse_ack_message("ACK,,20260304T120000Z")
         assert station is None
         assert ts is None
