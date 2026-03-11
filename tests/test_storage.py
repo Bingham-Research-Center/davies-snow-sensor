@@ -4,7 +4,15 @@ from pathlib import Path
 
 import pytest
 
-from src.sensor.storage import COLUMNS, Reading, Storage, StorageError
+from src.sensor.storage import (
+    COLUMNS,
+    SENSOR_COLUMNS,
+    Reading,
+    SensorReading,
+    SensorStorage,
+    Storage,
+    StorageError,
+)
 
 
 @pytest.fixture
@@ -101,7 +109,7 @@ class TestSerialization:
 class TestDeserializationErrors:
     def test_malformed_float_in_csv(self, csv_path):
         header = ",".join(COLUMNS)
-        row = "2025-01-15T12:00:00Z,DAVIES-01,not_a_number,157.5,-5.3,200.0,True,-45,"
+        row = "2025-01-15T12:00:00Z,DAVIES-01,not_a_number,157.5,-5.3,200.0,,True,-45,"
         csv_path.parent.mkdir(parents=True, exist_ok=True)
         csv_path.write_text(f"{header}\n{row}\n")
         storage = Storage(csv_path)
@@ -110,9 +118,69 @@ class TestDeserializationErrors:
 
     def test_malformed_int_in_csv(self, csv_path):
         header = ",".join(COLUMNS)
-        row = "2025-01-15T12:00:00Z,DAVIES-01,42.5,157.5,-5.3,200.0,True,bad_rssi,"
+        row = "2025-01-15T12:00:00Z,DAVIES-01,42.5,157.5,-5.3,200.0,,True,bad_rssi,"
         csv_path.parent.mkdir(parents=True, exist_ok=True)
         csv_path.write_text(f"{header}\n{row}\n")
         storage = Storage(csv_path)
         with pytest.raises(ValueError):
             storage.read_all()
+
+
+class TestSensorStorage:
+    def test_creates_file_with_header_and_row(self, tmp_path):
+        path = tmp_path / "sensors.csv"
+        ss = SensorStorage(path)
+        sr = SensorReading(
+            timestamp="2025-01-15T12:00:00Z", cycle_id=1, sensor_id="north",
+            distance_cm=150.0, num_samples=31, num_valid=31, spread_cm=0.5,
+        )
+        ss.append(sr)
+        lines = path.read_text().strip().splitlines()
+        assert lines[0] == ",".join(SENSOR_COLUMNS)
+        assert len(lines) == 2
+
+    def test_round_trip(self, tmp_path):
+        path = tmp_path / "sensors.csv"
+        ss = SensorStorage(path)
+        original = SensorReading(
+            timestamp="2025-01-15T12:00:00Z", cycle_id=5, sensor_id="south",
+            distance_cm=148.0, num_samples=31, num_valid=28, spread_cm=1.2,
+            error=None,
+        )
+        ss.append(original)
+        rows = ss.read_all()
+        assert len(rows) == 1
+        assert rows[0] == original
+
+    def test_none_fields_round_trip(self, tmp_path):
+        path = tmp_path / "sensors.csv"
+        ss = SensorStorage(path)
+        sr = SensorReading(
+            timestamp="2025-01-15T12:00:00Z", cycle_id=1, sensor_id="north",
+            distance_cm=None, num_samples=31, num_valid=5, spread_cm=None,
+            error="ultrasonic_unavailable",
+        )
+        ss.append(sr)
+        result = ss.read_all()[0]
+        assert result.distance_cm is None
+        assert result.spread_cm is None
+        assert result.error == "ultrasonic_unavailable"
+
+    def test_empty_returns_empty(self, tmp_path):
+        path = tmp_path / "sensors.csv"
+        ss = SensorStorage(path)
+        assert ss.read_all() == []
+
+
+class TestReadingSelectedUltrasonicId:
+    def test_round_trip_with_id(self, storage):
+        r = _sample_reading(selected_ultrasonic_id="north")
+        storage.append(r)
+        result = storage.read_all()[0]
+        assert result.selected_ultrasonic_id == "north"
+
+    def test_round_trip_none(self, storage):
+        r = _sample_reading(selected_ultrasonic_id=None)
+        storage.append(r)
+        result = storage.read_all()[0]
+        assert result.selected_ultrasonic_id is None
