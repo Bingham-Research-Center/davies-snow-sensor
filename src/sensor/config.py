@@ -59,6 +59,14 @@ class TimingConfig:
 
 
 @dataclass(frozen=True)
+class QCConfig:
+    num_samples: int = 31
+    inter_pulse_delay_ms: int = 60
+    min_valid_fraction: float = 0.5
+    max_spread_cm: float = 5.0
+
+
+@dataclass(frozen=True)
 class UltrasonicSensorConfig:
     id: str
     trigger_pin: int
@@ -79,6 +87,7 @@ class StationConfig:
     storage: StorageConfig
     timing: TimingConfig
     sensors: SensorsConfig | None = None
+    qc: QCConfig = QCConfig()
 
 
 def _require(data: dict, key: str, section: str) -> object:
@@ -273,6 +282,54 @@ def _parse_timing(raw: dict | None) -> TimingConfig:
 
 
 
+def _parse_qc(raw: dict | None) -> QCConfig:
+    if raw is None:
+        return QCConfig()
+    if not isinstance(raw, dict):
+        raise ConfigError("'qc' must be a mapping")
+    num_samples = raw.get("num_samples", 31)
+    if not isinstance(num_samples, int):
+        raise ConfigError(
+            f"Field 'num_samples' in 'qc' must be an integer, got {type(num_samples).__name__}"
+        )
+    if num_samples < 1:
+        raise ConfigError(f"num_samples must be >= 1, got {num_samples}")
+    inter_pulse_delay_ms = raw.get("inter_pulse_delay_ms", 60)
+    if not isinstance(inter_pulse_delay_ms, int):
+        raise ConfigError(
+            f"Field 'inter_pulse_delay_ms' in 'qc' must be an integer, "
+            f"got {type(inter_pulse_delay_ms).__name__}"
+        )
+    if inter_pulse_delay_ms < 0:
+        raise ConfigError(f"inter_pulse_delay_ms must be >= 0, got {inter_pulse_delay_ms}")
+    min_valid_fraction = raw.get("min_valid_fraction", 0.5)
+    if not isinstance(min_valid_fraction, (int, float)):
+        raise ConfigError(
+            f"Field 'min_valid_fraction' in 'qc' must be a number, "
+            f"got {type(min_valid_fraction).__name__}"
+        )
+    min_valid_fraction = float(min_valid_fraction)
+    if not (0.0 < min_valid_fraction <= 1.0):
+        raise ConfigError(
+            f"min_valid_fraction must be in (0, 1], got {min_valid_fraction}"
+        )
+    max_spread_cm = raw.get("max_spread_cm", 5.0)
+    if not isinstance(max_spread_cm, (int, float)):
+        raise ConfigError(
+            f"Field 'max_spread_cm' in 'qc' must be a number, "
+            f"got {type(max_spread_cm).__name__}"
+        )
+    max_spread_cm = float(max_spread_cm)
+    if max_spread_cm <= 0:
+        raise ConfigError(f"max_spread_cm must be > 0, got {max_spread_cm}")
+    return QCConfig(
+        num_samples=num_samples,
+        inter_pulse_delay_ms=inter_pulse_delay_ms,
+        min_valid_fraction=min_valid_fraction,
+        max_spread_cm=max_spread_cm,
+    )
+
+
 def load_config(path: str | Path) -> StationConfig:
     """Load and validate station configuration from a YAML file.
 
@@ -330,6 +387,7 @@ def load_config(path: str | Path) -> StationConfig:
     lora = _parse_lora(raw.get("lora"))
     storage = _parse_storage(raw.get("storage"))
     timing = _parse_timing(raw.get("timing"))
+    qc = _parse_qc(raw.get("qc"))
 
     return StationConfig(
         station_id=station_id,
@@ -339,4 +397,5 @@ def load_config(path: str | Path) -> StationConfig:
         storage=storage,
         timing=timing,
         sensors=sensors,
+        qc=qc,
     )

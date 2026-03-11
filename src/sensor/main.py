@@ -67,26 +67,34 @@ class SensorStation:
                 logger.info("Temperature: %.2f °C", temperature_c)
 
         # Read ultrasonic sensors sequentially
-        sensor_readings: dict[str, Optional[float]] = {}
+        qc = self._config.qc
+        sensor_distances: dict[str, Optional[float]] = {}
         for sensor_id, sensor in self._ultrasonics.items():
             if not sensor.initialize():
                 err = sensor.get_last_error_reason() or "ultrasonic_init_error"
                 errors.append(f"{sensor_id}:{err}")
                 logger.warning("Ultrasonic %s init failed: %s", sensor_id, err)
-                sensor_readings[sensor_id] = None
+                sensor_distances[sensor_id] = None
             else:
-                reading = sensor.read_distance_cm(temperature_c=temperature_c)
-                if reading is None:
-                    err = sensor.get_last_error_reason() or "ultrasonic_read_error"
+                result = sensor.read_distance_cm(
+                    num_samples=qc.num_samples,
+                    temperature_c=temperature_c,
+                    inter_pulse_delay_ms=qc.inter_pulse_delay_ms,
+                )
+                if result.distance_cm is None:
+                    err = result.error or "ultrasonic_read_error"
                     errors.append(f"{sensor_id}:{err}")
                     logger.warning("Ultrasonic %s read failed: %s", sensor_id, err)
-                sensor_readings[sensor_id] = reading
-                if reading is not None:
-                    logger.info("Ultrasonic %s distance: %.1f cm", sensor_id, reading)
+                else:
+                    logger.info(
+                        "Ultrasonic %s distance: %.1f cm (spread: %s)",
+                        sensor_id, result.distance_cm, result.spread_cm,
+                    )
+                sensor_distances[sensor_id] = result.distance_cm
 
-        # Use first successful reading; TODO: consider combining multiple sensor readings.
+        # Use first successful reading
         distance_raw_cm: Optional[float] = next(
-            (v for v in sensor_readings.values() if v is not None), None
+            (v for v in sensor_distances.values() if v is not None), None
         )
 
         # Compute snow depth

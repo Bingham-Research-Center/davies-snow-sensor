@@ -18,3 +18,9 @@ storage:
 
 timing:
   cycle_interval_minutes: 15
+
+qc:
+  num_samples: 31
+  inter_pulse_delay_ms: 60
+  min_valid_fraction: 0.5
+  max_spread_cm: 5.0

@@ -10,6 +10,7 @@ from src.sensor.config import (
     StationConfig,
     PinsConfig,
     LoraConfig,
+    QCConfig,
     StorageConfig,
     TimingConfig,
     UltrasonicSensorConfig,
@@ -256,6 +257,78 @@ class TestLoadConfigValueValidation:
         data = {**VALID_CONFIG, "timing": {"cycle_interval_minutes": 1}}
         cfg = load_config(_write_yaml(tmp_path, data))
         assert cfg.timing.cycle_interval_minutes == 1
+
+
+class TestQCConfig:
+    def test_defaults_when_absent(self, tmp_path):
+        minimal = {
+            "station": {"id": "DAVIES-02", "sensor_height_cm": 150},
+            "pins": {
+                "hcsr04_trigger": 1,
+                "hcsr04_echo": 2,
+                "ds18b20_data": 3,
+                "lora_cs": 4,
+                "lora_reset": 5,
+            },
+        }
+        cfg = load_config(_write_yaml(tmp_path, minimal))
+        assert cfg.qc == QCConfig()
+        assert cfg.qc.num_samples == 31
+        assert cfg.qc.inter_pulse_delay_ms == 60
+        assert cfg.qc.min_valid_fraction == 0.5
+        assert cfg.qc.max_spread_cm == 5.0
+
+    def test_custom_values(self, tmp_path):
+        data = {
+            **VALID_CONFIG,
+            "qc": {
+                "num_samples": 11,
+                "inter_pulse_delay_ms": 100,
+                "min_valid_fraction": 0.7,
+                "max_spread_cm": 3.0,
+            },
+        }
+        cfg = load_config(_write_yaml(tmp_path, data))
+        assert cfg.qc.num_samples == 11
+        assert cfg.qc.inter_pulse_delay_ms == 100
+        assert cfg.qc.min_valid_fraction == 0.7
+        assert cfg.qc.max_spread_cm == 3.0
+
+    def test_num_samples_zero_rejected(self, tmp_path):
+        data = {**VALID_CONFIG, "qc": {"num_samples": 0}}
+        with pytest.raises(ConfigError, match="num_samples"):
+            load_config(_write_yaml(tmp_path, data))
+
+    def test_min_valid_fraction_zero_rejected(self, tmp_path):
+        data = {**VALID_CONFIG, "qc": {"min_valid_fraction": 0.0}}
+        with pytest.raises(ConfigError, match="min_valid_fraction"):
+            load_config(_write_yaml(tmp_path, data))
+
+    def test_min_valid_fraction_over_one_rejected(self, tmp_path):
+        data = {**VALID_CONFIG, "qc": {"min_valid_fraction": 1.5}}
+        with pytest.raises(ConfigError, match="min_valid_fraction"):
+            load_config(_write_yaml(tmp_path, data))
+
+    def test_max_spread_zero_rejected(self, tmp_path):
+        data = {**VALID_CONFIG, "qc": {"max_spread_cm": 0}}
+        with pytest.raises(ConfigError, match="max_spread_cm"):
+            load_config(_write_yaml(tmp_path, data))
+
+    def test_inter_pulse_delay_negative_rejected(self, tmp_path):
+        data = {**VALID_CONFIG, "qc": {"inter_pulse_delay_ms": -1}}
+        with pytest.raises(ConfigError, match="inter_pulse_delay_ms"):
+            load_config(_write_yaml(tmp_path, data))
+
+    def test_qc_not_mapping_rejected(self, tmp_path):
+        data = {**VALID_CONFIG, "qc": "bad"}
+        with pytest.raises(ConfigError, match="qc"):
+            load_config(_write_yaml(tmp_path, data))
+
+    def test_qc_is_frozen(self, tmp_path):
+        data = {**VALID_CONFIG, "qc": {"num_samples": 11}}
+        cfg = load_config(_write_yaml(tmp_path, data))
+        with pytest.raises(AttributeError):
+            cfg.qc.num_samples = 99
 
 
 def test_shipped_template_loads():
