@@ -79,9 +79,24 @@ class Storage:
         self._path = Path(csv_path)
 
     def initialize(self) -> None:
-        """Create parent dirs and write CSV header if the file doesn't exist."""
+        """Create parent dirs and write CSV header if the file doesn't exist or is empty.
+
+        Raises StorageError if the file already has content but its header does not match
+        the expected COLUMNS (schema mismatch), to prevent silent column misalignment.
+        """
         self._path.parent.mkdir(parents=True, exist_ok=True)
-        if not self._path.exists():
+        if self._path.exists() and self._path.stat().st_size > 0:
+            try:
+                with open(self._path, newline="") as f:
+                    first_line = f.readline().strip()
+            except OSError as e:
+                raise StorageError(f"Failed to read CSV header: {e}") from e
+            existing_cols = tuple(first_line.split(","))
+            if existing_cols != COLUMNS:
+                raise StorageError(
+                    f"CSV schema mismatch: expected {COLUMNS}, found {existing_cols}"
+                )
+        else:
             try:
                 with open(self._path, "w", newline="") as f:
                     writer = csv.DictWriter(f, fieldnames=COLUMNS)
@@ -92,9 +107,9 @@ class Storage:
     def append(self, reading: Reading) -> None:
         """Append a single reading to the CSV file.
 
-        Calls initialize() automatically if the file doesn't exist yet.
+        Calls initialize() automatically if the file doesn't exist or is empty.
         """
-        if not self._path.exists():
+        if not self._path.exists() or self._path.stat().st_size == 0:
             self.initialize()
         try:
             with open(self._path, "a", newline="") as f:
@@ -119,9 +134,9 @@ class SensorStorage:
         self._path = Path(csv_path)
 
     def initialize(self) -> None:
-        """Create parent dirs and write CSV header if the file doesn't exist."""
+        """Create parent dirs and write CSV header if the file doesn't exist or is empty."""
         self._path.parent.mkdir(parents=True, exist_ok=True)
-        if not self._path.exists():
+        if not self._path.exists() or self._path.stat().st_size == 0:
             try:
                 with open(self._path, "w", newline="") as f:
                     writer = csv.DictWriter(f, fieldnames=SENSOR_COLUMNS)
@@ -131,7 +146,7 @@ class SensorStorage:
 
     def append(self, reading: SensorReading) -> None:
         """Append a single sensor reading to the CSV file."""
-        if not self._path.exists():
+        if not self._path.exists() or self._path.stat().st_size == 0:
             self.initialize()
         try:
             with open(self._path, "a", newline="") as f:

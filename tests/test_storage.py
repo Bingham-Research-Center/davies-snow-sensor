@@ -79,6 +79,40 @@ class TestInitialize:
         s.initialize()
         assert deep.exists()
 
+    def test_empty_file_gets_header(self, csv_path):
+        csv_path.parent.mkdir(parents=True, exist_ok=True)
+        csv_path.write_text("")  # empty file
+        storage = Storage(csv_path)
+        storage.initialize()
+        lines = csv_path.read_text().strip().splitlines()
+        assert lines[0] == ",".join(COLUMNS)
+
+    def test_schema_mismatch_raises(self, csv_path):
+        csv_path.parent.mkdir(parents=True, exist_ok=True)
+        # Write an old-schema header (missing selected_ultrasonic_id)
+        old_columns = [c for c in COLUMNS if c != "selected_ultrasonic_id"]
+        csv_path.write_text(",".join(old_columns) + "\n")
+        storage = Storage(csv_path)
+        with pytest.raises(StorageError, match="schema mismatch"):
+            storage.initialize()
+
+    def test_schema_ok_does_not_raise(self, csv_path):
+        csv_path.parent.mkdir(parents=True, exist_ok=True)
+        csv_path.write_text(",".join(COLUMNS) + "\n")
+        storage = Storage(csv_path)
+        storage.initialize()  # should not raise
+
+
+class TestAppendEmptyFile:
+    def test_append_to_empty_file_writes_header_and_row(self, csv_path):
+        csv_path.parent.mkdir(parents=True, exist_ok=True)
+        csv_path.write_text("")  # pre-created but empty
+        storage = Storage(csv_path)
+        storage.append(_sample_reading())
+        lines = csv_path.read_text().strip().splitlines()
+        assert lines[0] == ",".join(COLUMNS)
+        assert len(lines) == 2
+
 
 class TestSerialization:
     def test_none_floats_round_trip_as_none(self, storage):
@@ -170,6 +204,27 @@ class TestSensorStorage:
         path = tmp_path / "sensors.csv"
         ss = SensorStorage(path)
         assert ss.read_all() == []
+
+    def test_initialize_empty_file_writes_header(self, tmp_path):
+        path = tmp_path / "sensors.csv"
+        path.write_text("")  # pre-created but empty
+        ss = SensorStorage(path)
+        ss.initialize()
+        lines = path.read_text().strip().splitlines()
+        assert lines[0] == ",".join(SENSOR_COLUMNS)
+
+    def test_append_to_empty_file_writes_header_and_row(self, tmp_path):
+        path = tmp_path / "sensors.csv"
+        path.write_text("")  # pre-created but empty
+        ss = SensorStorage(path)
+        sr = SensorReading(
+            timestamp="2025-01-15T12:00:00Z", cycle_id=1, sensor_id="north",
+            distance_cm=150.0, num_samples=31, num_valid=31, spread_cm=0.5,
+        )
+        ss.append(sr)
+        lines = path.read_text().strip().splitlines()
+        assert lines[0] == ",".join(SENSOR_COLUMNS)
+        assert len(lines) == 2
 
 
 class TestReadingSelectedUltrasonicId:
