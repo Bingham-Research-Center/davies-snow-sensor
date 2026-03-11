@@ -692,6 +692,37 @@ class TestSelectBestSensor:
         best = _select_best_sensor(results, QCConfig())
         assert best[0] == "only"
 
+    def test_single_sensor_fails_qc_returns_none(self):
+        results = {
+            "only": SensorResult(distance_cm=150.0, num_samples=31, num_valid=10, spread_cm=1.0, error=None),
+        }
+        assert _select_best_sensor(results, QCConfig()) is None
+
+    def test_three_way_tie_alphabetical(self):
+        results = {
+            "charlie": SensorResult(distance_cm=150.0, num_samples=31, num_valid=31, spread_cm=1.0, error=None),
+            "alpha": SensorResult(distance_cm=148.0, num_samples=31, num_valid=31, spread_cm=1.0, error=None),
+            "bravo": SensorResult(distance_cm=149.0, num_samples=31, num_valid=31, spread_cm=1.0, error=None),
+        }
+        best = _select_best_sensor(results, QCConfig())
+        assert best[0] == "alpha"
+
+    def test_spread_none_filtered_out(self):
+        results = {
+            "a": SensorResult(distance_cm=150.0, num_samples=31, num_valid=31, spread_cm=None, error=None),
+            "b": SensorResult(distance_cm=148.0, num_samples=31, num_valid=31, spread_cm=1.0, error=None),
+        }
+        best = _select_best_sensor(results, QCConfig())
+        assert best[0] == "b"
+
+    def test_all_filtered_returns_none(self):
+        """All have valid distance but fail QC thresholds."""
+        results = {
+            "a": SensorResult(distance_cm=150.0, num_samples=31, num_valid=31, spread_cm=6.0, error=None),
+            "b": SensorResult(distance_cm=148.0, num_samples=31, num_valid=10, spread_cm=0.5, error=None),
+        }
+        assert _select_best_sensor(results, QCConfig()) is None
+
 
 # ── Per-sensor CSV writes ───────────────────────────────────────
 

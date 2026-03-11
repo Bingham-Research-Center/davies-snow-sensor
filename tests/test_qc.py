@@ -137,3 +137,64 @@ class TestNoSelectedResult:
         assert not (flag & SELECTED_DISTANCE_OOR)
         assert not (flag & SELECTED_TOO_FEW_VALID)
         assert not (flag & SELECTED_TOO_NOISY)
+
+
+class TestMultipleFlags:
+    def test_temp_missing_and_lora_failed(self):
+        flag = _flag(temperature_c=None, lora_tx_success=False)
+        assert flag & TEMP_MISSING
+        assert flag & LORA_TX_FAILED
+        assert flag == TEMP_MISSING | LORA_TX_FAILED
+
+    def test_all_bad_cycle(self):
+        """Everything fails: temp, ultrasonic, lora, storage."""
+        results = {"a": _good_result(distance_cm=None)}
+        flag = _flag(
+            temperature_c=None,
+            sensor_results=results,
+            selected_id=None,
+            selected_result=None,
+            snow_depth_cm=None,
+            lora_tx_success=False,
+            storage_failed=True,
+        )
+        assert flag & TEMP_MISSING
+        assert flag & ALL_ULTRASONIC_FAILED
+        assert flag & LORA_TX_FAILED
+        assert flag & STORAGE_WRITE_FAILED
+
+    def test_negative_snow_and_noisy(self):
+        r = _good_result(spread_cm=6.0)
+        flag = _flag(selected_result=r, snow_depth_cm=-1.0)
+        assert flag & SELECTED_TOO_NOISY
+        assert flag & SNOW_DEPTH_NEGATIVE
+
+
+class TestBoundaryValues:
+    def test_distance_at_lower_bound(self):
+        r = _good_result(distance_cm=2.0)
+        assert not (_flag(selected_result=r) & SELECTED_DISTANCE_OOR)
+
+    def test_distance_at_upper_bound(self):
+        r = _good_result(distance_cm=400.0)
+        assert not (_flag(selected_result=r) & SELECTED_DISTANCE_OOR)
+
+    def test_snow_depth_at_sensor_height_not_oor(self):
+        # snow_depth_cm == sensor_height_cm is not > so flag should NOT be set
+        assert not (_flag(snow_depth_cm=200.0, sensor_height_cm=200.0) & SNOW_DEPTH_OOR)
+
+    def test_snow_depth_zero_not_negative(self):
+        assert not (_flag(snow_depth_cm=0.0) & SNOW_DEPTH_NEGATIVE)
+
+    def test_valid_count_at_threshold(self):
+        # min_valid_fraction=0.5, num_samples=31 → need ceil(15.5)=16
+        r = _good_result(num_valid=16)
+        assert not (_flag(selected_result=r) & SELECTED_TOO_FEW_VALID)
+
+    def test_valid_count_one_below_threshold(self):
+        r = _good_result(num_valid=15)
+        assert _flag(selected_result=r) & SELECTED_TOO_FEW_VALID
+
+    def test_spread_at_max(self):
+        r = _good_result(spread_cm=5.0)
+        assert not (_flag(selected_result=r) & SELECTED_TOO_NOISY)
