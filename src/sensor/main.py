@@ -4,18 +4,46 @@ from __future__ import annotations
 
 import argparse
 import logging
+import math
 import signal
 import sys
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Optional
 
-from src.sensor.config import StationConfig, load_config
+from src.sensor.config import QCConfig, StationConfig, load_config
 from src.sensor.lora import LoRaTransmitter
-from src.sensor.storage import Reading, Storage
+from src.sensor.storage import Reading, SensorReading, SensorStorage, Storage
 from src.sensor.temperature import TemperatureSensor
-from src.sensor.ultrasonic import UltrasonicSensor
+from src.sensor.ultrasonic import SensorResult, UltrasonicSensor
 
 logger = logging.getLogger(__name__)
+
+
+def _select_best_sensor(
+    results: dict[str, SensorResult], qc: QCConfig
+) -> Optional[tuple[str, SensorResult]]:
+    """Pick the best sensor by QC criteria. Returns (sensor_id, result) or None."""
+    min_valid = math.ceil(qc.num_samples * qc.min_valid_fraction)
+    candidates: list[tuple[str, SensorResult]] = []
+    for sid, r in results.items():
+        if r.distance_cm is None:
+            continue
+        if r.num_valid < min_valid:
+            continue
+        if r.spread_cm is None or r.spread_cm > qc.max_spread_cm:
+            continue
+        candidates.append((sid, r))
+    if not candidates:
+        return None
+    candidates.sort(key=lambda x: (x[1].spread_cm, x[0]))
+    return candidates[0]
+
+
+def _sensor_csv_path(main_csv_path: str | Path) -> Path:
+    """Derive per-sensor CSV path from main CSV path."""
+    p = Path(main_csv_path)
+    return p.parent / f"{p.stem}_sensors{p.suffix}"
 
 
 class SensorStation:
@@ -39,6 +67,9 @@ class SensorStation:
             tx_power=config.lora.tx_power,
         )
         self._storage = Storage(config.storage.csv_path)
+        self._sensor_storage = SensorStorage(
+            _sensor_csv_path(config.storage.csv_path)
+        )
 
     def run_cycle(self) -> bool:
         """Execute one measurement cycle. Always returns True."""
@@ -48,6 +79,7 @@ class SensorStation:
         # Initialize storage
         try:
             self._storage.initialize()
+            self._sensor_storage.initialize()
         except Exception:
             logger.warning("Storage initialization failed", exc_info=True)
 
@@ -68,13 +100,16 @@ class SensorStation:
 
         # Read ultrasonic sensors sequentially
         qc = self._config.qc
-        sensor_distances: dict[str, Optional[float]] = {}
+        sensor_results: dict[str, SensorResult] = {}
         for sensor_id, sensor in self._ultrasonics.items():
             if not sensor.initialize():
                 err = sensor.get_last_error_reason() or "ultrasonic_init_error"
                 errors.append(f"{sensor_id}:{err}")
                 logger.warning("Ultrasonic %s init failed: %s", sensor_id, err)
-                sensor_distances[sensor_id] = None
+                sensor_results[sensor_id] = SensorResult(
+                    distance_cm=None, num_samples=0, num_valid=0,
+                    spread_cm=None, error=err,
+                )
             else:
                 result = sensor.read_distance_cm(
                     num_samples=qc.num_samples,
@@ -90,12 +125,30 @@ class SensorStation:
                         "Ultrasonic %s distance: %.1f cm (spread: %s)",
                         sensor_id, result.distance_cm, result.spread_cm,
                     )
-                sensor_distances[sensor_id] = result.distance_cm
+                sensor_results[sensor_id] = result
 
-        # Use first successful reading
-        distance_raw_cm: Optional[float] = next(
-            (v for v in sensor_distances.values() if v is not None), None
-        )
+        # Write per-sensor rows
+        cycle_id = 0  # placeholder until PR3
+        for sensor_id, result in sensor_results.items():
+            sr = SensorReading(
+                timestamp=timestamp,
+                cycle_id=cycle_id,
+                sensor_id=sensor_id,
+                distance_cm=result.distance_cm,
+                num_samples=result.num_samples,
+                num_valid=result.num_valid,
+                spread_cm=result.spread_cm,
+                error=result.error,
+            )
+            try:
+                self._sensor_storage.append(sr)
+            except Exception:
+                logger.warning("Sensor CSV append failed for %s", sensor_id, exc_info=True)
+
+        # Select best sensor by QC criteria
+        best = _select_best_sensor(sensor_results, qc)
+        selected_ultrasonic_id: Optional[str] = best[0] if best else None
+        distance_raw_cm: Optional[float] = best[1].distance_cm if best else None
 
         # Compute snow depth
         snow_depth_cm: Optional[float] = None
@@ -140,6 +193,7 @@ class SensorStation:
             distance_raw_cm=distance_raw_cm,
             temperature_c=temperature_c,
             sensor_height_cm=self._config.sensor_height_cm,
+            selected_ultrasonic_id=selected_ultrasonic_id,
             lora_tx_success=lora_tx_success,
             lora_rssi=self._lora.get_last_rssi() if lora_tx_success else None,
             error_flags=error_flags_csv,
