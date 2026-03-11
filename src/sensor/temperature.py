@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import time
-from typing import Optional
 
 
 class TemperatureSensor:
@@ -18,7 +17,7 @@ class TemperatureSensor:
         self._read_timeout_ms = read_timeout_ms
         self._sensor = None
         self._initialized = False
-        self._last_error: Optional[str] = None
+        self._last_error: str | None = None
         self._last_read_duration_ms: int = 0
 
     def initialize(self) -> bool:
@@ -47,7 +46,7 @@ class TemperatureSensor:
             self._last_error = "temp_no_device"
             return False
 
-    def read_temperature_c(self) -> Optional[float]:
+    def read_temperature_c(self) -> float | None:
         """Read temperature with retry logic within the configured timeout."""
         if not self._initialized or self._sensor is None:
             self._last_error = "temp_not_initialized"
@@ -88,7 +87,7 @@ class TemperatureSensor:
         self._last_error = "temp_unavailable"
         return None
 
-    def _validate_temperature_c(self, value: float) -> Optional[float]:
+    def _validate_temperature_c(self, value: float) -> float | None:
         """Reject readings outside the valid range, round to 2 decimals."""
         if value == self.RESET_VALUE_C:
             self._last_error = "temp_power_on_reset"
@@ -99,7 +98,7 @@ class TemperatureSensor:
         self._last_error = None
         return round(value, 2)
 
-    def get_last_error_reason(self) -> Optional[str]:
+    def get_last_error_reason(self) -> str | None:
         """Return the error code from the last operation, if any."""
         return self._last_error
 

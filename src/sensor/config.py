@@ -6,7 +6,6 @@ import hashlib
 import yaml
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
 
 
 class ConfigError(Exception):
@@ -20,18 +19,6 @@ _ISM_BANDS = (
     (863.0, 870.0),
     (902.0, 928.0),
 )
-
-
-@dataclass(frozen=True)
-class UltrasonicSensorConfig:
-    id: str
-    trigger_pin: int
-    echo_pin: int
-
-
-@dataclass(frozen=True)
-class SensorsConfig:
-    ultrasonic: list[UltrasonicSensorConfig]
 
 
 @dataclass(frozen=True)

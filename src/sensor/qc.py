@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import math
-from typing import Optional
 
 from src.sensor.config import QCConfig
 from src.sensor.ultrasonic import SensorResult
@@ -22,11 +21,11 @@ STORAGE_WRITE_FAILED = 1 << 9
 
 def compute_quality_flag(
     *,
-    temperature_c: Optional[float],
+    temperature_c: float | None,
     sensor_results: dict[str, SensorResult],
-    selected_id: Optional[str],
-    selected_result: Optional[SensorResult],
-    snow_depth_cm: Optional[float],
+    selected_id: str | None,
+    selected_result: SensorResult | None,
+    snow_depth_cm: float | None,
     sensor_height_cm: float,
     lora_tx_success: bool,
     storage_failed: bool,

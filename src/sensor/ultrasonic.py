@@ -6,16 +6,15 @@ import math
 import time
 import statistics
 from dataclasses import dataclass
-from typing import Optional
 
 
 @dataclass(frozen=True)
 class SensorResult:
-    distance_cm: Optional[float]
+    distance_cm: float | None
     num_samples: int
     num_valid: int
-    spread_cm: Optional[float]
-    error: Optional[str]
+    spread_cm: float | None
+    error: str | None
 
 
 def speed_of_sound_m_s(temperature_c: float) -> float:
@@ -47,7 +46,7 @@ class UltrasonicSensor:
         self._max_distance_m = max_distance_m
         self._sensor = None
         self._initialized = False
-        self._last_error: Optional[str] = None
+        self._last_error: str | None = None
         self._last_read_duration_ms: int = 0
 
     def initialize(self) -> bool:
@@ -72,7 +71,7 @@ class UltrasonicSensor:
     def read_distance_cm(
         self,
         num_samples: int = 31,
-        temperature_c: Optional[float] = None,
+        temperature_c: float | None = None,
         inter_pulse_delay_ms: int = 60,
     ) -> SensorResult:
         """Take multiple readings, return SensorResult with median and stats.
@@ -143,7 +142,7 @@ class UltrasonicSensor:
             num_valid=num_valid, spread_cm=spread_cm, error=error,
         )
 
-    def _validate_distance_cm(self, value: float) -> Optional[float]:
+    def _validate_distance_cm(self, value: float) -> float | None:
         """Reject readings outside the valid range, round to 1 decimal."""
         if value < self.MIN_VALID_CM or value > self.MAX_VALID_CM:
             self._last_error = "ultrasonic_out_of_range"
@@ -151,7 +150,7 @@ class UltrasonicSensor:
         self._last_error = None
         return round(value, 1)
 
-    def get_last_error_reason(self) -> Optional[str]:
+    def get_last_error_reason(self) -> str | None:
         """Return the error code from the last operation, if any."""
         return self._last_error
 

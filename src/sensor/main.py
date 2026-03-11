@@ -10,7 +10,6 @@ import signal
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
 
 from src.sensor.config import QCConfig, StationConfig, config_id, load_config
 from src.sensor.cycle import get_boot_id, read_and_increment_cycle_id
@@ -25,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 def _select_best_sensor(
     results: dict[str, SensorResult], qc: QCConfig
-) -> Optional[tuple[str, SensorResult]]:
+) -> tuple[str, SensorResult] | None:
     """Pick the best sensor by QC criteria. Returns (sensor_id, result) or None."""
     min_valid = math.ceil(qc.num_samples * qc.min_valid_fraction)
     candidates: list[tuple[str, SensorResult]] = []
@@ -55,6 +54,7 @@ class SensorStation:
     def __init__(self, config: StationConfig, config_path: str | Path | None = None) -> None:
         self._config = config
         self._config_path = config_path
+        self._config_id = config_id(config_path) if config_path else ""
         self._temp = TemperatureSensor()
         sensor_list = config.sensors.ultrasonic if config.sensors is not None else []
         self._ultrasonics: dict[str, UltrasonicSensor] = {
@@ -88,7 +88,7 @@ class SensorStation:
             logger.warning("Storage initialization failed", exc_info=True)
 
         # Read temperature
-        temperature_c: Optional[float] = None
+        temperature_c: float | None = None
         if not self._temp.initialize():
             err = self._temp.get_last_error_reason() or "temp_init_error"
             errors.append(err)
@@ -135,7 +135,7 @@ class SensorStation:
         cycle_id = read_and_increment_cycle_id(self._config.storage.csv_path)
         boot_id = get_boot_id()
         software_version = os.environ.get("SNOW_SENSOR_VERSION", "unknown")
-        cfg_id = config_id(self._config_path) if self._config_path else ""
+        cfg_id = self._config_id
 
         # Write per-sensor rows
         for sensor_id, result in sensor_results.items():
@@ -156,11 +156,11 @@ class SensorStation:
 
         # Select best sensor by QC criteria
         best = _select_best_sensor(sensor_results, qc)
-        selected_ultrasonic_id: Optional[str] = best[0] if best else None
-        distance_raw_cm: Optional[float] = best[1].distance_cm if best else None
+        selected_ultrasonic_id: str | None = best[0] if best else None
+        distance_raw_cm: float | None = best[1].distance_cm if best else None
 
         # Compute snow depth
-        snow_depth_cm: Optional[float] = None
+        snow_depth_cm: float | None = None
         if distance_raw_cm is not None:
             snow_depth_cm = round(
                 self._config.sensor_height_cm - distance_raw_cm, 1
