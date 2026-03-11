@@ -6,7 +6,6 @@ import csv
 import os
 from dataclasses import dataclass, asdict
 from pathlib import Path
-from typing import Optional
 
 
 class StorageError(Exception):
@@ -40,14 +39,14 @@ class Reading:
     boot_id: str = ""
     software_version: str = "unknown"
     config_id: str = ""
-    snow_depth_cm: Optional[float] = None
-    distance_raw_cm: Optional[float] = None
-    temperature_c: Optional[float] = None
-    sensor_height_cm: Optional[float] = None
-    selected_ultrasonic_id: Optional[str] = None
+    snow_depth_cm: float | None = None
+    distance_raw_cm: float | None = None
+    temperature_c: float | None = None
+    sensor_height_cm: float | None = None
+    selected_ultrasonic_id: str | None = None
     quality_flag: int = 0
     lora_tx_success: bool = False
-    lora_rssi: Optional[int] = None
+    lora_rssi: int | None = None
     error_flags: str = ""
 
     def to_row(self) -> dict:
@@ -72,11 +71,11 @@ class SensorReading:
     timestamp: str
     cycle_id: int
     sensor_id: str
-    distance_cm: Optional[float] = None
+    distance_cm: float | None = None
     num_samples: int = 0
     num_valid: int = 0
-    spread_cm: Optional[float] = None
-    error: Optional[str] = None
+    spread_cm: float | None = None
+    error: str | None = None
 
     def to_row(self) -> dict:
         """Convert to a dict suitable for csv.DictWriter."""
@@ -89,6 +88,7 @@ class Storage:
     def __init__(self, csv_path: str | Path, fsync: bool = False) -> None:
         self._path = Path(csv_path)
         self._fsync = fsync
+        self._initialized = False
 
     def initialize(self) -> None:
         """Create parent dirs and write CSV header if the file doesn't exist or is empty.
@@ -115,14 +115,16 @@ class Storage:
                     writer.writeheader()
             except OSError as e:
                 raise StorageError(f"Failed to initialize CSV: {e}") from e
+        self._initialized = True
 
     def append(self, reading: Reading) -> None:
         """Append a single reading to the CSV file.
 
         Calls initialize() automatically if the file doesn't exist or is empty.
         """
-        if not self._path.exists() or self._path.stat().st_size == 0:
-            self.initialize()
+        if not self._initialized:
+            if not self._path.exists() or self._path.stat().st_size == 0:
+                self.initialize()
         try:
             with open(self._path, "a", newline="") as f:
                 writer = csv.DictWriter(f, fieldnames=COLUMNS)
@@ -148,6 +150,7 @@ class SensorStorage:
     def __init__(self, csv_path: str | Path, fsync: bool = False) -> None:
         self._path = Path(csv_path)
         self._fsync = fsync
+        self._initialized = False
 
     def initialize(self) -> None:
         """Create parent dirs and write CSV header if the file doesn't exist or is empty."""
@@ -159,11 +162,13 @@ class SensorStorage:
                     writer.writeheader()
             except OSError as e:
                 raise StorageError(f"Failed to initialize sensor CSV: {e}") from e
+        self._initialized = True
 
     def append(self, reading: SensorReading) -> None:
         """Append a single sensor reading to the CSV file."""
-        if not self._path.exists() or self._path.stat().st_size == 0:
-            self.initialize()
+        if not self._initialized:
+            if not self._path.exists() or self._path.stat().st_size == 0:
+                self.initialize()
         try:
             with open(self._path, "a", newline="") as f:
                 writer = csv.DictWriter(f, fieldnames=SENSOR_COLUMNS)
@@ -218,19 +223,19 @@ def _row_to_sensor_reading(row: dict) -> SensorReading:
     )
 
 
-def _parse_optional_float(value: str) -> Optional[float]:
+def _parse_optional_float(value: str) -> float | None:
     if value == "":
         return None
     return float(value)
 
 
-def _parse_optional_int(value: str) -> Optional[int]:
+def _parse_optional_int(value: str) -> int | None:
     if value == "":
         return None
     return int(value)
 
 
-def _parse_optional_str(value: str) -> Optional[str]:
+def _parse_optional_str(value: str) -> str | None:
     if value == "":
         return None
     return value

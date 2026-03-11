@@ -1,56 +1,42 @@
 """Tests for cycle_id persistence and boot_id stability."""
 
+import pytest
+
 from src.sensor.cycle import get_boot_id, read_and_increment_cycle_id
 
 
+@pytest.fixture
+def cycle_csv(tmp_path):
+    csv = tmp_path / "data" / "snow.csv"
+    csv.parent.mkdir(parents=True)
+    return csv
+
+
 class TestCycleId:
-    def test_first_call_returns_one(self, tmp_path):
-        csv = tmp_path / "data" / "snow.csv"
-        csv.parent.mkdir(parents=True)
-        assert read_and_increment_cycle_id(csv) == 1
+    def test_first_call_returns_one(self, cycle_csv):
+        assert read_and_increment_cycle_id(cycle_csv) == 1
 
-    def test_increments(self, tmp_path):
-        csv = tmp_path / "data" / "snow.csv"
-        csv.parent.mkdir(parents=True)
-        assert read_and_increment_cycle_id(csv) == 1
-        assert read_and_increment_cycle_id(csv) == 2
-        assert read_and_increment_cycle_id(csv) == 3
+    def test_increments(self, cycle_csv):
+        assert read_and_increment_cycle_id(cycle_csv) == 1
+        assert read_and_increment_cycle_id(cycle_csv) == 2
+        assert read_and_increment_cycle_id(cycle_csv) == 3
 
-    def test_persists_to_file(self, tmp_path):
-        csv = tmp_path / "data" / "snow.csv"
-        csv.parent.mkdir(parents=True)
-        read_and_increment_cycle_id(csv)
-        read_and_increment_cycle_id(csv)
-        cycle_file = tmp_path / "data" / "cycle_id.txt"
+    def test_persists_to_file(self, cycle_csv):
+        read_and_increment_cycle_id(cycle_csv)
+        read_and_increment_cycle_id(cycle_csv)
+        cycle_file = cycle_csv.parent / "cycle_id.txt"
         assert cycle_file.read_text().strip() == "2"
 
-    def test_recovers_from_corrupt_file(self, tmp_path):
-        csv = tmp_path / "data" / "snow.csv"
-        csv.parent.mkdir(parents=True)
-        cycle_file = tmp_path / "data" / "cycle_id.txt"
-        cycle_file.write_text("garbage")
-        assert read_and_increment_cycle_id(csv) == 1
+    @pytest.mark.parametrize("content", ["garbage", "", "2.5"])
+    def test_recovers_from_corrupt_file(self, cycle_csv, content):
+        cycle_file = cycle_csv.parent / "cycle_id.txt"
+        cycle_file.write_text(content)
+        assert read_and_increment_cycle_id(cycle_csv) == 1
 
-    def test_recovers_from_empty_file(self, tmp_path):
-        csv = tmp_path / "data" / "snow.csv"
-        csv.parent.mkdir(parents=True)
-        cycle_file = tmp_path / "data" / "cycle_id.txt"
-        cycle_file.write_text("")
-        assert read_and_increment_cycle_id(csv) == 1
-
-    def test_recovers_from_float_string(self, tmp_path):
-        csv = tmp_path / "data" / "snow.csv"
-        csv.parent.mkdir(parents=True)
-        cycle_file = tmp_path / "data" / "cycle_id.txt"
-        cycle_file.write_text("2.5")
-        assert read_and_increment_cycle_id(csv) == 1
-
-    def test_handles_whitespace_in_file(self, tmp_path):
-        csv = tmp_path / "data" / "snow.csv"
-        csv.parent.mkdir(parents=True)
-        cycle_file = tmp_path / "data" / "cycle_id.txt"
+    def test_handles_whitespace_in_file(self, cycle_csv):
+        cycle_file = cycle_csv.parent / "cycle_id.txt"
         cycle_file.write_text("  5  \n")
-        assert read_and_increment_cycle_id(csv) == 6
+        assert read_and_increment_cycle_id(cycle_csv) == 6
 
     def test_creates_parent_dirs(self, tmp_path):
         csv = tmp_path / "a" / "b" / "snow.csv"

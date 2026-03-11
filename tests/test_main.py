@@ -391,26 +391,6 @@ pins:
         result = main(["--config", str(config_file)])
         assert result == 0
 
-    def test_test_flag_enables_debug(self, mock_deps, tmp_path):
-        config_file = tmp_path / "config.yaml"
-        config_file.write_text(
-            """\
-station:
-  id: TEST01
-  sensor_height_cm: 200.0
-pins:
-  hcsr04_trigger: 23
-  hcsr04_echo: 24
-  ds18b20_data: 4
-  lora_cs: 5
-  lora_reset: 25
-"""
-        )
-        with patch("src.sensor.main.logging.basicConfig") as mock_basic:
-            main(["--config", str(config_file), "--verbose"])
-            mock_basic.assert_called_once()
-            assert mock_basic.call_args[1]["level"] == logging.DEBUG
-
     def test_verbose_flag_enables_debug(self, mock_deps, tmp_path):
         config_file = tmp_path / "config.yaml"
         config_file.write_text(
