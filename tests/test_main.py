@@ -10,6 +10,7 @@ import pytest
 from src.sensor.config import (
     LoraConfig,
     PinsConfig,
+    QCConfig,
     SensorsConfig,
     StationConfig,
     StorageConfig,
@@ -18,6 +19,7 @@ from src.sensor.config import (
 )
 from src.sensor.main import SensorStation, main
 from src.sensor.storage import Reading
+from src.sensor.ultrasonic import SensorResult
 
 
 def _make_config(**overrides) -> StationConfig:
@@ -62,7 +64,10 @@ def mock_deps():
         temp.get_last_error_reason.return_value = None
 
         ultra.initialize.return_value = True
-        ultra.read_distance_cm.return_value = 150.0
+        ultra.read_distance_cm.return_value = SensorResult(
+            distance_cm=150.0, num_samples=31, num_valid=31,
+            spread_cm=0.5, error=None,
+        )
         ultra.get_last_error_reason.return_value = None
 
         lora.initialize.return_value = True
@@ -112,11 +117,16 @@ class TestRunCycleHappyPath:
         station.run_cycle()
 
         call_kwargs = mock_deps["ultra"].read_distance_cm.call_args
-        assert call_kwargs == call(temperature_c=5.0)
+        assert call_kwargs == call(
+            num_samples=31, temperature_c=5.0, inter_pulse_delay_ms=60,
+        )
 
     def test_snow_depth_computed(self, mock_deps):
         station = SensorStation(_make_config(sensor_height_cm=200.0))
-        mock_deps["ultra"].read_distance_cm.return_value = 150.0
+        mock_deps["ultra"].read_distance_cm.return_value = SensorResult(
+            distance_cm=150.0, num_samples=31, num_valid=31,
+            spread_cm=0.5, error=None,
+        )
         station.run_cycle()
 
         reading = mock_deps["storage"].append.call_args[0][0]
@@ -181,7 +191,9 @@ class TestRunCycleTemperatureFailure:
 
         mock_deps["ultra"].read_distance_cm.assert_called_once()
         call_kwargs = mock_deps["ultra"].read_distance_cm.call_args
-        assert call_kwargs == call(temperature_c=None)
+        assert call_kwargs == call(
+            num_samples=31, temperature_c=None, inter_pulse_delay_ms=60,
+        )
 
 
 # ── Ultrasonic failure ────────────────────────────────────────────
@@ -199,8 +211,10 @@ class TestRunCycleUltrasonicFailure:
         assert "ultrasonic_no_device" in reading.error_flags
 
     def test_read_none_adds_error(self, mock_deps):
-        mock_deps["ultra"].read_distance_cm.return_value = None
-        mock_deps["ultra"].get_last_error_reason.return_value = "ultrasonic_read_error"
+        mock_deps["ultra"].read_distance_cm.return_value = SensorResult(
+            distance_cm=None, num_samples=31, num_valid=5,
+            spread_cm=None, error="ultrasonic_read_error",
+        )
 
         station = SensorStation(_make_config())
         station.run_cycle()
@@ -209,8 +223,10 @@ class TestRunCycleUltrasonicFailure:
         assert "ultrasonic_read_error" in reading.error_flags
 
     def test_snow_depth_is_none(self, mock_deps):
-        mock_deps["ultra"].read_distance_cm.return_value = None
-        mock_deps["ultra"].get_last_error_reason.return_value = "ultrasonic_read_error"
+        mock_deps["ultra"].read_distance_cm.return_value = SensorResult(
+            distance_cm=None, num_samples=31, num_valid=5,
+            spread_cm=None, error="ultrasonic_read_error",
+        )
 
         station = SensorStation(_make_config())
         station.run_cycle()
@@ -285,8 +301,10 @@ class TestRunCycleErrorFlags:
     def test_multiple_errors_pipe_delimited(self, mock_deps):
         mock_deps["temp"].initialize.return_value = False
         mock_deps["temp"].get_last_error_reason.return_value = "temp_no_device"
-        mock_deps["ultra"].read_distance_cm.return_value = None
-        mock_deps["ultra"].get_last_error_reason.return_value = "ultrasonic_read_error"
+        mock_deps["ultra"].read_distance_cm.return_value = SensorResult(
+            distance_cm=None, num_samples=31, num_valid=5,
+            spread_cm=None, error="ultrasonic_read_error",
+        )
 
         station = SensorStation(_make_config())
         station.run_cycle()
@@ -406,7 +424,10 @@ pins:
 
 class TestRunCycleEdgeCases:
     def test_negative_snow_depth_when_distance_exceeds_height(self, mock_deps):
-        mock_deps["ultra"].read_distance_cm.return_value = 250.0
+        mock_deps["ultra"].read_distance_cm.return_value = SensorResult(
+            distance_cm=250.0, num_samples=31, num_valid=31,
+            spread_cm=0.5, error=None,
+        )
         station = SensorStation(_make_config(sensor_height_cm=200.0))
         station.run_cycle()
 
@@ -414,7 +435,10 @@ class TestRunCycleEdgeCases:
         assert reading.snow_depth_cm == -50.0
 
     def test_zero_snow_depth(self, mock_deps):
-        mock_deps["ultra"].read_distance_cm.return_value = 200.0
+        mock_deps["ultra"].read_distance_cm.return_value = SensorResult(
+            distance_cm=200.0, num_samples=31, num_valid=31,
+            spread_cm=0.5, error=None,
+        )
         station = SensorStation(_make_config(sensor_height_cm=200.0))
         station.run_cycle()
 
@@ -451,12 +475,18 @@ def mock_multi_deps():
         # Create separate mock for each sensor instance
         ultra_north = MagicMock()
         ultra_north.initialize.return_value = True
-        ultra_north.read_distance_cm.return_value = 150.0
+        ultra_north.read_distance_cm.return_value = SensorResult(
+            distance_cm=150.0, num_samples=31, num_valid=31,
+            spread_cm=0.5, error=None,
+        )
         ultra_north.get_last_error_reason.return_value = None
 
         ultra_south = MagicMock()
         ultra_south.initialize.return_value = True
-        ultra_south.read_distance_cm.return_value = 148.0
+        ultra_south.read_distance_cm.return_value = SensorResult(
+            distance_cm=148.0, num_samples=31, num_valid=31,
+            spread_cm=0.3, error=None,
+        )
         ultra_south.get_last_error_reason.return_value = None
 
         MockUltra.side_effect = [ultra_north, ultra_south]
@@ -501,8 +531,10 @@ class TestMultiSensorOrchestration:
         assert reading.distance_raw_cm == 150.0  # north's reading
 
     def test_skips_failed_sensor_uses_next(self, mock_multi_deps):
-        mock_multi_deps["ultra_north"].read_distance_cm.return_value = None
-        mock_multi_deps["ultra_north"].get_last_error_reason.return_value = "ultrasonic_read_error"
+        mock_multi_deps["ultra_north"].read_distance_cm.return_value = SensorResult(
+            distance_cm=None, num_samples=31, num_valid=5,
+            spread_cm=None, error="ultrasonic_read_error",
+        )
 
         station = SensorStation(_make_multi_sensor_config())
         station.run_cycle()
@@ -511,10 +543,14 @@ class TestMultiSensorOrchestration:
         assert reading.distance_raw_cm == 148.0  # south's reading
 
     def test_all_sensors_fail(self, mock_multi_deps):
-        mock_multi_deps["ultra_north"].read_distance_cm.return_value = None
-        mock_multi_deps["ultra_north"].get_last_error_reason.return_value = "ultrasonic_read_error"
-        mock_multi_deps["ultra_south"].read_distance_cm.return_value = None
-        mock_multi_deps["ultra_south"].get_last_error_reason.return_value = "ultrasonic_read_error"
+        mock_multi_deps["ultra_north"].read_distance_cm.return_value = SensorResult(
+            distance_cm=None, num_samples=31, num_valid=5,
+            spread_cm=None, error="ultrasonic_read_error",
+        )
+        mock_multi_deps["ultra_south"].read_distance_cm.return_value = SensorResult(
+            distance_cm=None, num_samples=31, num_valid=5,
+            spread_cm=None, error="ultrasonic_read_error",
+        )
 
         station = SensorStation(_make_multi_sensor_config())
         station.run_cycle()

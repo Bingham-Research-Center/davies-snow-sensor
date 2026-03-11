@@ -5,12 +5,28 @@ from __future__ import annotations
 import math
 import time
 import statistics
+from dataclasses import dataclass
 from typing import Optional
+
+
+@dataclass(frozen=True)
+class SensorResult:
+    distance_cm: Optional[float]
+    num_samples: int
+    num_valid: int
+    spread_cm: Optional[float]
+    error: Optional[str]
 
 
 def speed_of_sound_m_s(temperature_c: float) -> float:
     """Laplace formula for speed of sound in air."""
     return 331.3 * math.sqrt(1 + temperature_c / 273.15)
+
+
+def _median_absolute_deviation(values: list[float]) -> float:
+    """Compute MAD: median of absolute deviations from the median."""
+    med = statistics.median(values)
+    return statistics.median(abs(v - med) for v in values)
 
 
 class UltrasonicSensor:
@@ -57,20 +73,25 @@ class UltrasonicSensor:
         self,
         num_samples: int = 31,
         temperature_c: Optional[float] = None,
-    ) -> Optional[float]:
-        """Take multiple readings, return median distance in cm.
+        inter_pulse_delay_ms: int = 60,
+    ) -> SensorResult:
+        """Take multiple readings, return SensorResult with median and stats.
 
         Args:
             num_samples: Number of pulses to fire (odd recommended for median).
             temperature_c: Ambient temperature for speed-of-sound compensation.
+            inter_pulse_delay_ms: Delay between pulses in milliseconds.
 
         Returns:
-            Median distance in cm rounded to 1 decimal, or None on failure.
+            SensorResult with distance, sample counts, spread, and error.
         """
         if not self._initialized or self._sensor is None:
             self._last_error = "ultrasonic_not_initialized"
             self._last_read_duration_ms = 0
-            return None
+            return SensorResult(
+                distance_cm=None, num_samples=0, num_valid=0,
+                spread_cm=None, error="ultrasonic_not_initialized",
+            )
 
         # Apply temperature compensation
         if temperature_c is not None:
@@ -78,13 +99,14 @@ class UltrasonicSensor:
         else:
             self._sensor.speed_of_sound = self.SPEED_OF_SOUND_20C
 
+        delay_s = inter_pulse_delay_ms / 1000.0
         start = time.monotonic()
-        valid_readings = []
+        valid_readings: list[float] = []
 
         try:
             for i in range(num_samples):
                 if i > 0:
-                    time.sleep(0.06)  # 60ms inter-pulse delay
+                    time.sleep(delay_s)
                 raw = self._sensor.distance  # meters, or None with partial=True
                 if raw is not None:
                     valid_readings.append(raw * 100)  # convert to cm
@@ -93,17 +115,33 @@ class UltrasonicSensor:
                 (time.monotonic() - start) * 1000
             )
             self._last_error = "ultrasonic_read_error"
-            return None
+            return SensorResult(
+                distance_cm=None, num_samples=num_samples,
+                num_valid=len(valid_readings), spread_cm=None,
+                error="ultrasonic_read_error",
+            )
 
         self._last_read_duration_ms = int((time.monotonic() - start) * 1000)
+        num_valid = len(valid_readings)
 
         # Need majority of samples to be valid
-        if len(valid_readings) < num_samples // 2 + 1:
+        if num_valid < num_samples // 2 + 1:
             self._last_error = "ultrasonic_unavailable"
-            return None
+            return SensorResult(
+                distance_cm=None, num_samples=num_samples,
+                num_valid=num_valid, spread_cm=None,
+                error="ultrasonic_unavailable",
+            )
 
         median_cm = statistics.median(valid_readings)
-        return self._validate_distance_cm(median_cm)
+        spread_cm = round(_median_absolute_deviation(valid_readings), 2) if num_valid > 1 else 0.0
+        distance = self._validate_distance_cm(median_cm)
+        error = self._last_error  # set by _validate_distance_cm if OOR
+
+        return SensorResult(
+            distance_cm=distance, num_samples=num_samples,
+            num_valid=num_valid, spread_cm=spread_cm, error=error,
+        )
 
     def _validate_distance_cm(self, value: float) -> Optional[float]:
         """Reject readings outside the valid range, round to 1 decimal."""
