@@ -15,11 +15,16 @@ class StorageError(Exception):
 COLUMNS = (
     "timestamp",
     "station_id",
+    "cycle_id",
+    "boot_id",
+    "software_version",
+    "config_id",
     "snow_depth_cm",
     "distance_raw_cm",
     "temperature_c",
     "sensor_height_cm",
     "selected_ultrasonic_id",
+    "quality_flag",
     "lora_tx_success",
     "lora_rssi",
     "error_flags",
@@ -30,11 +35,16 @@ COLUMNS = (
 class Reading:
     timestamp: str
     station_id: str
+    cycle_id: int = 0
+    boot_id: str = ""
+    software_version: str = "unknown"
+    config_id: str = ""
     snow_depth_cm: Optional[float] = None
     distance_raw_cm: Optional[float] = None
     temperature_c: Optional[float] = None
     sensor_height_cm: Optional[float] = None
     selected_ultrasonic_id: Optional[str] = None
+    quality_flag: int = 0
     lora_tx_success: bool = False
     lora_rssi: Optional[int] = None
     error_flags: str = ""
@@ -169,11 +179,16 @@ def _row_to_reading(row: dict) -> Reading:
     return Reading(
         timestamp=row["timestamp"],
         station_id=row["station_id"],
+        cycle_id=int(row.get("cycle_id", "0")),
+        boot_id=row.get("boot_id", ""),
+        software_version=row.get("software_version", "unknown"),
+        config_id=row.get("config_id", ""),
         snow_depth_cm=_parse_optional_float(row["snow_depth_cm"]),
         distance_raw_cm=_parse_optional_float(row["distance_raw_cm"]),
         temperature_c=_parse_optional_float(row["temperature_c"]),
         sensor_height_cm=_parse_optional_float(row["sensor_height_cm"]),
         selected_ultrasonic_id=_parse_optional_str(row.get("selected_ultrasonic_id", "")),
+        quality_flag=int(row.get("quality_flag", "0")),
         lora_tx_success=row["lora_tx_success"] == "True",
         lora_rssi=_parse_optional_int(row.get("lora_rssi", "")),
         error_flags=row["error_flags"],
