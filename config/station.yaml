@@ -1,5 +1,5 @@
 station:
-  id: "DAVIES-TEST"
+  id: "DAVIES-01"
   sensor_height_cm: 5.08
 
 pins:
