@@ -6,11 +6,13 @@ from pathlib import Path
 
 from src.sensor.config import (
     ConfigError,
+    SensorsConfig,
     StationConfig,
     PinsConfig,
     LoraConfig,
     StorageConfig,
     TimingConfig,
+    UltrasonicSensorConfig,
     load_config,
 )
 
@@ -261,3 +263,153 @@ def test_shipped_template_loads():
     template_path = Path(__file__).resolve().parent.parent / "config" / "station.yaml"
     cfg = load_config(template_path)
     assert isinstance(cfg, StationConfig)
+
+
+# ── Multi-sensor config ─────────────────────────────────────────
+
+
+MULTI_SENSOR_CONFIG = {
+    "station": {"id": "DAVIES-01", "sensor_height_cm": 200.0},
+    "pins": {
+        "ds18b20_data": 4,
+        "lora_cs": 7,
+        "lora_reset": 25,
+    },
+    "sensors": {
+        "ultrasonic": [
+            {"id": "north", "trigger_pin": 5, "echo_pin": 6},
+            {"id": "south", "trigger_pin": 13, "echo_pin": 19},
+        ],
+    },
+}
+
+
+class TestMultiSensorConfig:
+    def test_parses_multiple_sensors(self, tmp_path):
+        cfg = load_config(_write_yaml(tmp_path, MULTI_SENSOR_CONFIG))
+        assert len(cfg.sensors.ultrasonic) == 2
+        assert cfg.sensors.ultrasonic[0].id == "north"
+        assert cfg.sensors.ultrasonic[0].trigger_pin == 5
+        assert cfg.sensors.ultrasonic[0].echo_pin == 6
+        assert cfg.sensors.ultrasonic[1].id == "south"
+        assert cfg.sensors.ultrasonic[1].trigger_pin == 13
+        assert cfg.sensors.ultrasonic[1].echo_pin == 19
+
+    def test_hcsr04_pins_not_required_with_sensors(self, tmp_path):
+        cfg = load_config(_write_yaml(tmp_path, MULTI_SENSOR_CONFIG))
+        assert cfg.pins.hcsr04_trigger is None
+        assert cfg.pins.hcsr04_echo is None
+
+    def test_four_sensors(self, tmp_path):
+        data = {
+            **MULTI_SENSOR_CONFIG,
+            "sensors": {
+                "ultrasonic": [
+                    {"id": "north", "trigger_pin": 5, "echo_pin": 6},
+                    {"id": "south", "trigger_pin": 13, "echo_pin": 19},
+                    {"id": "east", "trigger_pin": 20, "echo_pin": 21},
+                    {"id": "west", "trigger_pin": 16, "echo_pin": 26},
+                ],
+            },
+        }
+        cfg = load_config(_write_yaml(tmp_path, data))
+        assert len(cfg.sensors.ultrasonic) == 4
+
+
+class TestMultiSensorBackwardCompat:
+    def test_legacy_config_auto_converts(self, tmp_path):
+        cfg = load_config(_write_yaml(tmp_path, VALID_CONFIG))
+        assert cfg.sensors is not None
+        assert len(cfg.sensors.ultrasonic) == 1
+        assert cfg.sensors.ultrasonic[0].id == "default"
+        assert cfg.sensors.ultrasonic[0].trigger_pin == 23
+        assert cfg.sensors.ultrasonic[0].echo_pin == 24
+
+    def test_legacy_pins_still_set(self, tmp_path):
+        cfg = load_config(_write_yaml(tmp_path, VALID_CONFIG))
+        assert cfg.pins.hcsr04_trigger == 23
+        assert cfg.pins.hcsr04_echo == 24
+
+
+class TestMultiSensorValidation:
+    def test_empty_ultrasonic_list(self, tmp_path):
+        data = {
+            **MULTI_SENSOR_CONFIG,
+            "sensors": {"ultrasonic": []},
+        }
+        with pytest.raises(ConfigError, match="non-empty"):
+            load_config(_write_yaml(tmp_path, data))
+
+    def test_duplicate_sensor_id(self, tmp_path):
+        data = {
+            **MULTI_SENSOR_CONFIG,
+            "sensors": {
+                "ultrasonic": [
+                    {"id": "north", "trigger_pin": 5, "echo_pin": 6},
+                    {"id": "north", "trigger_pin": 13, "echo_pin": 19},
+                ],
+            },
+        }
+        with pytest.raises(ConfigError, match="Duplicate sensor id"):
+            load_config(_write_yaml(tmp_path, data))
+
+    def test_sensor_pin_out_of_range(self, tmp_path):
+        data = {
+            **MULTI_SENSOR_CONFIG,
+            "sensors": {
+                "ultrasonic": [
+                    {"id": "north", "trigger_pin": 30, "echo_pin": 6},
+                ],
+            },
+        }
+        with pytest.raises(ConfigError, match="out of range"):
+            load_config(_write_yaml(tmp_path, data))
+
+    def test_pin_collision_between_sensors(self, tmp_path):
+        data = {
+            **MULTI_SENSOR_CONFIG,
+            "sensors": {
+                "ultrasonic": [
+                    {"id": "north", "trigger_pin": 5, "echo_pin": 6},
+                    {"id": "south", "trigger_pin": 5, "echo_pin": 19},
+                ],
+            },
+        }
+        with pytest.raises(ConfigError, match="collision"):
+            load_config(_write_yaml(tmp_path, data))
+
+    def test_pin_collision_sensor_vs_lora(self, tmp_path):
+        data = {
+            **MULTI_SENSOR_CONFIG,
+            "sensors": {
+                "ultrasonic": [
+                    {"id": "north", "trigger_pin": 7, "echo_pin": 6},
+                ],
+            },
+        }
+        with pytest.raises(ConfigError, match="collision"):
+            load_config(_write_yaml(tmp_path, data))
+
+    def test_missing_trigger_pin(self, tmp_path):
+        data = {
+            **MULTI_SENSOR_CONFIG,
+            "sensors": {
+                "ultrasonic": [
+                    {"id": "north", "echo_pin": 6},
+                ],
+            },
+        }
+        with pytest.raises(ConfigError, match="trigger_pin"):
+            load_config(_write_yaml(tmp_path, data))
+
+    def test_missing_sensor_id(self, tmp_path):
+        data = {
+            **MULTI_SENSOR_CONFIG,
+            "sensors": {
+                "ultrasonic": [
+                    {"trigger_pin": 5, "echo_pin": 6},
+                ],
+            },
+        }
+        with pytest.raises(ConfigError, match="id"):
+            load_config(_write_yaml(tmp_path, data))

@@ -22,12 +22,24 @@ _ISM_BANDS = (
 
 
 @dataclass(frozen=True)
+class UltrasonicSensorConfig:
+    id: str
+    trigger_pin: int
+    echo_pin: int
+
+
+@dataclass(frozen=True)
+class SensorsConfig:
+    ultrasonic: list[UltrasonicSensorConfig]
+
+
+@dataclass(frozen=True)
 class PinsConfig:
-    hcsr04_trigger: int
-    hcsr04_echo: int
     ds18b20_data: int
     lora_cs: int
     lora_reset: int
+    hcsr04_trigger: int | None = None
+    hcsr04_echo: int | None = None
 
 
 @dataclass(frozen=True)
@@ -66,7 +78,7 @@ class StationConfig:
     lora: LoraConfig
     storage: StorageConfig
     timing: TimingConfig
-    sensors: Optional[SensorsConfig] = None
+    sensors: SensorsConfig | None = None
 
 
 def _require(data: dict, key: str, section: str) -> object:
@@ -85,29 +97,12 @@ def _require_int(data: dict, key: str, section: str) -> int:
     return val
 
 
-def _parse_pins(raw: dict) -> PinsConfig:
-    section = "pins"
-    if not isinstance(raw, dict):
-        raise ConfigError(f"'{section}' must be a mapping")
-    pins = PinsConfig(
-        hcsr04_trigger=_require_int(raw, "hcsr04_trigger", section),
-        hcsr04_echo=_require_int(raw, "hcsr04_echo", section),
-        ds18b20_data=_require_int(raw, "ds18b20_data", section),
-        lora_cs=_require_int(raw, "lora_cs", section),
-        lora_reset=_require_int(raw, "lora_reset", section),
-    )
-    pin_fields = {
-        "hcsr04_trigger": pins.hcsr04_trigger,
-        "hcsr04_echo": pins.hcsr04_echo,
-        "ds18b20_data": pins.ds18b20_data,
-        "lora_cs": pins.lora_cs,
-        "lora_reset": pins.lora_reset,
-    }
-    for name, val in pin_fields.items():
-        if val < 0 or val > 27:
-            raise ConfigError(
-                f"Pin '{name}' value {val} is out of range (must be 0-27)"
-            )
+def _validate_pin(name: str, val: int) -> None:
+    if val < 0 or val > 27:
+        raise ConfigError(f"Pin '{name}' value {val} is out of range (must be 0-27)")
+
+
+def _check_pin_collisions(pin_fields: dict[str, int]) -> None:
     seen: dict[int, str] = {}
     for name, val in pin_fields.items():
         if val in seen:
@@ -115,7 +110,108 @@ def _parse_pins(raw: dict) -> PinsConfig:
                 f"Pin collision: '{seen[val]}' and '{name}' both use GPIO {val}"
             )
         seen[val] = name
-    return pins
+
+
+def _parse_pins(raw: dict, require_hcsr04: bool = True) -> PinsConfig:
+    section = "pins"
+    if not isinstance(raw, dict):
+        raise ConfigError(f"'{section}' must be a mapping")
+
+    ds18b20_data = _require_int(raw, "ds18b20_data", section)
+    lora_cs = _require_int(raw, "lora_cs", section)
+    lora_reset = _require_int(raw, "lora_reset", section)
+
+    hcsr04_trigger = None
+    hcsr04_echo = None
+    if require_hcsr04:
+        hcsr04_trigger = _require_int(raw, "hcsr04_trigger", section)
+        hcsr04_echo = _require_int(raw, "hcsr04_echo", section)
+    else:
+        if "hcsr04_trigger" in raw:
+            hcsr04_trigger = _require_int(raw, "hcsr04_trigger", section)
+        if "hcsr04_echo" in raw:
+            hcsr04_echo = _require_int(raw, "hcsr04_echo", section)
+
+    pin_fields: dict[str, int] = {
+        "ds18b20_data": ds18b20_data,
+        "lora_cs": lora_cs,
+        "lora_reset": lora_reset,
+    }
+    if hcsr04_trigger is not None:
+        pin_fields["hcsr04_trigger"] = hcsr04_trigger
+    if hcsr04_echo is not None:
+        pin_fields["hcsr04_echo"] = hcsr04_echo
+
+    for name, val in pin_fields.items():
+        _validate_pin(name, val)
+    _check_pin_collisions(pin_fields)
+
+    return PinsConfig(
+        ds18b20_data=ds18b20_data,
+        lora_cs=lora_cs,
+        lora_reset=lora_reset,
+        hcsr04_trigger=hcsr04_trigger,
+        hcsr04_echo=hcsr04_echo,
+    )
+
+
+def _parse_sensors(raw: dict | None, pins: PinsConfig) -> SensorsConfig:
+    """Parse sensors section, or auto-convert from legacy pins config."""
+    if raw is not None:
+        if not isinstance(raw, dict):
+            raise ConfigError("'sensors' must be a mapping")
+        ultra_raw = raw.get("ultrasonic")
+        if not isinstance(ultra_raw, list) or len(ultra_raw) == 0:
+            raise ConfigError(
+                "'sensors.ultrasonic' must be a non-empty list"
+            )
+        ultrasonic = []
+        seen_ids: set[str] = set()
+        all_pins: dict[str, int] = {}
+        for i, entry in enumerate(ultra_raw):
+            section = f"sensors.ultrasonic[{i}]"
+            if not isinstance(entry, dict):
+                raise ConfigError(f"'{section}' must be a mapping")
+            sid = _require(entry, "id", section)
+            if not isinstance(sid, str):
+                raise ConfigError(
+                    f"Field 'id' in '{section}' must be a string"
+                )
+            if sid in seen_ids:
+                raise ConfigError(f"Duplicate sensor id '{sid}'")
+            seen_ids.add(sid)
+            trig = _require_int(entry, "trigger_pin", section)
+            echo = _require_int(entry, "echo_pin", section)
+            _validate_pin(f"{sid}.trigger_pin", trig)
+            _validate_pin(f"{sid}.echo_pin", echo)
+            all_pins[f"{sid}.trigger_pin"] = trig
+            all_pins[f"{sid}.echo_pin"] = echo
+            ultrasonic.append(UltrasonicSensorConfig(id=sid, trigger_pin=trig, echo_pin=echo))
+        # Check collisions among all ultrasonic pins
+        _check_pin_collisions(all_pins)
+        # Check collisions against non-ultrasonic pins
+        base_pins = {
+            "ds18b20_data": pins.ds18b20_data,
+            "lora_cs": pins.lora_cs,
+            "lora_reset": pins.lora_reset,
+        }
+        _check_pin_collisions({**base_pins, **all_pins})
+        return SensorsConfig(ultrasonic=ultrasonic)
+
+    # Legacy: auto-convert from pins config
+    if pins.hcsr04_trigger is None or pins.hcsr04_echo is None:
+        raise ConfigError(
+            "Either 'sensors' section or 'pins.hcsr04_trigger'/'pins.hcsr04_echo' required"
+        )
+    return SensorsConfig(
+        ultrasonic=[
+            UltrasonicSensorConfig(
+                id="default",
+                trigger_pin=pins.hcsr04_trigger,
+                echo_pin=pins.hcsr04_echo,
+            )
+        ]
+    )
 
 
 def _parse_lora(raw: dict | None) -> LoraConfig:
@@ -176,37 +272,6 @@ def _parse_timing(raw: dict | None) -> TimingConfig:
     return TimingConfig(cycle_interval_minutes=interval)
 
 
-def _parse_sensors(raw: dict | None) -> SensorsConfig | None:
-    if raw is None:
-        return None
-    if not isinstance(raw, dict):
-        raise ConfigError("'sensors' must be a mapping")
-    ultrasonic_raw = raw.get("ultrasonic", [])
-    if not isinstance(ultrasonic_raw, list):
-        raise ConfigError("'sensors.ultrasonic' must be a list")
-    seen_ids: set[str] = set()
-    ultrasonic_list: list[UltrasonicSensorConfig] = []
-    for i, s in enumerate(ultrasonic_raw):
-        if not isinstance(s, dict):
-            raise ConfigError(f"sensors.ultrasonic[{i}] must be a mapping")
-        sensor_id = _require(s, "id", f"sensors.ultrasonic[{i}]")
-        if not isinstance(sensor_id, str):
-            raise ConfigError(
-                f"Field 'id' in 'sensors.ultrasonic[{i}]' must be a string, "
-                f"got {type(sensor_id).__name__}"
-            )
-        if sensor_id in seen_ids:
-            raise ConfigError(
-                f"Duplicate sensor ID '{sensor_id}' in sensors.ultrasonic"
-            )
-        seen_ids.add(sensor_id)
-        trigger_pin = _require_int(s, "trigger_pin", f"sensors.ultrasonic[{i}]")
-        echo_pin = _require_int(s, "echo_pin", f"sensors.ultrasonic[{i}]")
-        ultrasonic_list.append(
-            UltrasonicSensorConfig(id=sensor_id, trigger_pin=trigger_pin, echo_pin=echo_pin)
-        )
-    return SensorsConfig(ultrasonic=ultrasonic_list)
-
 
 def load_config(path: str | Path) -> StationConfig:
     """Load and validate station configuration from a YAML file.
@@ -254,14 +319,17 @@ def load_config(path: str | Path) -> StationConfig:
         )
 
     # Pins section (required — no safe defaults for hardware pins)
+    has_sensors = "sensors" in raw
     pins_raw = _require(raw, "pins", "root")
-    pins = _parse_pins(pins_raw)
+    pins = _parse_pins(pins_raw, require_hcsr04=not has_sensors)
+
+    # Sensors section (or auto-convert from legacy pins)
+    sensors = _parse_sensors(raw.get("sensors"), pins)
 
     # Optional sections with defaults
     lora = _parse_lora(raw.get("lora"))
     storage = _parse_storage(raw.get("storage"))
     timing = _parse_timing(raw.get("timing"))
-    sensors = _parse_sensors(raw.get("sensors"))
 
     return StationConfig(
         station_id=station_id,
