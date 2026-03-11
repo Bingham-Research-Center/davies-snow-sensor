@@ -281,3 +281,15 @@ class TestFsync:
         rows = ss.read_all()
         assert len(rows) == 1
         assert rows[0] == sr
+
+    def test_batch_writes_with_fsync(self, csv_path):
+        s = Storage(csv_path, fsync=True)
+        for i in range(100):
+            s.append(_sample_reading(
+                timestamp=f"2025-01-15T{i // 60:02d}:{i % 60:02d}:00Z",
+                cycle_id=i + 1,
+            ))
+        rows = s.read_all()
+        assert len(rows) == 100
+        assert rows[0].cycle_id == 1
+        assert rows[99].cycle_id == 100

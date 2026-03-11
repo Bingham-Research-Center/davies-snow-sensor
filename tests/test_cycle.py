@@ -31,6 +31,31 @@ class TestCycleId:
         cycle_file.write_text("garbage")
         assert read_and_increment_cycle_id(csv) == 1
 
+    def test_recovers_from_empty_file(self, tmp_path):
+        csv = tmp_path / "data" / "snow.csv"
+        csv.parent.mkdir(parents=True)
+        cycle_file = tmp_path / "data" / "cycle_id.txt"
+        cycle_file.write_text("")
+        assert read_and_increment_cycle_id(csv) == 1
+
+    def test_recovers_from_float_string(self, tmp_path):
+        csv = tmp_path / "data" / "snow.csv"
+        csv.parent.mkdir(parents=True)
+        cycle_file = tmp_path / "data" / "cycle_id.txt"
+        cycle_file.write_text("2.5")
+        assert read_and_increment_cycle_id(csv) == 1
+
+    def test_handles_whitespace_in_file(self, tmp_path):
+        csv = tmp_path / "data" / "snow.csv"
+        csv.parent.mkdir(parents=True)
+        cycle_file = tmp_path / "data" / "cycle_id.txt"
+        cycle_file.write_text("  5  \n")
+        assert read_and_increment_cycle_id(csv) == 6
+
+    def test_creates_parent_dirs(self, tmp_path):
+        csv = tmp_path / "a" / "b" / "snow.csv"
+        assert read_and_increment_cycle_id(csv) == 1
+
 
 class TestBootId:
     def test_stable_within_process(self):
