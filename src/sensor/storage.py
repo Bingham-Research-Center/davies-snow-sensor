@@ -122,9 +122,8 @@ class Storage:
 
         Calls initialize() automatically if the file doesn't exist or is empty.
         """
-        if not self._initialized:
-            if not self._path.exists() or self._path.stat().st_size == 0:
-                self.initialize()
+        if not self._path.exists() or self._path.stat().st_size == 0:
+            self.initialize()
         try:
             with open(self._path, "a", newline="") as f:
                 writer = csv.DictWriter(f, fieldnames=COLUMNS)
@@ -166,9 +165,8 @@ class SensorStorage:
 
     def append(self, reading: SensorReading) -> None:
         """Append a single sensor reading to the CSV file."""
-        if not self._initialized:
-            if not self._path.exists() or self._path.stat().st_size == 0:
-                self.initialize()
+        if not self._path.exists() or self._path.stat().st_size == 0:
+            self.initialize()
         try:
             with open(self._path, "a", newline="") as f:
                 writer = csv.DictWriter(f, fieldnames=SENSOR_COLUMNS)
