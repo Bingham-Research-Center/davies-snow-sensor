@@ -182,9 +182,9 @@ The Adafruit RFM95W LoRa Radio Bonnet (Semtech SX127x chipset) operates in the 9
 |-----------|-------|
 | Chipset | Semtech SX127x |
 | Frequency | 915 MHz (ITU Region 2 ISM) |
-| TX power | +5 to +20 dBm (configurable, default +20 dBm / 100 mW) |
+| TX power | +5 to +23 dBm (configurable, default +23 dBm / 200 mW) |
 | Sleep current | ~300 µA |
-| TX current (peak) | ~120 mA at +20 dBm |
+| TX current (peak) | ~120 mA at +23 dBm |
 | RX current | ~40 mA |
 | Range (line-of-sight) | > 2 km (wire quarter-wave antenna) |
 | Range (with high-gain antenna) | Up to 20 km |
@@ -298,19 +298,25 @@ Readings are stored in append-only CSV files with the following schema:
 |--------|------|-------------|
 | `timestamp` | string | UTC ISO 8601 (e.g., `2025-01-15T12:00:00Z`) |
 | `station_id` | string | Station identifier (e.g., `DAVIES-01`) |
+| `cycle_id` | integer | Monotonically increasing measurement cycle counter within a boot session |
+| `boot_id` | string | Unique identifier for the current boot session |
+| `software_version` | string | Software version string recorded by the station |
+| `config_id` | string | Identifier or hash of the active configuration used for this reading |
 | `snow_depth_cm` | float | Computed snow depth (blank if unavailable) |
 | `distance_raw_cm` | float | Temperature-compensated median distance (blank if unavailable) |
 | `temperature_c` | float | Ambient temperature (blank if unavailable) |
 | `sensor_height_cm` | float | Configured sensor-to-ground height (blank if unavailable) |
+| `selected_ultrasonic_id` | string | Identifier of the ultrasonic transducer used when multiple sensors are present |
+| `quality_flag` | string | High-level QC flag for the row (e.g., `ok`, `suspect`, `bad`) |
 | `lora_tx_success` | boolean | `True` if ACK received, `False` otherwise |
 | `lora_rssi` | integer | RSSI of received ACK packet in dBm (blank if no ACK) |
-| `error_flags` | string | Pipe-delimited error codes (e.g., `temp_no_device\|ultrasonic_unavailable`) |
+| `error_flags` | string | Pipe-delimited error codes; entries may be global or per-sensor with `S{n}:<error>` prefixes (e.g., `temp_no_device\|S1:ultrasonic_unavailable`) |
 
 ### 4.3 Quality Control
 
 #### 4.3.1 Error Flag Taxonomy
 
-The software generates 13 distinct error codes across 3 sensor modules:
+The software generates 16 distinct error codes across 3 sensor modules. When multiple ultrasonic sensors are configured, ultrasonic error codes are prefixed with the sensor identifier (e.g., `S1:ultrasonic_unavailable`) to indicate which sensor triggered the error:
 
 **Table 6: Error codes and severity**
 
@@ -636,7 +642,7 @@ The spatial variability problem identified by Ryan et al. (2008) motivates a mul
 
 ### C.2. Sensor Beam Geometry
 
-The HC-SR04 ultrasonic ranging module emits a conical acoustic beam with an effective half-angle of approximately 15 degrees. The manufacturer's characterization (HandsOnTec, n.d.) provides an empirical relationship between the sensor mounting height $h$ (in feet) and the resulting beam footprint diameter $d$ (in inches) at the ground surface:
+The HC-SR04 ultrasonic ranging module emits a conical acoustic beam with an effective full cone angle of approximately 15 degrees (corresponding to a half-angle of ~7.5 degrees). The manufacturer's characterization (HandsOnTec, n.d.) provides an empirical relationship between the sensor mounting height $h$ (in feet) and the resulting beam footprint diameter $d$ (in inches) at the ground surface:
 
 $d \approx 3.16\,h \tag{1}$
 
@@ -690,7 +696,7 @@ A practical overlap fraction of $f \approx 0.15$ (15% overlap) provides a balanc
 
 Table C.1 summarizes the key geometric parameters for candidate sensor heights within the strong-signal and transition zones of the HC-SR04.
 
-**Table C.1.** Geometric parameters for candidate sensor heights. The recommended height ($h = 8$ ft) is highlighted.
+**Table C.1.** Geometric parameters for candidate sensor heights. The unconstrained optimum height ($h = 8$ ft) is highlighted; the constrained (practical) recommendation of $h = 9$ ft is derived in Section C.10.
 
 | Height (ft) | Cone Diam. (in.) | Cone Diam. (ft) | Cone Radius (ft) | $L_{\text{tangent}}$ (ft) | $L_{\text{tangent}}$ (in.) | $L_{\text{overlap}}$ (in., $f$=0.15) | Signal Quality |
 |:-----------:|:-----------------:|:----------------:|:-----------------:|:--------------------------:|:--------------------------:|:-------------------------------------:|:--------------:|
@@ -701,17 +707,17 @@ Table C.1 summarizes the key geometric parameters for candidate sensor heights w
 | 9 | 28.4 | 2.37 | 1.19 | 1.676 | 20.1 | 17.1 | Transition |
 | 10 | 31.6 | 2.63 | 1.32 | 1.862 | 22.3 | 19.0 | Transition |
 
-### C.7. Recommended Configuration
+### C.7. Unconstrained Optimum Configuration
 
-Based on the analysis above, the recommended configuration is:
+Based on the analysis above, the unconstrained optimum configuration is:
 
-- **Sensor height:** $h = 8$ ft (2.44 m), at the upper bound of the strong-signal zone
+- **Sensor height (unconstrained optimum):** $h = 8$ ft (2.44 m), at the upper bound of the strong-signal zone
 - **Cone footprint diameter:** $d = 25.3$ in. (2.11 ft)
 - **Arm length (tangent):** $L = 17.9$ in. (1.49 ft)
 - **Arm length (15% overlap):** $L = 15.2$ in. (1.27 ft)
 - **Approximate total ground coverage:** $\sim 12.7$ ft$^2$
 
-**Note:** This unconstrained recommendation is revised in Section C.10, which introduces the 19-inch support leg clearance requirement and shifts the optimal height to 9 ft.
+**Note:** This unconstrained optimum is revised in Section C.10, which introduces the 19-inch support leg clearance requirement and shifts the *practically recommended* (constrained) sensor height to $h = 9$ ft.
 
 The 8-ft height is selected as the unconstrained optimum for several reasons. First, it remains within the manufacturer's strong-signal characterization, ensuring reliable echo detection even under adverse conditions (e.g., fresh powder with low acoustic reflectivity). Second, the resulting cone diameter of approximately 2.1 ft provides spatial averaging over a footprint large enough to smooth point-scale snow surface irregularities while remaining small enough to resolve meaningful spatial gradients across the array. Third, the arm length of approximately 15 to 18 inches is mechanically practical for field construction using standard aluminum angle stock or steel strut channel.
 
@@ -727,7 +733,7 @@ $\tan(\theta) = \frac{r}{h} = 0.1317 \tag{10}$
 
 $\theta = \arctan(0.1317) \approx 7.5° \tag{11}$
 
-This confirms the HC-SR04's effective beam half-angle of approximately 8 degrees, yielding a full cone angle of approximately 15 degrees, which is consistent with the manufacturer's stated 15-degree half-angle specification.
+This confirms the HC-SR04's effective beam half-angle of approximately 8 degrees, yielding a full cone angle of approximately 15 degrees, which is consistent with the manufacturer's stated 15-degree full cone angle specification.
 
 ### C.9. Total Array Footprint Diameter
 
@@ -819,4 +825,4 @@ The minimum radial extent of coverage (at the 45-degree gap) is:
 
 $R_{\min} = L^* + \sqrt{r^2 - (L^*)^2} = 13.4 + \sqrt{14.2^2 - 13.4^2} \approx 13.4 + 4.7 = 18.1 \text{ in.} \tag{22}$
 
-This confirms marginal clearance of the 19-inch leg radius at the 45-degree midpoints, with full clearance along the cardinal directions where the footprints extend to $L + r = 27.6$ in.
+This falls 0.9 in short of the 19-inch leg radius at the 45-degree midpoints, indicating a small uncovered region in this worst-case direction, although along the cardinal directions the footprints extend to $L + r = 27.6$ in.
