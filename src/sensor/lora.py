@@ -44,6 +44,7 @@ class LoRaTransmitter:
 
         try:
             self._spi = busio.SPI(board.SCK, MOSI=board.MOSI, MISO=board.MISO)
+            # adafruit-blinka exposes Pi BCM pin N as board.DN
             self._cs = digitalio.DigitalInOut(
                 getattr(board, f"D{self._cs_pin}")
             )

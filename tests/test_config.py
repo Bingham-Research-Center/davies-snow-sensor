@@ -505,11 +505,11 @@ class TestMultiSensorValidation:
 
 
 class TestConfigId:
-    def test_returns_8_hex_chars(self, tmp_path):
+    def test_returns_16_hex_chars(self, tmp_path):
         p = tmp_path / "test.yaml"
         p.write_text("station:\n  id: TEST\n")
         result = config_id(p)
-        assert len(result) == 8
+        assert len(result) == 16
         assert all(c in "0123456789abcdef" for c in result)
 
     def test_same_content_same_hash(self, tmp_path):

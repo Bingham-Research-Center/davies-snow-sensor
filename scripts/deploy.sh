@@ -42,38 +42,16 @@ echo "Installing project into venv..."
 sudo -u "$TARGET_USER" "$VENV_DIR/bin/pip" install --quiet -e "$REPO_DIR[hardware]"
 
 # --- step 3: create data directory ---
-CSV_PATH=$(python3 - "$CONFIG" <<'PY'
+# Use the venv's validated config loader — same code path as production.
+CSV_PATH=$("$VENV_DIR/bin/python" -c "
 import sys
-
+from src.sensor.config import load_config, ConfigError
 try:
-    import yaml
-except ImportError:
-    sys.stderr.write("ERROR: PyYAML is required to parse the config (pip install pyyaml).\n")
+    print(load_config(sys.argv[1]).storage.csv_path)
+except (FileNotFoundError, ConfigError) as e:
+    sys.stderr.write(f'ERROR: failed to load config: {e}\n')
     sys.exit(1)
-
-if len(sys.argv) != 2:
-    sys.stderr.write("ERROR: Internal error: expected config path argument.\n")
-    sys.exit(1)
-
-cfg_path = sys.argv[1]
-try:
-    with open(cfg_path, "r", encoding="utf-8") as f:
-        data = yaml.safe_load(f) or {}
-except Exception as e:
-    sys.stderr.write(f"ERROR: failed to read or parse config {cfg_path}: {e}\n")
-    sys.exit(1)
-
-storage = data.get("storage") or {}
-csv_path = storage.get("csv_path")
-if not csv_path:
-    sys.stderr.write(
-        "ERROR: storage.csv_path is not set in the config; cannot determine data directory.\n"
-    )
-    sys.exit(1)
-
-print(csv_path)
-PY
-)
+" "$CONFIG")
 DATA_DIR=$(dirname "$CSV_PATH")
 if [ -z "$DATA_DIR" ] || [ "$DATA_DIR" = "." ]; then
     echo "ERROR: could not derive a valid data directory from csv_path '$CSV_PATH'"
