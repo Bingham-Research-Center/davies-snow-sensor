@@ -303,6 +303,25 @@ class TestRunCycleStorageFailure:
 
         assert result is True
 
+    def test_init_exception_sets_storage_failed_flag(self, mock_deps):
+        mock_deps["storage"].initialize.side_effect = Exception("no dir")
+
+        with patch("src.sensor.main.compute_quality_flag", return_value=0) as qc:
+            SensorStation(_make_config()).run_cycle()
+            assert qc.call_args.kwargs["storage_failed"] is True
+
+    def test_sensor_append_exception_sets_storage_failed_flag(self, mock_deps):
+        mock_deps["sensor_storage"].append.side_effect = Exception("disk full")
+
+        with patch("src.sensor.main.compute_quality_flag", return_value=0) as qc:
+            SensorStation(_make_config()).run_cycle()
+            assert qc.call_args.kwargs["storage_failed"] is True
+
+    def test_happy_path_storage_failed_is_false(self, mock_deps):
+        with patch("src.sensor.main.compute_quality_flag", return_value=0) as qc:
+            SensorStation(_make_config()).run_cycle()
+            assert qc.call_args.kwargs["storage_failed"] is False
+
 
 # ── Error flags ───────────────────────────────────────────────────
 
@@ -372,6 +391,40 @@ class TestMain:
     def test_missing_config_exits_nonzero(self):
         result = main(["--config", "/nonexistent/config.yaml"])
         assert result == 1
+
+    def test_sigterm_triggers_cleanup(self, mock_deps, tmp_path):
+        """SIGTERM handler should call SensorStation.cleanup and exit cleanly."""
+        import signal as _signal
+
+        config_file = tmp_path / "config.yaml"
+        config_file.write_text(
+            """\
+station:
+  id: TEST01
+  sensor_height_cm: 200.0
+pins:
+  hcsr04_trigger: 23
+  hcsr04_echo: 24
+  ds18b20_data: 4
+  lora_cs: 5
+  lora_reset: 25
+"""
+        )
+        captured: dict = {}
+
+        def fake_signal(signum, handler):
+            if signum == _signal.SIGTERM:
+                captured["handler"] = handler
+
+        with patch("src.sensor.main.signal.signal", side_effect=fake_signal):
+            main(["--config", str(config_file)])
+
+        assert "handler" in captured
+        with pytest.raises(SystemExit) as exc:
+            captured["handler"](_signal.SIGTERM, None)
+        assert exc.value.code == 0
+        # cleanup was invoked by the handler — each hw resource had cleanup() called
+        assert mock_deps["temp"].cleanup.call_count >= 1
 
     def test_valid_config_runs_cycle(self, mock_deps, tmp_path):
         config_file = tmp_path / "config.yaml"

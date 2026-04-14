@@ -1,16 +1,24 @@
-"""Diagnose HC-SR04 no-echo issue on GPIO 23 (trigger) / GPIO 24 (echo).
+"""Low-level HC-SR04 diagnostic that bypasses gpiozero.
 
-Steps:
-  1. GPIO sanity check — toggle GPIO 23, read GPIO 24 with pull-up
-  2. Fire trigger and sample echo at high frequency (100ms window)
-  3. Repeat with trigger/echo swapped (GPIO 24 trigger, GPIO 23 echo)
+Uses raw lgpio to do three things the production UltrasonicSensor path cannot:
+  1. GPIO sanity check with internal pull-up/pull-down
+  2. Fire trigger and sample echo at max rate within a 100ms window
+  3. Repeat with trigger/echo swapped to rule out wiring reversal
+
+Defaults to GPIO 23/24, the historically-problematic pair that is clamped LOW
+by the 52Pi multiplexing board when the LoRa bonnet is seated on Row 1.
+Override via --trig / --echo when diagnosing a different pin pair.
 """
 
-import lgpio
+import argparse
+import sys
 import time
 
-TRIG = 23
-ECHO = 24
+try:
+    import lgpio
+except ImportError:
+    print("ERROR: lgpio not installed. Install with `pip install lgpio`.", file=sys.stderr)
+    sys.exit(1)
 
 
 def open_chip():
@@ -148,7 +156,16 @@ def step3_swapped(h):
 # ── Main ────────────────────────────────────────────────────────────────
 
 def main():
-    print("HC-SR04 Diagnostic — GPIO 23 (trig) / GPIO 24 (echo)")
+    parser = argparse.ArgumentParser(description="HC-SR04 low-level diagnostic")
+    parser.add_argument("--trig", type=int, default=23, help="Trigger BCM pin")
+    parser.add_argument("--echo", type=int, default=24, help="Echo BCM pin")
+    args = parser.parse_args()
+
+    global TRIG, ECHO
+    TRIG = args.trig
+    ECHO = args.echo
+
+    print(f"HC-SR04 Diagnostic — GPIO {TRIG} (trig) / GPIO {ECHO} (echo)")
     print()
 
     h = open_chip()
@@ -173,11 +190,13 @@ def main():
             print("    1. Voltage divider pulling echo too low (check resistor values)")
             print("    2. Sensor not powered (verify 5V on VCC)")
             print("    3. Faulty sensor")
+            print(f"    4. Pin {TRIG} or {ECHO} clamped by multiplexing board (see README)")
             print()
             print("  Next steps:")
             print("    - Verify resistor values: ~1kΩ (echo->GPIO), ~2kΩ (GPIO->GND)")
             print("    - Check 5V is reaching sensor VCC pin")
             print("    - Try removing voltage divider briefly for a direct-connect test")
+            print("    - Try a different pin pair via --trig N --echo N")
 
     finally:
         close_chip(h)
