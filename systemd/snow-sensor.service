@@ -1,12 +1,20 @@
 [Unit]
 Description=Davies snow-sensor reading
-After=network-online.target
-Wants=network-online.target
 
 [Service]
 Type=oneshot
+User=admin
+SupplementaryGroups=gpio spi i2c dialout
 WorkingDirectory=/home/admin/davies-snow-sensor
 ExecStart=/home/admin/davies-snow-sensor/venv/bin/python -m src.sensor.main --config /home/admin/davies-snow-sensor/config/station.yaml
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=snow-sensor
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/admin/data
+PrivateTmp=yes
 
 [Install]
 WantedBy=multi-user.target

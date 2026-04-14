@@ -199,6 +199,16 @@ class TestTransmitWithAck:
 
         assert tx.get_last_transmit_duration_ms() >= 0
 
+    def test_receive_exception_sets_recv_error(self):
+        mock_rfm = MagicMock()
+        mock_rfm.receive.side_effect = OSError("RX fail")
+        tx = self._make_initialized_tx(mock_rfm)
+
+        result = tx.transmit_with_ack(self._make_payload(), retries=1, timeout_seconds=0.1)
+
+        assert result is False
+        assert tx.get_last_error_reason() == "lora_recv_error"
+
 
 def _make_tx():
     return LoRaTransmitter(cs_pin=7, reset_pin=25)

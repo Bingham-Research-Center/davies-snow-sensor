@@ -44,6 +44,7 @@ class LoRaTransmitter:
 
         try:
             self._spi = busio.SPI(board.SCK, MOSI=board.MOSI, MISO=board.MISO)
+            # adafruit-blinka exposes Pi BCM pin N as board.DN
             self._cs = digitalio.DigitalInOut(
                 getattr(board, f"D{self._cs_pin}")
             )
@@ -104,7 +105,7 @@ class LoRaTransmitter:
                         timeout=remaining, with_header=False,
                     )
                 except Exception:
-                    self._last_error = "lora_transmit_error"
+                    self._last_error = "lora_recv_error"
                     break
 
                 if packet is None:
@@ -124,8 +125,8 @@ class LoRaTransmitter:
                         (time.monotonic() - start) * 1000
                     )
                     return True
-
-            self._last_error = "lora_ack_timeout"
+            else:
+                self._last_error = "lora_ack_timeout"
 
         self._last_transmit_duration_ms = int(
             (time.monotonic() - start) * 1000

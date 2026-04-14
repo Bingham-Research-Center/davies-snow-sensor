@@ -129,6 +129,23 @@ class TestSerialization:
         assert rows[0].lora_tx_success is False
         assert rows[1].lora_tx_success is True
 
+    def test_bool_parser_tolerates_case_and_aliases(self, csv_path):
+        """lora_tx_success should parse 'true', '1', 'yes' case-insensitively —
+        protects against hand-edited CSVs and alternate serializers."""
+        header = ",".join(COLUMNS)
+        base = "2025-01-15T12:00:00Z,DAVIES-01,1,boot,v1,abc,42.5,157.5,-5.3,200.0,,0"
+        csv_path.parent.mkdir(parents=True, exist_ok=True)
+        csv_path.write_text(
+            f"{header}\n"
+            f"{base},true,-45,\n"
+            f"{base},1,-45,\n"
+            f"{base},YES,-45,\n"
+            f"{base},False,-45,\n"
+            f"{base},no,-45,\n"
+        )
+        rows = Storage(csv_path).read_all()
+        assert [r.lora_tx_success for r in rows] == [True, True, True, False, False]
+
     def test_empty_error_flags_round_trip(self, storage):
         storage.append(_sample_reading(error_flags=""))
         result = storage.read_all()[0]

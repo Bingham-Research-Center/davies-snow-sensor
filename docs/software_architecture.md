@@ -358,10 +358,10 @@ dtoverlay=w1-gpio,gpiopin=4
 | ultrasonic | `ultrasonic_no_device` | gpiozero DistanceSensor creation failed |
 | ultrasonic | `ultrasonic_not_initialized` | `read_distance_cm()` called before successful `initialize()` |
 | ultrasonic | `ultrasonic_read_error` | Exception during pulse sampling |
-| ultrasonic | `ultrasonic_unavailable` | Fewer than majority of samples were valid |
+| ultrasonic | `ultrasonic_unavailable` | All samples were None (no valid readings at all) |
 | ultrasonic | `ultrasonic_out_of_range` | Median outside 2–400 cm |
 | lora | `lora_no_device` | Blinka/rfm9x not installed or SPI init failed |
 | lora | `lora_not_initialized` | `transmit_with_ack()` called before successful `initialize()` |
 | lora | `lora_send_error` | Exception during `rfm9x.send()` |
-| lora | `lora_transmit_error` | Exception during `rfm9x.receive()` |
+| lora | `lora_recv_error` | Exception during `rfm9x.receive()` |
 | lora | `lora_ack_timeout` | No matching ACK received within timeout |

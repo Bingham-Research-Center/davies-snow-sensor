@@ -24,20 +24,25 @@ class TemperatureSensor:
         """Discover and attach to the first DS18B20 on the 1-Wire bus."""
         try:
             from w1thermsensor import W1ThermSensor
-            from w1thermsensor.errors import NoSensorFoundError
+            from w1thermsensor.errors import (
+                NoSensorFoundError,
+                ResetValueError,
+                SensorNotReadyError,
+                W1ThermSensorError,
+            )
         except ImportError:
             self._last_error = "temp_no_device"
             return False
 
         try:
             self._sensor = W1ThermSensor()
-            # Discard first reading — DS18B20 powers on with +85°C reset value
-            # and needs one conversion cycle (up to 750ms at 12-bit) before
-            # returning real data. This kicks off that first conversion.
+            # DS18B20 powers on at +85°C reset value; kick off a first
+            # conversion so subsequent reads return real data (up to 750ms
+            # at 12-bit resolution). Discard this reading.
             try:
                 self._sensor.get_temperature()
-            except Exception:
-                pass  # sensor may return reset value or not be ready; that's expected
+            except (ResetValueError, SensorNotReadyError, W1ThermSensorError):
+                pass
             time.sleep(0.1)
             self._initialized = True
             self._last_error = None
@@ -53,11 +58,7 @@ class TemperatureSensor:
             self._last_read_duration_ms = 0
             return None
 
-        from w1thermsensor.errors import (
-            ResetValueError,
-            SensorNotReadyError,
-            W1ThermSensorError,
-        )
+        from w1thermsensor.errors import ResetValueError, SensorNotReadyError
 
         deadline = time.monotonic() + (self._read_timeout_ms / 1000.0)
         attempts = 0
@@ -76,7 +77,7 @@ class TemperatureSensor:
                 continue  # sensor still has reset value, retry
             except SensorNotReadyError:
                 continue
-            except (W1ThermSensorError, Exception):
+            except Exception:
                 self._last_read_duration_ms = int(
                     (time.monotonic() - start) * 1000
                 )

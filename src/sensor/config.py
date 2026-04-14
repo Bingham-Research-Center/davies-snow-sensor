@@ -38,7 +38,7 @@ class LoraConfig:
 
 @dataclass(frozen=True)
 class StorageConfig:
-    csv_path: str = "/home/pi/data/snow_data.csv"
+    csv_path: str = "/home/admin/data/snow_data.csv"
     fsync: bool = False
 
 
@@ -396,6 +396,6 @@ def load_config(path: str | Path) -> StationConfig:
 
 
 def config_id(path: str | Path) -> str:
-    """Return SHA-256 hash of the config file content, truncated to 8 hex chars."""
+    """Return SHA-256 hash of the config file content, truncated to 16 hex chars (64-bit)."""
     data = Path(path).read_bytes()
-    return hashlib.sha256(data).hexdigest()[:8]
+    return hashlib.sha256(data).hexdigest()[:16]

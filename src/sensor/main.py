@@ -75,16 +75,20 @@ class SensorStation:
         )
 
     def run_cycle(self) -> bool:
-        """Execute one measurement cycle. Always returns True."""
+        """Execute one measurement cycle. Always returns True — failures are routed
+        through the error_flags string and QC bitmask instead of raising, so the
+        systemd oneshot unit doesn't enter `failed` state on a bad sensor read.
+        """
         timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         errors: list[str] = []
+        storage_failed = False
 
-        # Initialize storage
         try:
             self._storage.initialize()
             self._sensor_storage.initialize()
         except Exception:
             logger.warning("Storage initialization failed", exc_info=True)
+            storage_failed = True
 
         # Read temperature
         temperature_c: float | None = None
@@ -152,6 +156,7 @@ class SensorStation:
                 self._sensor_storage.append(sr)
             except Exception:
                 logger.warning("Sensor CSV append failed for %s", sensor_id, exc_info=True)
+                storage_failed = True
 
         # Select best sensor by QC criteria
         best = _select_best_sensor(sensor_results, qc)
@@ -203,7 +208,7 @@ class SensorStation:
             snow_depth_cm=snow_depth_cm,
             sensor_height_cm=self._config.sensor_height_cm,
             lora_tx_success=lora_tx_success,
-            storage_failed=False,
+            storage_failed=storage_failed,
             qc=qc,
         )
 
@@ -229,6 +234,7 @@ class SensorStation:
             self._storage.append(reading)
         except Exception:
             logger.warning("CSV append failed", exc_info=True)
+            storage_failed = True
 
         logger.info(
             "Cycle complete: snow=%s cm, temp=%s, lora=%s, errors=%s",
