@@ -53,11 +53,7 @@ class TemperatureSensor:
             self._last_read_duration_ms = 0
             return None
 
-        from w1thermsensor.errors import (
-            ResetValueError,
-            SensorNotReadyError,
-            W1ThermSensorError,
-        )
+        from w1thermsensor.errors import ResetValueError, SensorNotReadyError
 
         deadline = time.monotonic() + (self._read_timeout_ms / 1000.0)
         attempts = 0
@@ -76,7 +72,7 @@ class TemperatureSensor:
                 continue  # sensor still has reset value, retry
             except SensorNotReadyError:
                 continue
-            except (W1ThermSensorError, Exception):
+            except Exception:
                 self._last_read_duration_ms = int(
                     (time.monotonic() - start) * 1000
                 )

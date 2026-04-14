@@ -123,12 +123,11 @@ class UltrasonicSensor:
         self._last_read_duration_ms = int((time.monotonic() - start) * 1000)
         num_valid = len(valid_readings)
 
-        # Need majority of samples to be valid
-        if num_valid < num_samples // 2 + 1:
+        if num_valid == 0:
             self._last_error = "ultrasonic_unavailable"
             return SensorResult(
                 distance_cm=None, num_samples=num_samples,
-                num_valid=num_valid, spread_cm=None,
+                num_valid=0, spread_cm=None,
                 error="ultrasonic_unavailable",
             )
 

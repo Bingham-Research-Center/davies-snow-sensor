@@ -185,36 +185,40 @@ class SensorStorage:
 def _row_to_reading(row: dict) -> Reading:
     """Deserialize a CSV row dict back into a Reading."""
     return Reading(
-        timestamp=row["timestamp"],
-        station_id=row["station_id"],
-        cycle_id=int(row.get("cycle_id", "0")),
+        timestamp=row.get("timestamp", ""),
+        station_id=row.get("station_id", ""),
+        cycle_id=int(row.get("cycle_id") or 0),
         boot_id=row.get("boot_id", ""),
         software_version=row.get("software_version", "unknown"),
         config_id=row.get("config_id", ""),
-        snow_depth_cm=_parse_optional_float(row["snow_depth_cm"]),
-        distance_raw_cm=_parse_optional_float(row["distance_raw_cm"]),
-        temperature_c=_parse_optional_float(row["temperature_c"]),
-        sensor_height_cm=_parse_optional_float(row["sensor_height_cm"]),
+        snow_depth_cm=_parse_optional_float(row.get("snow_depth_cm", "")),
+        distance_raw_cm=_parse_optional_float(row.get("distance_raw_cm", "")),
+        temperature_c=_parse_optional_float(row.get("temperature_c", "")),
+        sensor_height_cm=_parse_optional_float(row.get("sensor_height_cm", "")),
         selected_ultrasonic_id=_parse_optional_str(row.get("selected_ultrasonic_id", "")),
-        quality_flag=int(row.get("quality_flag", "0")),
-        lora_tx_success=row["lora_tx_success"] == "True",
+        quality_flag=int(row.get("quality_flag") or 0),
+        lora_tx_success=_parse_bool(row.get("lora_tx_success", "")),
         lora_rssi=_parse_optional_int(row.get("lora_rssi", "")),
-        error_flags=row["error_flags"],
+        error_flags=row.get("error_flags", ""),
     )
 
 
 def _row_to_sensor_reading(row: dict) -> SensorReading:
     """Deserialize a CSV row dict back into a SensorReading."""
     return SensorReading(
-        timestamp=row["timestamp"],
-        cycle_id=int(row["cycle_id"]),
-        sensor_id=row["sensor_id"],
+        timestamp=row.get("timestamp", ""),
+        cycle_id=int(row.get("cycle_id") or 0),
+        sensor_id=row.get("sensor_id", ""),
         distance_cm=_parse_optional_float(row.get("distance_cm", "")),
-        num_samples=int(row["num_samples"]),
-        num_valid=int(row["num_valid"]),
+        num_samples=int(row.get("num_samples") or 0),
+        num_valid=int(row.get("num_valid") or 0),
         spread_cm=_parse_optional_float(row.get("spread_cm", "")),
         error=_parse_optional_str(row.get("error", "")),
     )
+
+
+def _parse_bool(value: str) -> bool:
+    return value.strip().lower() in ("true", "1", "yes")
 
 
 def _parse_optional_float(value: str) -> float | None:

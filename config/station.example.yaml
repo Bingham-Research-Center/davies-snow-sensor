@@ -1,0 +1,51 @@
+# Snow sensor station configuration — canonical example.
+#
+# Copy this file to config/station.yaml and edit for each station.
+# The YAML schema is validated by src/sensor/config.py at load time;
+# invalid files raise ConfigError with a specific field name.
+#
+# 52Pi Easy Multiplexing Board row plan:
+#   - Row 1 (reserved): LoRa plug-and-play board/bonnet
+#   - Other rows: external sensor wiring
+# All rows are mirrored breakouts of the same Raspberry Pi GPIO pins;
+# "row" does not change BCM pin numbers.
+# Avoid LoRa/OLED pins for sensors: BCM GPIO 2,3,7,8,9,10,11,25.
+
+station:
+  id: "DAVIES-XX"           # Unique station identifier (string)
+  sensor_height_cm: 5.08    # Height of ultrasonic sensor above ground at zero snow (cm)
+
+pins:
+  hcsr04_trigger: 5         # HC-SR04 TRIG (BCM GPIO)
+  hcsr04_echo: 6            # HC-SR04 ECHO via 1k/2k divider to 3.3V
+  ds18b20_data: 4           # DS18B20 1-Wire DATA (BCM GPIO4 with 4.7k pull-up to 3.3V)
+  lora_cs: 7                # RFM95W SPI chip select
+  lora_reset: 25            # RFM95W reset
+
+# Alternative: define multiple ultrasonic sensors instead of single pins.hcsr04_*.
+# When `sensors.ultrasonic` is present, pins.hcsr04_* are optional.
+# sensors:
+#   ultrasonic:
+#     - id: "front"
+#       trigger_pin: 5
+#       echo_pin: 6
+#     - id: "rear"
+#       trigger_pin: 17
+#       echo_pin: 27
+
+lora:
+  frequency: 915.0          # MHz; must be in an ISM band (169/433/868/915)
+  tx_power: 23              # dBm, 5-23
+
+storage:
+  csv_path: "/home/admin/data/snow_data.csv"
+  fsync: false              # true = fsync after each append (durability vs throughput)
+
+timing:
+  cycle_interval_minutes: 15  # Informational; systemd timer drives actual cadence
+
+qc:
+  num_samples: 31             # Ultrasonic samples per reading (odd, median-friendly)
+  inter_pulse_delay_ms: 60    # Delay between pulses to avoid echo overlap
+  min_valid_fraction: 0.5     # Fraction of samples that must be valid to accept
+  max_spread_cm: 5.0          # Max MAD-based spread before flagging as noisy

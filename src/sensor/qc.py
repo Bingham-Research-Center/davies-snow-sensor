@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 
 from src.sensor.config import QCConfig
-from src.sensor.ultrasonic import SensorResult
+from src.sensor.ultrasonic import SensorResult, UltrasonicSensor
 
 TEMP_MISSING = 1 << 0
 ALL_ULTRASONIC_FAILED = 1 << 1
@@ -52,7 +52,10 @@ def compute_quality_flag(
         if selected_result.spread_cm is not None and selected_result.spread_cm > qc.max_spread_cm:
             flag |= SELECTED_TOO_NOISY
         if selected_result.distance_cm is not None:
-            if selected_result.distance_cm < 2.0 or selected_result.distance_cm > 400.0:
+            if (
+                selected_result.distance_cm < UltrasonicSensor.MIN_VALID_CM
+                or selected_result.distance_cm > UltrasonicSensor.MAX_VALID_CM
+            ):
                 flag |= SELECTED_DISTANCE_OOR
 
     if snow_depth_cm is not None:
