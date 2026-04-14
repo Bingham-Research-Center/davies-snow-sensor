@@ -38,7 +38,7 @@ class LoraConfig:
 
 @dataclass(frozen=True)
 class StorageConfig:
-    csv_path: str = "/home/pi/data/snow_data.csv"
+    csv_path: str = "/home/admin/data/snow_data.csv"
     fsync: bool = False
 
 

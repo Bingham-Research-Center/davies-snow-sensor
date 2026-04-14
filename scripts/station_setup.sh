@@ -19,7 +19,7 @@ DEF_LORA_CS=7
 DEF_LORA_RST=25
 DEF_FREQ="915.0"
 DEF_TX=23
-DEF_CSV="/home/pi/data/snow_data.csv"
+DEF_CSV="$HOME/data/snow_data.csv"
 DEF_INTERVAL=15
 
 # ---------------------------------------------------------------

@@ -3,7 +3,7 @@
 A dense network of low-cost snow depth stations that outperforms expensive single-point research instruments through spatial coverage, redundancy, and volume of data.
 
 ![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)
-![Tests: 132 passing](https://img.shields.io/badge/tests-132%20passing-brightgreen)
+![Tests: 245 passing](https://img.shields.io/badge/tests-245%20passing-brightgreen)
 ![License: MIT](https://img.shields.io/badge/license-MIT-green)
 
 ## About
@@ -38,12 +38,14 @@ davies-snow-sensor/
 │   ├── ultrasonic.py        # HC-SR04 distance readings (temp-compensated)
 │   ├── lora.py              # LoRa DATA/ACK radio protocol
 │   └── storage.py           # Append-only CSV storage
-├── tests/                   # 132 unit tests (pytest)
+├── tests/                   # 245 unit tests (pytest)
 ├── scripts/
 │   └── station_setup.sh     # Interactive station configuration wizard
 ├── config/
-│   ├── station.yaml         # Per-station configuration
+│   ├── station.yaml         # Per-station configuration (gitignored)
+│   ├── station.example.yaml # Canonical example — copy to station.yaml
 │   └── config.txt           # Drop-in Raspberry Pi /boot/firmware/config.txt
+├── systemd/                 # snow-sensor.service + .timer (15-min cycle)
 ├── docs/                    # Research methodology and software docs
 ├── hardware/                # BOM, wiring diagrams, enclosure files
 └── pyproject.toml           # Package metadata and dependencies
@@ -140,7 +142,7 @@ Key fields:
 | `pins.lora_reset` | LoRa reset GPIO | *(required)* |
 | `lora.frequency` | LoRa frequency in MHz | `915.0` |
 | `lora.tx_power` | LoRa transmit power in dBm | `23` |
-| `storage.csv_path` | Path to CSV data file | `/home/pi/data/snow_data.csv` |
+| `storage.csv_path` | Path to CSV data file | `/home/admin/data/snow_data.csv` |
 | `timing.cycle_interval_minutes` | Minutes between readings | `15` |
 
 Pin assignments and LoRa settings have sensible defaults; see the config file comments for details.
@@ -149,23 +151,15 @@ Pin assignments and LoRa settings have sensible defaults; see the config file co
 
 ## Usage
 
-### Single test reading
+### One-shot measurement cycle
 
-Take one reading and exit — useful for verifying the full sensor pipeline after installation:
-
-```bash
-sudo venv/bin/python -m src.sensor.main --config config/station.yaml --test
-```
-
-### Verbose one-shot cycle
-
-Run a single measurement cycle with debug-level logging for troubleshooting:
+Run a single cycle and exit — useful for verifying the full sensor pipeline after installation. Add `--verbose` for debug-level logging when troubleshooting:
 
 ```bash
 sudo venv/bin/python -m src.sensor.main --config config/station.yaml --verbose
 ```
 
-Both modes perform exactly one cycle and exit.
+Every invocation performs exactly one cycle and exits; the systemd timer (see below) is what drives the 15-minute cadence.
 
 Example output:
 
@@ -177,6 +171,23 @@ Example output:
 ```
 
 > **Note:** `sudo` is required — the 1-Wire kernel module and GPIO access need root privileges.
+
+### Running as a systemd service
+
+For unattended operation, `scripts/deploy.sh` installs a systemd `.service` + `.timer` pair that runs one cycle every 15 minutes:
+
+```bash
+sudo bash scripts/deploy.sh
+```
+
+This creates the venv, installs the package with `[hardware]` extras, derives the data directory from `storage.csv_path`, and enables `snow-sensor.timer`. Inspect activity with:
+
+```bash
+systemctl status snow-sensor.timer
+journalctl -u snow-sensor.service -n 50 --no-pager
+```
+
+The unit is a `Type=oneshot` service triggered by `OnCalendar=*:0/15` with `Persistent=true`, so cycles missed during power outages are caught up on the next boot.
 
 ## Architecture
 
@@ -207,12 +218,12 @@ See [hardware/multiplexing_board_wiring.md](hardware/multiplexing_board_wiring.m
 ## Roadmap
 
 - [x] Sensor software stack (temperature, ultrasonic, LoRa, storage, config)
-- [x] 132 unit tests with full module coverage
+- [x] 245 unit tests with full module coverage
 - [x] LoRa DATA/ACK protocol with retries and CRC
 - [x] Interactive station setup script
 - [x] Raspberry Pi drop-in boot config
+- [x] systemd service + timer for unattended operation
 - [x] Prototype development (2 stations)
-- [ ] systemd service for unattended operation
 - [ ] Base station receiver software
 - [ ] Initial deployment and field testing
 - [ ] Scale to 10 stations
