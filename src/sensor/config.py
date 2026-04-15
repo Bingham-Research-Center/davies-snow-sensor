@@ -20,6 +20,23 @@ _ISM_BANDS = (
     (902.0, 928.0),
 )
 
+# Hardware profiles recognized by the config loader. Profiles gate
+# board-specific pin reservations (see _check_sensor_pin_reserved).
+_VALID_HARDWARE_PROFILES = frozenset({"52pi-ep0123"})
+
+# Pins unusable for an ultrasonic sensor when the 52Pi Easy Multiplexing
+# Board (EP-0123) is seated under the Adafruit RFM95W LoRa Bonnet:
+#   - 2, 3       I2C (OLED bonnet uses these)
+#   - 7, 8       SPI chip selects (LoRa CS is 7)
+#   - 9, 10, 11  SPI bus (MISO/MOSI/SCLK for LoRa)
+#   - 17, 22, 23, 24  pulled LOW by the 52Pi multiplexer when LoRa sits on Row 1
+#   - 25         LoRa reset
+# The LoRa CS/reset and DS18B20 pins legitimately occupy some of these;
+# the check is scoped to ultrasonic trigger/echo pins only.
+_RESERVED_52PI_SENSOR_PINS = frozenset(
+    {2, 3, 7, 8, 9, 10, 11, 17, 22, 23, 24, 25}
+)
+
 
 @dataclass(frozen=True)
 class PinsConfig:
@@ -38,7 +55,7 @@ class LoraConfig:
 
 @dataclass(frozen=True)
 class StorageConfig:
-    csv_path: str = "/home/admin/data/snow_data.csv"
+    csv_path: str
     fsync: bool = False
 
 
@@ -77,6 +94,7 @@ class StationConfig:
     timing: TimingConfig
     sensors: SensorsConfig | None = None
     qc: QCConfig = QCConfig()
+    hardware_profile: str | None = None
 
 
 def _require(data: dict, key: str, section: str) -> object:
@@ -100,6 +118,18 @@ def _validate_pin(name: str, val: int) -> None:
         raise ConfigError(f"Pin '{name}' value {val} is out of range (must be 0-27)")
 
 
+def _check_sensor_pin_reserved(name: str, val: int, hardware_profile: str | None) -> None:
+    if hardware_profile != "52pi-ep0123":
+        return
+    if val in _RESERVED_52PI_SENSOR_PINS:
+        raise ConfigError(
+            f"Sensor pin '{name}' uses GPIO {val}, which is reserved by the "
+            f"LoRa bonnet or 52Pi EP-0123 multiplexing board "
+            f"(hardware_profile '52pi-ep0123'). "
+            f"Safe sensor pins: 0,1,4,5,6,12,13,14,15,16,18,19,20,21,26,27."
+        )
+
+
 def _check_pin_collisions(pin_fields: dict[str, int]) -> None:
     seen: dict[int, str] = {}
     for name, val in pin_fields.items():
@@ -110,7 +140,11 @@ def _check_pin_collisions(pin_fields: dict[str, int]) -> None:
         seen[val] = name
 
 
-def _parse_pins(raw: dict, require_hcsr04: bool = True) -> PinsConfig:
+def _parse_pins(
+    raw: dict,
+    require_hcsr04: bool = True,
+    hardware_profile: str | None = None,
+) -> PinsConfig:
     section = "pins"
     if not isinstance(raw, dict):
         raise ConfigError(f"'{section}' must be a mapping")
@@ -142,6 +176,10 @@ def _parse_pins(raw: dict, require_hcsr04: bool = True) -> PinsConfig:
 
     for name, val in pin_fields.items():
         _validate_pin(name, val)
+    if hcsr04_trigger is not None:
+        _check_sensor_pin_reserved("hcsr04_trigger", hcsr04_trigger, hardware_profile)
+    if hcsr04_echo is not None:
+        _check_sensor_pin_reserved("hcsr04_echo", hcsr04_echo, hardware_profile)
     _check_pin_collisions(pin_fields)
 
     return PinsConfig(
@@ -153,7 +191,11 @@ def _parse_pins(raw: dict, require_hcsr04: bool = True) -> PinsConfig:
     )
 
 
-def _parse_sensors(raw: dict | None, pins: PinsConfig) -> SensorsConfig:
+def _parse_sensors(
+    raw: dict | None,
+    pins: PinsConfig,
+    hardware_profile: str | None = None,
+) -> SensorsConfig:
     """Parse sensors section, or auto-convert from legacy pins config."""
     if raw is not None:
         if not isinstance(raw, dict):
@@ -182,6 +224,8 @@ def _parse_sensors(raw: dict | None, pins: PinsConfig) -> SensorsConfig:
             echo = _require_int(entry, "echo_pin", section)
             _validate_pin(f"{sid}.trigger_pin", trig)
             _validate_pin(f"{sid}.echo_pin", echo)
+            _check_sensor_pin_reserved(f"{sid}.trigger_pin", trig, hardware_profile)
+            _check_sensor_pin_reserved(f"{sid}.echo_pin", echo, hardware_profile)
             all_pins[f"{sid}.trigger_pin"] = trig
             all_pins[f"{sid}.echo_pin"] = echo
             ultrasonic.append(UltrasonicSensorConfig(id=sid, trigger_pin=trig, echo_pin=echo))
@@ -241,10 +285,12 @@ def _parse_lora(raw: dict | None) -> LoraConfig:
 
 def _parse_storage(raw: dict | None) -> StorageConfig:
     if raw is None:
-        return StorageConfig()
+        raise ConfigError(
+            "Missing required section 'storage' (with 'csv_path')"
+        )
     if not isinstance(raw, dict):
         raise ConfigError("'storage' must be a mapping")
-    csv_path = raw.get("csv_path", StorageConfig.csv_path)
+    csv_path = _require(raw, "csv_path", "storage")
     if not isinstance(csv_path, str):
         raise ConfigError(
             f"Field 'csv_path' in 'storage' must be a string, got {type(csv_path).__name__}"
@@ -369,13 +415,32 @@ def load_config(path: str | Path) -> StationConfig:
             f"sensor_height_cm must be > 0, got {sensor_height_cm}"
         )
 
+    hardware_profile_raw = station_raw.get("hardware_profile")
+    hardware_profile: str | None = None
+    if hardware_profile_raw is not None:
+        if not isinstance(hardware_profile_raw, str):
+            raise ConfigError(
+                f"Field 'hardware_profile' in 'station' must be a string, "
+                f"got {type(hardware_profile_raw).__name__}"
+            )
+        if hardware_profile_raw not in _VALID_HARDWARE_PROFILES:
+            raise ConfigError(
+                f"Unknown hardware_profile '{hardware_profile_raw}'; "
+                f"valid values: {sorted(_VALID_HARDWARE_PROFILES)}"
+            )
+        hardware_profile = hardware_profile_raw
+
     # Pins section (required — no safe defaults for hardware pins)
     has_sensors = "sensors" in raw
     pins_raw = _require(raw, "pins", "root")
-    pins = _parse_pins(pins_raw, require_hcsr04=not has_sensors)
+    pins = _parse_pins(
+        pins_raw,
+        require_hcsr04=not has_sensors,
+        hardware_profile=hardware_profile,
+    )
 
     # Sensors section (or auto-convert from legacy pins)
-    sensors = _parse_sensors(raw.get("sensors"), pins)
+    sensors = _parse_sensors(raw.get("sensors"), pins, hardware_profile=hardware_profile)
 
     # Optional sections with defaults
     lora = _parse_lora(raw.get("lora"))
@@ -392,6 +457,7 @@ def load_config(path: str | Path) -> StationConfig:
         timing=timing,
         sensors=sensors,
         qc=qc,
+        hardware_profile=hardware_profile,
     )
 
 

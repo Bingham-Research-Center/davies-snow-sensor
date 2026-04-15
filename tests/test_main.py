@@ -408,6 +408,8 @@ pins:
   ds18b20_data: 4
   lora_cs: 5
   lora_reset: 25
+storage:
+  csv_path: "/tmp/test_snow.csv"
 """
         )
         captured: dict = {}
@@ -439,6 +441,8 @@ pins:
   ds18b20_data: 4
   lora_cs: 5
   lora_reset: 25
+storage:
+  csv_path: "/tmp/test_snow.csv"
 """
         )
         result = main(["--config", str(config_file)])
@@ -457,6 +461,8 @@ pins:
   ds18b20_data: 4
   lora_cs: 5
   lora_reset: 25
+storage:
+  csv_path: "/tmp/test_snow.csv"
 """
         )
         with patch("src.sensor.main.logging.basicConfig") as mock_basic:

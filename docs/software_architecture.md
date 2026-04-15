@@ -22,6 +22,7 @@ Loads a YAML file into a frozen `StationConfig` dataclass hierarchy:
 StationConfig
 ├── station_id: str          (required)
 ├── sensor_height_cm: float  (required)
+├── hardware_profile: str    (optional; "52pi-ep0123" enables reserved-pin checks)
 ├── pins: PinsConfig         (required — no safe defaults for GPIO)
 │   ├── hcsr04_trigger: int
 │   ├── hcsr04_echo: int
@@ -32,16 +33,18 @@ StationConfig
 │   ├── frequency: float     (default 915.0)
 │   └── tx_power: int        (default 23)
 ├── storage: StorageConfig
-│   └── csv_path: str        (default /home/pi/data/snow_data.csv)
+│   ├── csv_path: str        (required)
+│   └── fsync: bool          (default false)
 └── timing: TimingConfig
     └── cycle_interval_minutes: int (default 15)
 ```
 
 Validation rules:
-- `station` and `pins` sections are required; missing keys raise `ConfigError`.
-- All pin values must be integers.
+- `station`, `pins`, and `storage` sections are required; missing keys raise `ConfigError`.
+- All pin values must be integers in the range 0–27.
+- When `station.hardware_profile == "52pi-ep0123"`, ultrasonic trigger/echo pins in `{2,3,7,8,9,10,11,17,22,23,24,25}` are rejected (LoRa bonnet and 52Pi EP-0123 reservations).
 - `frequency` must be numeric; `tx_power` and `cycle_interval_minutes` must be integers.
-- `lora`, `storage`, and `timing` sections are optional (defaults apply).
+- `lora` and `timing` sections are optional (defaults apply).
 
 ## storage.py
 

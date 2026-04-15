@@ -62,8 +62,13 @@ mkdir -p "$DATA_DIR"
 chown "$TARGET_USER:$TARGET_USER" "$DATA_DIR"
 
 # --- step 4: install systemd units ---
+# Template the bundled unit file to match this host: repo path, target user,
+# and the sandboxed writable data directory. The unit ships hardcoded
+# /home/admin paths for DAVIES-01; deploys to other Pis rewrite them here.
 echo "Installing systemd units..."
-sed "s|/home/admin/davies-snow-sensor|$REPO_DIR|g" \
+sed -e "s|/home/admin/davies-snow-sensor|$REPO_DIR|g" \
+    -e "s|^User=admin$|User=$TARGET_USER|" \
+    -e "s|^ReadWritePaths=/home/admin/data$|ReadWritePaths=$DATA_DIR|" \
     "$REPO_DIR/systemd/snow-sensor.service" > /etc/systemd/system/snow-sensor.service
 cp "$REPO_DIR/systemd/snow-sensor.timer" /etc/systemd/system/
 systemctl daemon-reload

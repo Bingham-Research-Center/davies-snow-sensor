@@ -65,13 +65,16 @@ class TestLoadConfigValid:
                 "lora_cs": 4,
                 "lora_reset": 5,
             },
+            "storage": {"csv_path": "/tmp/test.csv"},
         }
         cfg = load_config(_write_yaml(tmp_path, minimal))
         assert cfg.lora == LoraConfig()
-        assert cfg.storage == StorageConfig()
+        assert cfg.storage.csv_path == "/tmp/test.csv"
+        assert cfg.storage.fsync is False
         assert cfg.timing == TimingConfig()
         assert cfg.lora.frequency == 915.0
         assert cfg.timing.cycle_interval_minutes == 15
+        assert cfg.hardware_profile is None
 
     def test_config_is_frozen(self, tmp_path):
         cfg = load_config(_write_yaml(tmp_path, VALID_CONFIG))
@@ -151,7 +154,7 @@ class TestLoadConfigInvalidTypes:
         assert cfg.storage.fsync is False
 
     def test_fsync_non_bool_raises(self, tmp_path):
-        data = {**VALID_CONFIG, "storage": {"fsync": "yes"}}
+        data = {**VALID_CONFIG, "storage": {"csv_path": "/tmp/t.csv", "fsync": "yes"}}
         with pytest.raises(ConfigError, match="boolean"):
             load_config(_write_yaml(tmp_path, data))
 
@@ -286,6 +289,7 @@ class TestQCConfig:
                 "lora_cs": 4,
                 "lora_reset": 5,
             },
+            "storage": {"csv_path": "/tmp/test.csv"},
         }
         cfg = load_config(_write_yaml(tmp_path, minimal))
         assert cfg.qc == QCConfig()
@@ -370,6 +374,7 @@ MULTI_SENSOR_CONFIG = {
             {"id": "south", "trigger_pin": 13, "echo_pin": 19},
         ],
     },
+    "storage": {"csv_path": "/tmp/test.csv"},
 }
 
 
@@ -501,6 +506,147 @@ class TestMultiSensorValidation:
             },
         }
         with pytest.raises(ConfigError, match="id"):
+            load_config(_write_yaml(tmp_path, data))
+
+
+class TestStorageRequired:
+    def test_missing_storage_section_raises(self, tmp_path):
+        data = {k: v for k, v in VALID_CONFIG.items() if k != "storage"}
+        with pytest.raises(ConfigError, match="storage"):
+            load_config(_write_yaml(tmp_path, data))
+
+    def test_missing_csv_path_raises(self, tmp_path):
+        data = {**VALID_CONFIG, "storage": {"fsync": True}}
+        with pytest.raises(ConfigError, match="csv_path"):
+            load_config(_write_yaml(tmp_path, data))
+
+    def test_storage_not_mapping_raises(self, tmp_path):
+        data = {**VALID_CONFIG, "storage": "not-a-dict"}
+        with pytest.raises(ConfigError, match="mapping"):
+            load_config(_write_yaml(tmp_path, data))
+
+
+class TestHardwareProfile:
+    def test_default_profile_is_none(self, tmp_path):
+        cfg = load_config(_write_yaml(tmp_path, VALID_CONFIG))
+        assert cfg.hardware_profile is None
+
+    def test_profile_roundtrips(self, tmp_path):
+        data = {
+            **VALID_CONFIG,
+            "station": {
+                **VALID_CONFIG["station"],
+                "hardware_profile": "52pi-ep0123",
+            },
+            "pins": {**VALID_CONFIG["pins"], "hcsr04_trigger": 5, "hcsr04_echo": 6},
+        }
+        cfg = load_config(_write_yaml(tmp_path, data))
+        assert cfg.hardware_profile == "52pi-ep0123"
+
+    def test_no_profile_allows_reserved_sensor_pin(self, tmp_path):
+        # Pin 17 is pulled LOW by the 52Pi board, but without the profile
+        # opt-in the loader does not enforce the reservation.
+        data = {
+            **VALID_CONFIG,
+            "pins": {**VALID_CONFIG["pins"], "hcsr04_trigger": 17},
+        }
+        cfg = load_config(_write_yaml(tmp_path, data))
+        assert cfg.pins.hcsr04_trigger == 17
+
+    def test_52pi_profile_rejects_reserved_trigger(self, tmp_path):
+        data = {
+            **VALID_CONFIG,
+            "station": {
+                **VALID_CONFIG["station"],
+                "hardware_profile": "52pi-ep0123",
+            },
+            "pins": {**VALID_CONFIG["pins"], "hcsr04_trigger": 17, "hcsr04_echo": 6},
+        }
+        with pytest.raises(ConfigError, match="hcsr04_trigger.*reserved"):
+            load_config(_write_yaml(tmp_path, data))
+
+    def test_52pi_profile_rejects_reserved_echo(self, tmp_path):
+        data = {
+            **VALID_CONFIG,
+            "station": {
+                **VALID_CONFIG["station"],
+                "hardware_profile": "52pi-ep0123",
+            },
+            "pins": {**VALID_CONFIG["pins"], "hcsr04_trigger": 5, "hcsr04_echo": 22},
+        }
+        with pytest.raises(ConfigError, match="hcsr04_echo.*reserved"):
+            load_config(_write_yaml(tmp_path, data))
+
+    def test_52pi_profile_accepts_safe_pins(self, tmp_path):
+        data = {
+            **VALID_CONFIG,
+            "station": {
+                **VALID_CONFIG["station"],
+                "hardware_profile": "52pi-ep0123",
+            },
+            "pins": {**VALID_CONFIG["pins"], "hcsr04_trigger": 5, "hcsr04_echo": 6},
+        }
+        cfg = load_config(_write_yaml(tmp_path, data))
+        assert cfg.pins.hcsr04_trigger == 5
+        assert cfg.pins.hcsr04_echo == 6
+
+    def test_52pi_profile_allows_lora_pins_in_reserved_set(self, tmp_path):
+        # lora_cs=7 and lora_reset=25 are in the reserved set but are
+        # LEGITIMATELY used by the LoRa bonnet itself; the check is scoped
+        # to ultrasonic sensor pins only.
+        data = {
+            **VALID_CONFIG,
+            "station": {
+                **VALID_CONFIG["station"],
+                "hardware_profile": "52pi-ep0123",
+            },
+            "pins": {
+                "hcsr04_trigger": 5,
+                "hcsr04_echo": 6,
+                "ds18b20_data": 4,
+                "lora_cs": 7,
+                "lora_reset": 25,
+            },
+        }
+        cfg = load_config(_write_yaml(tmp_path, data))
+        assert cfg.pins.lora_cs == 7
+        assert cfg.pins.lora_reset == 25
+
+    def test_52pi_profile_enforced_on_multi_sensor(self, tmp_path):
+        data = {
+            **MULTI_SENSOR_CONFIG,
+            "station": {
+                **MULTI_SENSOR_CONFIG["station"],
+                "hardware_profile": "52pi-ep0123",
+            },
+            "sensors": {
+                "ultrasonic": [
+                    {"id": "north", "trigger_pin": 5, "echo_pin": 6},
+                    {"id": "south", "trigger_pin": 17, "echo_pin": 19},
+                ],
+            },
+            "storage": {"csv_path": "/tmp/test.csv"},
+        }
+        with pytest.raises(ConfigError, match="south.trigger_pin.*reserved"):
+            load_config(_write_yaml(tmp_path, data))
+
+    def test_unknown_profile_raises(self, tmp_path):
+        data = {
+            **VALID_CONFIG,
+            "station": {
+                **VALID_CONFIG["station"],
+                "hardware_profile": "acme-board-v2",
+            },
+        }
+        with pytest.raises(ConfigError, match="Unknown hardware_profile"):
+            load_config(_write_yaml(tmp_path, data))
+
+    def test_profile_as_non_string_raises(self, tmp_path):
+        data = {
+            **VALID_CONFIG,
+            "station": {**VALID_CONFIG["station"], "hardware_profile": 42},
+        }
+        with pytest.raises(ConfigError, match="hardware_profile.*string"):
             load_config(_write_yaml(tmp_path, data))
 
 
