@@ -3,7 +3,7 @@
 A dense network of low-cost snow depth stations that outperforms expensive single-point research instruments through spatial coverage, redundancy, and volume of data.
 
 ![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)
-![Tests: 251 passing](https://img.shields.io/badge/tests-251%20passing-brightgreen)
+![Tests: 264 passing](https://img.shields.io/badge/tests-264%20passing-brightgreen)
 ![License: MIT](https://img.shields.io/badge/license-MIT-green)
 
 ## About
@@ -42,7 +42,7 @@ davies-snow-sensor/
 │   ├── ultrasonic.py        # HC-SR04 distance readings (temp-compensated)
 │   ├── lora.py              # LoRa DATA/ACK radio protocol
 │   └── storage.py           # Append-only CSV storage
-├── tests/                   # 251 unit tests (pytest)
+├── tests/                   # 264 unit tests (pytest)
 ├── scripts/
 │   └── station_setup.sh     # Interactive station configuration wizard
 ├── config/
@@ -139,6 +139,7 @@ Key fields:
 |-------|-------------|---------|
 | `station.id` | Unique station identifier (convention: `DAVIES-XX`) | *(required)* |
 | `station.sensor_height_cm` | Distance from sensor face to bare ground (cm) | *(required)* |
+| `station.hardware_profile` | Opt into board-specific pin validation. Set to `"52pi-ep0123"` to reject ultrasonic pins reserved by the LoRa bonnet and 52Pi multiplexing board. | *(none)* |
 | `pins.hcsr04_trigger` | HC-SR04 trigger GPIO | *(required)* |
 | `pins.hcsr04_echo` | HC-SR04 echo GPIO | *(required)* |
 | `pins.ds18b20_data` | DS18B20 1-Wire data GPIO | *(required)* |
@@ -146,7 +147,7 @@ Key fields:
 | `pins.lora_reset` | LoRa reset GPIO | *(required)* |
 | `lora.frequency` | LoRa frequency in MHz | `915.0` |
 | `lora.tx_power` | LoRa transmit power in dBm | `23` |
-| `storage.csv_path` | Path to CSV data file | `/home/admin/data/snow_data.csv` |
+| `storage.csv_path` | Path to CSV data file | *(required)* |
 | `timing.cycle_interval_minutes` | Minutes between readings | `15` |
 
 Pin assignments and LoRa settings have sensible defaults; see the config file comments for details.
@@ -222,7 +223,7 @@ See [hardware/multiplexing_board_wiring.md](hardware/multiplexing_board_wiring.m
 ## Roadmap
 
 - [x] Sensor software stack (temperature, ultrasonic, LoRa, storage, config)
-- [x] 251 unit tests with full module coverage
+- [x] 264 unit tests with full module coverage
 - [x] LoRa DATA/ACK protocol with retries and CRC
 - [x] Interactive station setup script
 - [x] Raspberry Pi drop-in boot config

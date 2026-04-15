@@ -9,11 +9,18 @@
 #   - Other rows: external sensor wiring
 # All rows are mirrored breakouts of the same Raspberry Pi GPIO pins;
 # "row" does not change BCM pin numbers.
-# Avoid LoRa/OLED pins for sensors: BCM GPIO 2,3,7,8,9,10,11,25.
+#
+# Pins unusable for ultrasonic sensors under the 52Pi + LoRa bonnet combo:
+#   - LoRa/OLED reservations: GPIO 2,3,7,8,9,10,11,25
+#   - 52Pi EP-0123 pulls LOW: GPIO 17,22,23,24
+# With `hardware_profile: "52pi-ep0123"` set below, the config loader rejects
+# any ultrasonic trigger/echo pin in the reserved set. Safe sensor pins:
+# 0,1,4,5,6,12,13,14,15,16,18,19,20,21,26,27.
 
 station:
   id: "DAVIES-XX"           # Unique station identifier (string)
   sensor_height_cm: 5.08    # Height of ultrasonic sensor above ground at zero snow (cm)
+  hardware_profile: "52pi-ep0123"  # Opt into board-specific pin validation. Remove for non-52Pi builds.
 
 pins:
   hcsr04_trigger: 5         # HC-SR04 TRIG (BCM GPIO)
@@ -30,8 +37,8 @@ pins:
 #       trigger_pin: 5
 #       echo_pin: 6
 #     - id: "rear"
-#       trigger_pin: 17
-#       echo_pin: 27
+#       trigger_pin: 13
+#       echo_pin: 19
 
 lora:
   frequency: 915.0          # MHz; must be in an ISM band (169/433/868/915)

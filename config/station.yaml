@@ -1,6 +1,7 @@
 station:
   id: "DAVIES-01"
   sensor_height_cm: 5.08
+  hardware_profile: "52pi-ep0123"
 
 pins:
   hcsr04_trigger: 5

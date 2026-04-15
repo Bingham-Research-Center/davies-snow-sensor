@@ -190,6 +190,7 @@ cat > "$CONFIG_FILE" <<EOF
 station:
   id: "$STATION_ID"
   sensor_height_cm: $SENSOR_HEIGHT
+  hardware_profile: "52pi-ep0123"
 
 pins:
   hcsr04_trigger: $TRIG
