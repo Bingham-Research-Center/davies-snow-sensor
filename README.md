@@ -3,7 +3,7 @@
 A dense network of low-cost snow depth stations that outperforms expensive single-point research instruments through spatial coverage, redundancy, and volume of data.
 
 ![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)
-![Tests: 245 passing](https://img.shields.io/badge/tests-245%20passing-brightgreen)
+![Tests: 251 passing](https://img.shields.io/badge/tests-251%20passing-brightgreen)
 ![License: MIT](https://img.shields.io/badge/license-MIT-green)
 
 ## About
@@ -20,6 +20,10 @@ A network of multiple inexpensive snow depth sensors (Raspberry Pi + ultrasonic 
 - Lower total cost enabling wider deployment
 
 This network will be compared against the 4 main research sites at Bingham Research Center to evaluate accuracy, reliability, and cost-effectiveness.
+
+### Status
+
+DAVIES-01 — the first prototype station — is in continuous **bench test** as of 2026-03-11, running `snow-sensor.timer` every 15 minutes and logging each cycle to CSV. Ultrasonic and temperature readings are stable; LoRa transmit succeeds but ACK times out, pending the base station receiver (see [Roadmap](#roadmap)). The station is not yet field-deployed.
 
 ## Built With
 
@@ -38,7 +42,7 @@ davies-snow-sensor/
 │   ├── ultrasonic.py        # HC-SR04 distance readings (temp-compensated)
 │   ├── lora.py              # LoRa DATA/ACK radio protocol
 │   └── storage.py           # Append-only CSV storage
-├── tests/                   # 245 unit tests (pytest)
+├── tests/                   # 251 unit tests (pytest)
 ├── scripts/
 │   └── station_setup.sh     # Interactive station configuration wizard
 ├── config/
@@ -218,12 +222,13 @@ See [hardware/multiplexing_board_wiring.md](hardware/multiplexing_board_wiring.m
 ## Roadmap
 
 - [x] Sensor software stack (temperature, ultrasonic, LoRa, storage, config)
-- [x] 245 unit tests with full module coverage
+- [x] 251 unit tests with full module coverage
 - [x] LoRa DATA/ACK protocol with retries and CRC
 - [x] Interactive station setup script
 - [x] Raspberry Pi drop-in boot config
 - [x] systemd service + timer for unattended operation
 - [x] Prototype development (2 stations)
+- [x] First station (DAVIES-01) running continuous 15-min cycles on real hardware (bench test)
 - [ ] Base station receiver software
 - [ ] Initial deployment and field testing
 - [ ] Scale to 10 stations
