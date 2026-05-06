@@ -1,0 +1,25 @@
+[Unit]
+Description=Davies snow-sensor base station receiver
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=admin
+SupplementaryGroups=gpio spi i2c dialout
+RuntimeDirectory=base-station
+WorkingDirectory=/run/base-station
+ExecStart=/home/admin/davies-snow-sensor/venv/bin/python -m src.base_station.main --config /home/admin/davies-snow-sensor/config/receiver.yaml
+Restart=on-failure
+RestartSec=5s
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=base-station
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/admin/data
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target
