@@ -1,0 +1,9 @@
+[Unit]
+Description=Watch davies-snow-sensor config dir; sync timer on change
+
+[Path]
+PathChanged=/home/admin/davies-snow-sensor/config/
+Unit=snow-sensor-sync.service
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,7 @@
+[Unit]
+Description=Sync snow-sensor.timer cadence from station.yaml
+After=local-fs.target
+
+[Service]
+Type=oneshot
+ExecStart=/home/admin/davies-snow-sensor/venv/bin/python /home/admin/davies-snow-sensor/scripts/sync-timer-from-config.py
