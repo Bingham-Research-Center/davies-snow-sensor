@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import time
 
+from src.protocol import wire
+
 
 class LoRaTransmitter:
     """Thin wrapper around adafruit_rfm9x.RFM9x for DATA/ACK messaging."""
@@ -84,7 +86,7 @@ class LoRaTransmitter:
             self._ack_timeout_seconds if timeout_seconds is None
             else timeout_seconds
         )
-        message = self._format_data_message(payload)
+        message = wire.format_data(payload)
         expected_station_id = str(payload.get("station_id", ""))
         expected_timestamp = str(payload.get("timestamp", ""))
 
@@ -113,9 +115,10 @@ class LoRaTransmitter:
 
                 self._last_rssi = self._rfm9x.last_rssi
                 text = bytes(packet).decode("utf-8", errors="replace").strip()
-                ack_station, ack_timestamp = self._parse_ack_message(text)
-                if ack_station is None:
+                ack = wire.parse_ack(text)
+                if ack is None:
                     continue
+                ack_station, ack_timestamp = ack
                 if (
                     ack_station == expected_station_id
                     and ack_timestamp == expected_timestamp
@@ -171,44 +174,3 @@ class LoRaTransmitter:
         self._last_rssi = None
         self._last_transmit_duration_ms = 0
 
-    # -- Private helpers --
-
-    def _format_data_message(self, payload: dict) -> str:
-        """Format payload into protocol v2 DATA packet."""
-        temp = payload.get("temperature_c")
-        temp_text = "-" if temp is None else f"{float(temp):.2f}"
-        error_flags = str(payload.get("error_flags", "")).replace(",", "|")
-
-        parts = [
-            "DATA",
-            str(payload.get("station_id", "UNK")),
-            str(payload.get("timestamp", "")),
-            self._format_number(payload.get("snow_depth_cm")),
-            self._format_number(payload.get("distance_raw_cm")),
-            temp_text,
-            self._format_number(payload.get("sensor_height_cm")),
-            error_flags,
-        ]
-        return ",".join(parts)
-
-    def _parse_ack_message(
-        self, message: str,
-    ) -> tuple[str | None, str | None]:
-        """Return (station_id, timestamp) for ACK packets, else (None, None)."""
-        parts = [part.strip() for part in message.split(",")]
-        if len(parts) != 3 or parts[0] != "ACK":
-            return None, None
-        station_id = parts[1]
-        timestamp = parts[2]
-        if not station_id or not timestamp:
-            return None, None
-        return station_id, timestamp
-
-    def _format_number(self, value: object) -> str:
-        """Format a numeric value to 2dp, or '-' if None/invalid."""
-        if value is None:
-            return "-"
-        try:
-            return f"{float(value):.2f}"
-        except (TypeError, ValueError):
-            return "-"
