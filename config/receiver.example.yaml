@@ -27,9 +27,5 @@ stations:
   # - id: "DAVIES-02"
   #   label: "Davies prototype #2"
 
-web:
-  bind: "tailscale"              # tailscale | lan | localhost
-  port: 8000
-
 metrics:
   sample_interval_seconds: 30    # Pi system-metrics sampling cadence
