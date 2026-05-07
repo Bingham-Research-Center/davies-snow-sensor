@@ -3,8 +3,8 @@
 The base-station Pi listens for LoRa DATA packets from sensor stations,
 ACKs them, and persists each packet plus its own system metrics to CSV.
 
-This document covers the v1 receiver — packet reception, ACK, storage,
-and Pi-metrics sampling. The web dashboard is a follow-up (PR-C).
+This document covers the receiver — packet reception, ACK, storage,
+and Pi-metrics sampling.
 
 ## Hardware
 
@@ -60,7 +60,6 @@ Optional sections:
 - `lora.frequency` (default 915.0 MHz) — must match the senders'
 - `lora.tx_power` (default 23 dBm) — used for ACK transmissions
 - `storage.data_dir` (default `/home/admin/data`)
-- `web.bind` / `web.port` — used by the v2 dashboard (not yet)
 - `metrics.sample_interval_seconds` (default 30) — Pi-metrics cadence
 
 ## Storage layout

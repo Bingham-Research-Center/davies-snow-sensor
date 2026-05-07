@@ -19,8 +19,6 @@ _ISM_BANDS = (
     (902.0, 928.0),
 )
 
-_VALID_BIND_MODES = frozenset({"tailscale", "lan", "localhost"})
-
 
 @dataclass(frozen=True)
 class PinsConfig:
@@ -37,12 +35,6 @@ class LoraConfig:
 @dataclass(frozen=True)
 class StorageConfig:
     data_dir: str = "/home/admin/data"
-
-
-@dataclass(frozen=True)
-class WebConfig:
-    bind: str = "tailscale"
-    port: int = 8000
 
 
 @dataclass(frozen=True)
@@ -63,7 +55,6 @@ class ReceiverConfig:
     stations: tuple[StationEntry, ...]
     lora: LoraConfig = field(default_factory=LoraConfig)
     storage: StorageConfig = field(default_factory=StorageConfig)
-    web: WebConfig = field(default_factory=WebConfig)
     metrics: MetricsConfig = field(default_factory=MetricsConfig)
 
 
@@ -128,23 +119,6 @@ def _parse_storage(raw: dict | None) -> StorageConfig:
     if not isinstance(data_dir, str) or not data_dir:
         raise ConfigError("Field 'data_dir' in 'storage' must be a non-empty string")
     return StorageConfig(data_dir=data_dir)
-
-
-def _parse_web(raw: dict | None) -> WebConfig:
-    if raw is None:
-        return WebConfig()
-    if not isinstance(raw, dict):
-        raise ConfigError("Section 'web' must be a mapping")
-    bind = raw.get("bind", "tailscale")
-    if bind not in _VALID_BIND_MODES:
-        raise ConfigError(
-            f"Field 'bind' in 'web' must be one of {sorted(_VALID_BIND_MODES)}, "
-            f"got {bind!r}"
-        )
-    port = raw.get("port", 8000)
-    if not isinstance(port, int) or isinstance(port, bool) or not 1 <= port <= 65535:
-        raise ConfigError("Field 'port' in 'web' must be an integer in [1, 65535]")
-    return WebConfig(bind=bind, port=port)
 
 
 def _parse_metrics(raw: dict | None) -> MetricsConfig:
@@ -212,6 +186,5 @@ def load_config(path: str | Path) -> ReceiverConfig:
         stations=stations,
         lora=_parse_lora(raw.get("lora")),
         storage=_parse_storage(raw.get("storage")),
-        web=_parse_web(raw.get("web")),
         metrics=_parse_metrics(raw.get("metrics")),
     )

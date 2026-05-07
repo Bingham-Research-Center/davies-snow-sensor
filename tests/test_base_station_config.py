@@ -12,7 +12,6 @@ from src.base_station.config import (
     MetricsConfig,
     StationEntry,
     StorageConfig,
-    WebConfig,
     load_config,
 )
 
@@ -43,7 +42,6 @@ class TestValid:
         assert cfg.stations == (StationEntry(id="DAVIES-01", label=""),)
         assert cfg.lora == LoraConfig()
         assert cfg.storage == StorageConfig()
-        assert cfg.web == WebConfig()
         assert cfg.metrics == MetricsConfig()
 
     def test_full(self, tmp_path):
@@ -63,9 +61,6 @@ stations:
     label: "First sender"
   - id: "DAVIES-02"
     label: "Second sender"
-web:
-  bind: "lan"
-  port: 8080
 metrics:
   sample_interval_seconds: 10
 """
@@ -75,8 +70,6 @@ metrics:
         assert cfg.storage.data_dir == "/var/lib/snow"
         assert len(cfg.stations) == 2
         assert cfg.stations[1].label == "Second sender"
-        assert cfg.web.bind == "lan"
-        assert cfg.web.port == 8080
         assert cfg.metrics.sample_interval_seconds == 10
 
     def test_alias_id(self, tmp_path):
@@ -154,36 +147,6 @@ stations:
   - id: "DAVIES-01"
 """
         with pytest.raises(ConfigError, match="ISM band"):
-            load_config(_write(tmp_path, body))
-
-    def test_invalid_bind_mode(self, tmp_path):
-        body = """\
-station:
-  station_id: "BASE-01"
-pins:
-  lora_cs: 7
-  lora_reset: 25
-stations:
-  - id: "DAVIES-01"
-web:
-  bind: "internet"
-"""
-        with pytest.raises(ConfigError, match="bind"):
-            load_config(_write(tmp_path, body))
-
-    def test_invalid_port(self, tmp_path):
-        body = """\
-station:
-  station_id: "BASE-01"
-pins:
-  lora_cs: 7
-  lora_reset: 25
-stations:
-  - id: "DAVIES-01"
-web:
-  port: 99999
-"""
-        with pytest.raises(ConfigError, match="port"):
             load_config(_write(tmp_path, body))
 
     def test_invalid_metrics_interval(self, tmp_path):

@@ -2,7 +2,7 @@
 
 Listens for LoRa DATA packets from configured stations, ACKs them, writes
 each packet to a per-station CSV, and samples Pi system metrics on a
-separate cadence. No web layer yet (PR-C adds FastAPI + WebSocket).
+separate cadence.
 """
 
 from __future__ import annotations
