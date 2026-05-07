@@ -1,0 +1,35 @@
+# Base-station receiver configuration — canonical example.
+#
+# Copy this file to config/receiver.yaml on the receiver Pi and edit.
+# The YAML schema is validated by src/base_station/config.py at load time;
+# invalid files raise ConfigError with a specific field name.
+
+station:
+  station_id: "BASE-01"          # Receiver's identifier in logs
+
+pins:
+  lora_cs: 7                     # RFM95W SPI chip select (default 7 for the
+                                 # Adafruit LoRa Bonnet on a Pi)
+  lora_reset: 25                 # RFM95W reset
+
+lora:
+  frequency: 915.0               # MHz — must match the senders' frequency
+  tx_power: 23                   # dBm, used for ACK transmissions
+
+storage:
+  data_dir: "/home/admin/data"   # per-station folders are created here
+
+# Senders we will accept and ACK. Add a line per station; unknown senders
+# are logged but not ACKed (so they retry into the void).
+stations:
+  - id: "DAVIES-01"
+    label: "Davies prototype #1"
+  # - id: "DAVIES-02"
+  #   label: "Davies prototype #2"
+
+web:
+  bind: "tailscale"              # tailscale | lan | localhost
+  port: 8000
+
+metrics:
+  sample_interval_seconds: 30    # Pi system-metrics sampling cadence
