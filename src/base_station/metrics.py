@@ -80,7 +80,7 @@ def read_load_1m() -> float | None:
 
 def read_uptime_seconds() -> int | None:
     try:
-        with open("/proc/uptime") as f:
+        with open("/proc/uptime", encoding="utf-8") as f:
             return int(float(f.read().split()[0]))
     except (OSError, ValueError):
         return None
@@ -90,7 +90,7 @@ def read_meminfo_mb() -> tuple[int | None, int | None]:
     """Return (used_mb, total_mb) from /proc/meminfo. Used = Total - MemAvailable."""
     try:
         kv: dict[str, int] = {}
-        with open("/proc/meminfo") as f:
+        with open("/proc/meminfo", encoding="utf-8") as f:
             for line in f:
                 key, _, rest = line.partition(":")
                 value = rest.strip().split()
@@ -115,7 +115,7 @@ def read_cpu_percent() -> float | None:
     """CPU usage since the last call. First call returns None (no baseline)."""
     global _LAST_CPU
     try:
-        with open("/proc/stat") as f:
+        with open("/proc/stat", encoding="utf-8") as f:
             line = f.readline()
     except OSError:
         return None

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import locale
 from pathlib import Path
 
 import pytest
@@ -172,3 +173,20 @@ class TestExampleFile:
         cfg = load_config(repo / "config" / "receiver.example.yaml")
         assert cfg.station_id == "BASE-01"
         assert any(s.id == "DAVIES-01" for s in cfg.stations)
+
+
+class TestEncoding:
+    def test_load_config_handles_non_utf8_locale(self, tmp_path, monkeypatch):
+        # On a Pi with LANG=en_US (no .UTF-8 suffix) Python's preferred
+        # encoding is ISO-8859-1, so a load_config that calls read_text()
+        # without encoding="utf-8" reads UTF-8 bytes as Latin-1 and
+        # PyYAML chokes on the non-ASCII bytes in the bundled example
+        # (e.g. em-dashes in comments).
+        monkeypatch.setattr(
+            locale, "getpreferredencoding", lambda *a, **k: "ascii",
+        )
+        p = tmp_path / "receiver.yaml"
+        body = "# Comment with em-dash — must round-trip cleanly\n" + _VALID_MINIMAL
+        p.write_bytes(body.encode("utf-8"))
+        cfg = load_config(p)
+        assert cfg.station_id == "BASE-01"

@@ -161,7 +161,7 @@ def load_config(path: str | Path) -> ReceiverConfig:
     """Load and validate a receiver YAML config file."""
     p = Path(path)
     try:
-        raw = yaml.safe_load(p.read_text()) or {}
+        raw = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
     except FileNotFoundError:
         raise
     except yaml.YAMLError as e:
