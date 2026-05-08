@@ -1,5 +1,7 @@
 """Tests for sensor.config module."""
 
+import locale
+
 import pytest
 import yaml
 from pathlib import Path
@@ -672,3 +674,22 @@ class TestConfigId:
         p1.write_text("station:\n  id: A\n")
         p2.write_text("station:\n  id: B\n")
         assert config_id(p1) != config_id(p2)
+
+
+class TestEncoding:
+    def test_load_config_handles_non_utf8_locale(self, tmp_path, monkeypatch):
+        # On a Pi with LANG=en_US (no .UTF-8 suffix) Python's preferred
+        # encoding is ISO-8859-1, so a load_config that calls open()
+        # without encoding="utf-8" reads UTF-8 bytes as Latin-1 and
+        # PyYAML chokes on the non-ASCII bytes in the bundled example
+        # (e.g. em-dashes in comments).
+        monkeypatch.setattr(
+            locale, "getpreferredencoding", lambda *a, **k: "ascii",
+        )
+        p = tmp_path / "station.yaml"
+        body = "# Comment with em-dash — must round-trip cleanly\n" + yaml.dump(
+            VALID_CONFIG,
+        )
+        p.write_bytes(body.encode("utf-8"))
+        cfg = load_config(p)
+        assert cfg.station_id == "DAVIES-01"

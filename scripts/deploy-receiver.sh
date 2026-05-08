@@ -33,7 +33,7 @@ echo ""
 # --- step 1: system packages ---
 echo "Installing system packages..."
 apt-get update -qq
-apt-get install -y -qq python3-venv python3-dev python3-yaml libgpiod-dev
+apt-get install -y -qq python3-venv python3-dev python3-yaml libgpiod-dev liblgpio-dev swig
 
 # --- step 2: venv + pip install ---
 if [ ! -d "$VENV_DIR" ]; then

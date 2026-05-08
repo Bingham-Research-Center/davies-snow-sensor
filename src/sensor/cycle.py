@@ -21,7 +21,7 @@ def read_and_increment_cycle_id(csv_path: str | Path) -> int:
     p = Path(csv_path).parent / "cycle_id.txt"
     current = 0
     try:
-        current = int(p.read_text().strip())
+        current = int(p.read_text(encoding="utf-8").strip())
     except (ValueError, OSError):
         current = 0
     next_id = current + 1

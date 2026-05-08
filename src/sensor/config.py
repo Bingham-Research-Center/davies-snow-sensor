@@ -387,7 +387,7 @@ def load_config(path: str | Path) -> StationConfig:
     if not path.exists():
         raise FileNotFoundError(f"Config file not found: {path}")
 
-    with open(path) as f:
+    with open(path, encoding="utf-8") as f:
         raw = yaml.safe_load(f)
 
     if not isinstance(raw, dict):
