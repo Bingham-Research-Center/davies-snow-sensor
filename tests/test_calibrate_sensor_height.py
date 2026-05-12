@@ -223,7 +223,7 @@ class TestAggregate:
         assert s["max_cm"] == 104.0
         assert s["iqr_cm"] is not None
 
-    def test_four_cycles_iqr_is_none(self):
+    def test_four_samples_iqr_is_none(self):
         # Exactly 4 samples exercises the exclusive-quartile edge case.
         cycles = [
             _make_cycle(i, distance_cm=v)
