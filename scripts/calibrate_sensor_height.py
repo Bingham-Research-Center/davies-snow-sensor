@@ -27,7 +27,6 @@ import csv
 import json
 import os
 import re
-import stat
 import statistics
 import subprocess
 import sys
@@ -316,6 +315,8 @@ def aggregate(cycles: list[Cycle]) -> dict:
     trimmed = sorted_d[trim : n - trim] if (n - 2 * trim) > 0 else sorted_d
 
     iqr = None
+    # 'exclusive' quartiles can raise on small n (e.g., n=4), so only
+    # compute IQR where quartiles are well-defined for this method.
     if n >= 5:
         q1, _q2, q3 = statistics.quantiles(distances, n=4, method="exclusive")
         iqr = round(q3 - q1, 3)
@@ -376,7 +377,7 @@ def write_yaml_height(config_path: Path, new_value: float) -> Path:
     multiple matches are found.
     """
     text = config_path.read_text(encoding="utf-8")
-    original_mode = stat.S_IMODE(config_path.stat().st_mode)
+    original_mode = config_path.stat().st_mode & 0o777
     matches = list(_HEIGHT_LINE_RE.finditer(text))
     if len(matches) == 0:
         raise RuntimeError(
