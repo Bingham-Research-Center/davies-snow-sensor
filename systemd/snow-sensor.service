@@ -1,6 +1,6 @@
 [Unit]
 Description=Davies snow-sensor reading
-Wants=pigpiod.service
+Requires=pigpiod.service
 After=pigpiod.service
 
 [Service]
