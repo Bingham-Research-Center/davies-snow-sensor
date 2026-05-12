@@ -1,14 +1,21 @@
 station:
   id: "DAVIES-01"
-  sensor_height_cm: 5.08
+  sensor_height_cm: 203.00
   hardware_profile: "52pi-ep0123"
 
 pins:
-  hcsr04_trigger: 5
-  hcsr04_echo: 6
   ds18b20_data: 4
   lora_cs: 7
   lora_reset: 25
+
+sensors:
+  ultrasonic:
+    - id: "east_1"
+      trigger_pin: 5
+      echo_pin: 6
+    - id: "east_2"
+      trigger_pin: 13
+      echo_pin: 19
 
 lora:
   frequency: 915.0
