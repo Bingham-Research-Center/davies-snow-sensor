@@ -45,10 +45,16 @@ data/bingham_reference/*
 !data/bingham_reference/.gitkeep
 data/exports/*
 !data/exports/.gitkeep
+data/calibration/*
+!data/calibration/.gitkeep
 
 # Operational station data (tracked for publications)
 !data/operational/
 !data/operational/*
+
+# YAML backups created by calibrate_sensor_height.py --apply
+config/*.yaml.bak.*
+config/*.yaml.tmp
 
 # Local configuration (may contain sensitive info)
 config/station_*.yaml
