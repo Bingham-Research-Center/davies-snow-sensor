@@ -8,6 +8,7 @@ test_ultrasonic.py does it.
 from __future__ import annotations
 
 import importlib.util
+import os
 import sys
 import types
 from pathlib import Path
@@ -222,6 +223,15 @@ class TestAggregate:
         assert s["max_cm"] == 104.0
         assert s["iqr_cm"] is not None
 
+    def test_four_cycles_iqr_is_none(self):
+        cycles = [
+            _make_cycle(i, distance_cm=v)
+            for i, v in enumerate([100.0, 101.0, 102.0, 103.0])
+        ]
+        s = calibrate.aggregate(cycles)
+        assert s["n_kept"] == 4
+        assert s["iqr_cm"] is None
+
     def test_temperatures_averaged(self):
         cycles = [
             _make_cycle(i, distance_cm=100.0, temperature_c=t)
@@ -389,6 +399,20 @@ class TestWriteYAMLHeight:
         )
         calibrate.write_yaml_height(cfg_path, 100.0)
         assert not (tmp_path / "station.yaml.tmp").exists()
+
+    def test_preserves_file_mode_for_backup_and_rewritten_config(
+        self, tmp_path: Path
+    ):
+        cfg_path = tmp_path / "station.yaml"
+        cfg_path.write_text(
+            "station:\n  sensor_height_cm: 5.08\n", encoding="utf-8"
+        )
+        os.chmod(cfg_path, 0o640)
+
+        backup = calibrate.write_yaml_height(cfg_path, 100.0)
+
+        assert (cfg_path.stat().st_mode & 0o777) == 0o640
+        assert (backup.stat().st_mode & 0o777) == 0o640
 
 
 # ---------- append_history_csv ----------
@@ -666,6 +690,38 @@ class TestMainIntegration:
             ])
         assert rc == calibrate.EXIT_OK
         TempCls.assert_not_called()  # never instantiated
+
+    def test_inter_pulse_delay_zero_cli_override_is_used(
+        self, tmp_path, monkeypatch
+    ):
+        cfg_path = self._write_yaml(tmp_path, height=100.0)
+        monkeypatch.setattr(calibrate, "DEFAULT_OUTPUT_DIR", tmp_path / "calib")
+        monkeypatch.setattr(calibrate.time, "sleep", lambda *_: None)
+
+        ultra_inst, temp_inst = self._patch_sensors(distance_cm=100.0)
+        with patch.object(calibrate, "UltrasonicSensor", return_value=ultra_inst), \
+             patch.object(calibrate, "TemperatureSensor", return_value=temp_inst):
+            rc = calibrate.main([
+                "--config", str(cfg_path),
+                "--cycles", "3", "--cycle-delay", "0",
+                "--samples-per-cycle", "1",
+                "--inter-pulse-delay-ms", "0",
+            ])
+
+        assert rc == calibrate.EXIT_OK
+        kwargs = ultra_inst.read_distance_cm.call_args.kwargs
+        assert kwargs["num_samples"] == 1
+        assert kwargs["inter_pulse_delay_ms"] == 0
+
+    def test_samples_per_cycle_less_than_one_returns_hardware_error(
+        self, tmp_path
+    ):
+        cfg_path = self._write_yaml(tmp_path, height=100.0)
+        rc = calibrate.main([
+            "--config", str(cfg_path),
+            "--samples-per-cycle", "0",
+        ])
+        assert rc == calibrate.EXIT_HARDWARE
 
     def test_writeback_rollback_on_invalid_config(self, tmp_path, monkeypatch):
         cfg_path = self._write_yaml(tmp_path, height=100.0)

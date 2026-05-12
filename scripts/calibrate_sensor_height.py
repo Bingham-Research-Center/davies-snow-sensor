@@ -27,6 +27,7 @@ import csv
 import json
 import os
 import re
+import stat
 import statistics
 import subprocess
 import sys
@@ -315,7 +316,7 @@ def aggregate(cycles: list[Cycle]) -> dict:
     trimmed = sorted_d[trim : n - trim] if (n - 2 * trim) > 0 else sorted_d
 
     iqr = None
-    if n >= 4:
+    if n >= 5:
         q1, _q2, q3 = statistics.quantiles(distances, n=4, method="exclusive")
         iqr = round(q3 - q1, 3)
 
@@ -375,6 +376,7 @@ def write_yaml_height(config_path: Path, new_value: float) -> Path:
     multiple matches are found.
     """
     text = config_path.read_text(encoding="utf-8")
+    original_mode = stat.S_IMODE(config_path.stat().st_mode)
     matches = list(_HEIGHT_LINE_RE.finditer(text))
     if len(matches) == 0:
         raise RuntimeError(
@@ -399,9 +401,11 @@ def write_yaml_height(config_path: Path, new_value: float) -> Path:
     ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     backup = config_path.with_name(f"{config_path.name}.bak.{ts}")
     backup.write_text(text, encoding="utf-8")
+    os.chmod(backup, original_mode)
 
     tmp = config_path.with_name(f"{config_path.name}.tmp")
     tmp.write_text(new_text, encoding="utf-8")
+    os.chmod(tmp, original_mode)
     os.replace(tmp, config_path)
     return backup
 
@@ -446,6 +450,26 @@ def _cycle_to_dict(c: Cycle) -> dict:
     return asdict(c)
 
 
+def _effective_samples_per_cycle(
+    args: argparse.Namespace, cfg: StationConfig
+) -> int:
+    return (
+        cfg.qc.num_samples
+        if args.samples_per_cycle is None
+        else args.samples_per_cycle
+    )
+
+
+def _effective_inter_pulse_delay_ms(
+    args: argparse.Namespace, cfg: StationConfig
+) -> int:
+    return (
+        cfg.qc.inter_pulse_delay_ms
+        if args.inter_pulse_delay_ms is None
+        else args.inter_pulse_delay_ms
+    )
+
+
 def write_logs(
     args: argparse.Namespace,
     cfg: StationConfig,
@@ -480,11 +504,9 @@ def write_logs(
         "applied": applied,
         "args": {
             "cycles": args.cycles,
-            "samples_per_cycle": args.samples_per_cycle or cfg.qc.num_samples,
+            "samples_per_cycle": _effective_samples_per_cycle(args, cfg),
             "cycle_delay_s": args.cycle_delay,
-            "inter_pulse_delay_ms": (
-                args.inter_pulse_delay_ms or cfg.qc.inter_pulse_delay_ms
-            ),
+            "inter_pulse_delay_ms": _effective_inter_pulse_delay_ms(args, cfg),
             "mad_k": args.mad_k,
             "no_temperature": args.no_temperature,
             "force": args.force,
@@ -615,6 +637,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.cycles < 1:
         print("ERROR: --cycles must be >= 1", file=sys.stderr)
         return EXIT_HARDWARE
+    if args.samples_per_cycle is not None and args.samples_per_cycle < 1:
+        print("ERROR: --samples-per-cycle must be >= 1", file=sys.stderr)
+        return EXIT_HARDWARE
 
     config_path = Path(args.config).resolve()
 
@@ -630,10 +655,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"ERROR: {e}", file=sys.stderr)
         return EXIT_HARDWARE
 
-    samples = args.samples_per_cycle or cfg.qc.num_samples
-    inter_pulse_delay_ms = (
-        args.inter_pulse_delay_ms or cfg.qc.inter_pulse_delay_ms
-    )
+    samples = _effective_samples_per_cycle(args, cfg)
+    inter_pulse_delay_ms = _effective_inter_pulse_delay_ms(args, cfg)
 
     print(
         f"Calibrating sensor '{usc.id}' (trig={usc.trigger_pin}, "
