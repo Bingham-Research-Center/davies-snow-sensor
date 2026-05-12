@@ -377,6 +377,7 @@ def write_yaml_height(config_path: Path, new_value: float) -> Path:
     multiple matches are found.
     """
     text = config_path.read_text(encoding="utf-8")
+    # Keep only rwx permission bits when restoring modes on rewritten files.
     original_mode = config_path.stat().st_mode & 0o777
     matches = list(_HEIGHT_LINE_RE.finditer(text))
     if len(matches) == 0:
