@@ -41,8 +41,16 @@ pins:
 #       echo_pin: 19
 
 lora:
-  frequency: 915.0          # MHz; must be in an ISM band (169/433/868/915)
-  tx_power: 23              # dBm, 5-23
+  # CRITICAL: every field below MUST match the peer's lora block on the base
+  # station. SF/BW/CR/preamble mismatch causes 100% silent packet loss.
+  # The defaults below are the "max range" preset (SF12/BW125/CR4-8).
+  frequency: 915.0              # MHz; must be in an ISM band (169/433/868/915)
+  tx_power: 23                  # dBm, 5-23
+  spreading_factor: 12          # 6-12; higher = longer range, longer time-on-air
+  signal_bandwidth_hz: 125000   # 7800,10400,15600,20800,31250,41700,62500,125000,250000,500000
+  coding_rate: 8                # 5..8 (== 4/5..4/8 FEC; higher = stronger error correction)
+  preamble_length: 12           # symbols; longer helps RX lock at low SNR
+  ack_timeout_seconds: 20.0     # ~9s ToA + ~1.5s ACK at SF12/BW125; sender-only
 
 storage:
   csv_path: "/home/admin/data/snow_data.csv"

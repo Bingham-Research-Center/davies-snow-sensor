@@ -13,8 +13,15 @@ pins:
   lora_reset: 25                 # RFM95W reset
 
 lora:
+  # CRITICAL: every field below MUST match the senders' lora block. SF/BW/CR/
+  # preamble mismatch causes 100% silent packet loss at the preamble detector.
   frequency: 915.0               # MHz — must match the senders' frequency
   tx_power: 23                   # dBm, used for ACK transmissions
+  spreading_factor: 12           # 6-12; must match senders
+  signal_bandwidth_hz: 125000    # must match senders
+  coding_rate: 8                 # 5..8 (== 4/5..4/8); must match senders
+  preamble_length: 12            # symbols; must match senders
+  ack_timeout_seconds: 20.0      # sender-only field; ignored on receiver
 
 storage:
   data_dir: "/home/admin/data"   # per-station folders are created here

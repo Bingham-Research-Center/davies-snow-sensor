@@ -20,6 +20,16 @@ _ISM_BANDS = (
     (902.0, 928.0),
 )
 
+# LoRa modulation validation. Bandwidth bins match adafruit_rfm9x.bw_bins
+# exactly (note 31250 not 31200); 500000 is handled by the library's
+# fall-through branch.
+_VALID_SPREADING_FACTORS = frozenset({6, 7, 8, 9, 10, 11, 12})
+_VALID_CODING_RATES = frozenset({5, 6, 7, 8})
+_VALID_BANDWIDTHS_HZ = frozenset(
+    {7800, 10400, 15600, 20800, 31250, 41700, 62500, 125000, 250000, 500000}
+)
+_MAX_PREAMBLE_LENGTH = 65535
+
 # Hardware profiles recognized by the config loader. Profiles gate
 # board-specific pin reservations (see _check_sensor_pin_reserved).
 _VALID_HARDWARE_PROFILES = frozenset({"52pi-ep0123"})
@@ -51,6 +61,11 @@ class PinsConfig:
 class LoraConfig:
     frequency: float = 915.0
     tx_power: int = 23
+    spreading_factor: int = 12
+    signal_bandwidth_hz: int = 125000
+    coding_rate: int = 8
+    preamble_length: int = 12
+    ack_timeout_seconds: float = 20.0
 
 
 @dataclass(frozen=True)
@@ -261,26 +276,89 @@ def _parse_lora(raw: dict | None) -> LoraConfig:
         return LoraConfig()
     if not isinstance(raw, dict):
         raise ConfigError("'lora' must be a mapping")
-    freq = raw.get("frequency", 915.0)
-    if not isinstance(freq, (int, float)):
+    defaults = LoraConfig()
+
+    freq = raw.get("frequency", defaults.frequency)
+    if not isinstance(freq, (int, float)) or isinstance(freq, bool):
         raise ConfigError(
             f"Field 'frequency' in 'lora' must be a number, got {type(freq).__name__}"
-        )
-    tx = raw.get("tx_power", 23)
-    if not isinstance(tx, int):
-        raise ConfigError(
-            f"Field 'tx_power' in 'lora' must be an integer, got {type(tx).__name__}"
         )
     freq = float(freq)
     if not any(lo <= freq <= hi for lo, hi in _ISM_BANDS):
         raise ConfigError(
             f"Frequency {freq} MHz is not in a valid ISM band"
         )
+
+    tx = raw.get("tx_power", defaults.tx_power)
+    if not isinstance(tx, int) or isinstance(tx, bool):
+        raise ConfigError(
+            f"Field 'tx_power' in 'lora' must be an integer, got {type(tx).__name__}"
+        )
     if tx < 5 or tx > 23:
         raise ConfigError(
             f"TX power {tx} dBm is out of range (must be 5-23)"
         )
-    return LoraConfig(frequency=freq, tx_power=tx)
+
+    sf = raw.get("spreading_factor", defaults.spreading_factor)
+    if not isinstance(sf, int) or isinstance(sf, bool):
+        raise ConfigError(
+            f"Field 'spreading_factor' in 'lora' must be an integer, got {type(sf).__name__}"
+        )
+    if sf not in _VALID_SPREADING_FACTORS:
+        raise ConfigError(
+            f"spreading_factor {sf} is invalid (must be one of {sorted(_VALID_SPREADING_FACTORS)})"
+        )
+
+    bw = raw.get("signal_bandwidth_hz", defaults.signal_bandwidth_hz)
+    if not isinstance(bw, int) or isinstance(bw, bool):
+        raise ConfigError(
+            f"Field 'signal_bandwidth_hz' in 'lora' must be an integer, got {type(bw).__name__}"
+        )
+    if bw not in _VALID_BANDWIDTHS_HZ:
+        raise ConfigError(
+            f"signal_bandwidth_hz {bw} is invalid (must be one of {sorted(_VALID_BANDWIDTHS_HZ)})"
+        )
+
+    cr = raw.get("coding_rate", defaults.coding_rate)
+    if not isinstance(cr, int) or isinstance(cr, bool):
+        raise ConfigError(
+            f"Field 'coding_rate' in 'lora' must be an integer, got {type(cr).__name__}"
+        )
+    if cr not in _VALID_CODING_RATES:
+        raise ConfigError(
+            f"coding_rate {cr} is invalid (must be 5, 6, 7, or 8 — representing 4/5..4/8)"
+        )
+
+    preamble = raw.get("preamble_length", defaults.preamble_length)
+    if not isinstance(preamble, int) or isinstance(preamble, bool):
+        raise ConfigError(
+            f"Field 'preamble_length' in 'lora' must be an integer, got {type(preamble).__name__}"
+        )
+    if preamble < 1 or preamble > _MAX_PREAMBLE_LENGTH:
+        raise ConfigError(
+            f"preamble_length {preamble} is out of range (must be 1..{_MAX_PREAMBLE_LENGTH})"
+        )
+
+    ack = raw.get("ack_timeout_seconds", defaults.ack_timeout_seconds)
+    if not isinstance(ack, (int, float)) or isinstance(ack, bool):
+        raise ConfigError(
+            f"Field 'ack_timeout_seconds' in 'lora' must be a number, got {type(ack).__name__}"
+        )
+    ack = float(ack)
+    if ack <= 0:
+        raise ConfigError(
+            f"ack_timeout_seconds must be > 0, got {ack}"
+        )
+
+    return LoraConfig(
+        frequency=freq,
+        tx_power=tx,
+        spreading_factor=sf,
+        signal_bandwidth_hz=bw,
+        coding_rate=cr,
+        preamble_length=preamble,
+        ack_timeout_seconds=ack,
+    )
 
 
 def _parse_storage(raw: dict | None) -> StorageConfig:

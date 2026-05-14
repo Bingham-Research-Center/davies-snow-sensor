@@ -112,8 +112,16 @@ async def receive_loop(
 
 
 async def run(config: ReceiverConfig) -> int:
-    log.info("base-station starting: station_id=%s, listening on %.1f MHz",
-             config.station_id, config.lora.frequency)
+    log.info(
+        "base-station starting: station_id=%s, listening on %.1f MHz "
+        "SF%d BW%dkHz CR4/%d preamble=%d",
+        config.station_id,
+        config.lora.frequency,
+        config.lora.spreading_factor,
+        config.lora.signal_bandwidth_hz // 1000,
+        config.lora.coding_rate,
+        config.lora.preamble_length,
+    )
     log.info("known senders: %s", ", ".join(s.id for s in config.stations))
 
     radio = LoRaReceiver(
@@ -121,6 +129,10 @@ async def run(config: ReceiverConfig) -> int:
         reset_pin=config.pins.lora_reset,
         frequency_mhz=config.lora.frequency,
         tx_power=config.lora.tx_power,
+        spreading_factor=config.lora.spreading_factor,
+        signal_bandwidth_hz=config.lora.signal_bandwidth_hz,
+        coding_rate=config.lora.coding_rate,
+        preamble_length=config.lora.preamble_length,
     )
     if not radio.initialize():
         log.error("radio init failed: %s", radio.get_last_error_reason())

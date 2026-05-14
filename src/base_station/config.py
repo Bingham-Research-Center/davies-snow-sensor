@@ -19,6 +19,16 @@ _ISM_BANDS = (
     (902.0, 928.0),
 )
 
+# LoRa modulation validation. Must match the constants used by the sensor-side
+# parser in src/sensor/config.py — TX and RX must agree on SF/BW/CR/preamble
+# or every packet drops silently at the preamble detector.
+_VALID_SPREADING_FACTORS = frozenset({6, 7, 8, 9, 10, 11, 12})
+_VALID_CODING_RATES = frozenset({5, 6, 7, 8})
+_VALID_BANDWIDTHS_HZ = frozenset(
+    {7800, 10400, 15600, 20800, 31250, 41700, 62500, 125000, 250000, 500000}
+)
+_MAX_PREAMBLE_LENGTH = 65535
+
 
 @dataclass(frozen=True)
 class PinsConfig:
@@ -30,6 +40,12 @@ class PinsConfig:
 class LoraConfig:
     frequency: float = 915.0
     tx_power: int = 23
+    spreading_factor: int = 12
+    signal_bandwidth_hz: int = 125000
+    coding_rate: int = 8
+    preamble_length: int = 12
+    # Sender-only; kept here so a single YAML shape works on both Pis.
+    ack_timeout_seconds: float = 20.0
 
 
 @dataclass(frozen=True)
@@ -102,12 +118,70 @@ def _parse_lora(raw: dict | None) -> LoraConfig:
         return LoraConfig()
     if not isinstance(raw, dict):
         raise ConfigError("Section 'lora' must be a mapping")
-    freq = float(raw.get("frequency", 915.0))
-    tx_power = raw.get("tx_power", 23)
+    defaults = LoraConfig()
+
+    freq = raw.get("frequency", defaults.frequency)
+    if not isinstance(freq, (int, float)) or isinstance(freq, bool):
+        raise ConfigError("Field 'frequency' in 'lora' must be a number")
+    freq = float(freq)
+    _validate_frequency(freq)
+
+    tx_power = raw.get("tx_power", defaults.tx_power)
     if not isinstance(tx_power, int) or isinstance(tx_power, bool):
         raise ConfigError("Field 'tx_power' in 'lora' must be an integer")
-    _validate_frequency(freq)
-    return LoraConfig(frequency=freq, tx_power=tx_power)
+    if tx_power < 5 or tx_power > 23:
+        raise ConfigError(
+            f"TX power {tx_power} dBm is out of range (must be 5-23)"
+        )
+
+    sf = raw.get("spreading_factor", defaults.spreading_factor)
+    if not isinstance(sf, int) or isinstance(sf, bool):
+        raise ConfigError("Field 'spreading_factor' in 'lora' must be an integer")
+    if sf not in _VALID_SPREADING_FACTORS:
+        raise ConfigError(
+            f"spreading_factor {sf} is invalid (must be one of {sorted(_VALID_SPREADING_FACTORS)})"
+        )
+
+    bw = raw.get("signal_bandwidth_hz", defaults.signal_bandwidth_hz)
+    if not isinstance(bw, int) or isinstance(bw, bool):
+        raise ConfigError("Field 'signal_bandwidth_hz' in 'lora' must be an integer")
+    if bw not in _VALID_BANDWIDTHS_HZ:
+        raise ConfigError(
+            f"signal_bandwidth_hz {bw} is invalid (must be one of {sorted(_VALID_BANDWIDTHS_HZ)})"
+        )
+
+    cr = raw.get("coding_rate", defaults.coding_rate)
+    if not isinstance(cr, int) or isinstance(cr, bool):
+        raise ConfigError("Field 'coding_rate' in 'lora' must be an integer")
+    if cr not in _VALID_CODING_RATES:
+        raise ConfigError(
+            f"coding_rate {cr} is invalid (must be 5, 6, 7, or 8 — representing 4/5..4/8)"
+        )
+
+    preamble = raw.get("preamble_length", defaults.preamble_length)
+    if not isinstance(preamble, int) or isinstance(preamble, bool):
+        raise ConfigError("Field 'preamble_length' in 'lora' must be an integer")
+    if preamble < 1 or preamble > _MAX_PREAMBLE_LENGTH:
+        raise ConfigError(
+            f"preamble_length {preamble} is out of range (must be 1..{_MAX_PREAMBLE_LENGTH})"
+        )
+
+    ack = raw.get("ack_timeout_seconds", defaults.ack_timeout_seconds)
+    if not isinstance(ack, (int, float)) or isinstance(ack, bool):
+        raise ConfigError("Field 'ack_timeout_seconds' in 'lora' must be a number")
+    ack = float(ack)
+    if ack <= 0:
+        raise ConfigError(f"ack_timeout_seconds must be > 0, got {ack}")
+
+    return LoraConfig(
+        frequency=freq,
+        tx_power=tx_power,
+        spreading_factor=sf,
+        signal_bandwidth_hz=bw,
+        coding_rate=cr,
+        preamble_length=preamble,
+        ack_timeout_seconds=ack,
+    )
 
 
 def _parse_storage(raw: dict | None) -> StorageConfig:

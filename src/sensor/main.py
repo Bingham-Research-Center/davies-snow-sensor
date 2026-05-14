@@ -68,6 +68,11 @@ class SensorStation:
             reset_pin=config.pins.lora_reset,
             frequency_mhz=config.lora.frequency,
             tx_power=config.lora.tx_power,
+            spreading_factor=config.lora.spreading_factor,
+            signal_bandwidth_hz=config.lora.signal_bandwidth_hz,
+            coding_rate=config.lora.coding_rate,
+            preamble_length=config.lora.preamble_length,
+            ack_timeout_seconds=config.lora.ack_timeout_seconds,
         )
         self._storage = Storage(config.storage.csv_path, fsync=config.storage.fsync)
         self._sensor_storage = SensorStorage(

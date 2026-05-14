@@ -280,6 +280,99 @@ class TestLoadConfigValueValidation:
         assert cfg.timing.cycle_interval_minutes == 1
 
 
+class TestLoraModulationConfig:
+    def test_defaults_are_long_range_preset(self, tmp_path):
+        minimal = {
+            "station": {"id": "X", "sensor_height_cm": 100},
+            "pins": {
+                "hcsr04_trigger": 1, "hcsr04_echo": 2,
+                "ds18b20_data": 3, "lora_cs": 4, "lora_reset": 5,
+            },
+            "storage": {"csv_path": "/tmp/test.csv"},
+        }
+        cfg = load_config(_write_yaml(tmp_path, minimal))
+        assert cfg.lora.spreading_factor == 12
+        assert cfg.lora.signal_bandwidth_hz == 125000
+        assert cfg.lora.coding_rate == 8
+        assert cfg.lora.preamble_length == 12
+        assert cfg.lora.ack_timeout_seconds == 20.0
+
+    @pytest.mark.parametrize("sf", [6, 7, 8, 9, 10, 11, 12])
+    def test_spreading_factor_accepted(self, tmp_path, sf):
+        data = {**VALID_CONFIG, "lora": {"spreading_factor": sf}}
+        cfg = load_config(_write_yaml(tmp_path, data))
+        assert cfg.lora.spreading_factor == sf
+
+    @pytest.mark.parametrize("sf", [0, 5, 13, 100])
+    def test_spreading_factor_out_of_range(self, tmp_path, sf):
+        data = {**VALID_CONFIG, "lora": {"spreading_factor": sf}}
+        with pytest.raises(ConfigError, match="spreading_factor"):
+            load_config(_write_yaml(tmp_path, data))
+
+    def test_spreading_factor_bool_rejected(self, tmp_path):
+        data = {**VALID_CONFIG, "lora": {"spreading_factor": True}}
+        with pytest.raises(ConfigError, match="spreading_factor"):
+            load_config(_write_yaml(tmp_path, data))
+
+    @pytest.mark.parametrize("bw", [7800, 62500, 125000, 250000, 500000])
+    def test_bandwidth_accepted(self, tmp_path, bw):
+        data = {**VALID_CONFIG, "lora": {"signal_bandwidth_hz": bw}}
+        cfg = load_config(_write_yaml(tmp_path, data))
+        assert cfg.lora.signal_bandwidth_hz == bw
+
+    @pytest.mark.parametrize("bw", [100000, 31200, 300000, 0, -125000])
+    def test_bandwidth_invalid(self, tmp_path, bw):
+        data = {**VALID_CONFIG, "lora": {"signal_bandwidth_hz": bw}}
+        with pytest.raises(ConfigError, match="signal_bandwidth_hz"):
+            load_config(_write_yaml(tmp_path, data))
+
+    @pytest.mark.parametrize("cr", [5, 6, 7, 8])
+    def test_coding_rate_accepted(self, tmp_path, cr):
+        data = {**VALID_CONFIG, "lora": {"coding_rate": cr}}
+        cfg = load_config(_write_yaml(tmp_path, data))
+        assert cfg.lora.coding_rate == cr
+
+    @pytest.mark.parametrize("cr", [4, 9, 0, -1])
+    def test_coding_rate_invalid(self, tmp_path, cr):
+        data = {**VALID_CONFIG, "lora": {"coding_rate": cr}}
+        with pytest.raises(ConfigError, match="coding_rate"):
+            load_config(_write_yaml(tmp_path, data))
+
+    @pytest.mark.parametrize("preamble", [1, 8, 12, 65535])
+    def test_preamble_length_accepted(self, tmp_path, preamble):
+        data = {**VALID_CONFIG, "lora": {"preamble_length": preamble}}
+        cfg = load_config(_write_yaml(tmp_path, data))
+        assert cfg.lora.preamble_length == preamble
+
+    @pytest.mark.parametrize("preamble", [0, -1, 65536])
+    def test_preamble_length_invalid(self, tmp_path, preamble):
+        data = {**VALID_CONFIG, "lora": {"preamble_length": preamble}}
+        with pytest.raises(ConfigError, match="preamble_length"):
+            load_config(_write_yaml(tmp_path, data))
+
+    def test_ack_timeout_accepts_int(self, tmp_path):
+        data = {**VALID_CONFIG, "lora": {"ack_timeout_seconds": 15}}
+        cfg = load_config(_write_yaml(tmp_path, data))
+        assert cfg.lora.ack_timeout_seconds == 15.0
+        assert isinstance(cfg.lora.ack_timeout_seconds, float)
+
+    def test_ack_timeout_accepts_float(self, tmp_path):
+        data = {**VALID_CONFIG, "lora": {"ack_timeout_seconds": 0.5}}
+        cfg = load_config(_write_yaml(tmp_path, data))
+        assert cfg.lora.ack_timeout_seconds == 0.5
+
+    @pytest.mark.parametrize("ack", [0, -1, -0.5])
+    def test_ack_timeout_non_positive_rejected(self, tmp_path, ack):
+        data = {**VALID_CONFIG, "lora": {"ack_timeout_seconds": ack}}
+        with pytest.raises(ConfigError, match="ack_timeout_seconds"):
+            load_config(_write_yaml(tmp_path, data))
+
+    def test_ack_timeout_bool_rejected(self, tmp_path):
+        data = {**VALID_CONFIG, "lora": {"ack_timeout_seconds": True}}
+        with pytest.raises(ConfigError, match="ack_timeout_seconds"):
+            load_config(_write_yaml(tmp_path, data))
+
+
 class TestQCConfig:
     def test_defaults_when_absent(self, tmp_path):
         minimal = {
