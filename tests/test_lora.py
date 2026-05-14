@@ -83,6 +83,66 @@ class TestInitialize:
         assert calls[1] == call(_board.D25)
 
 
+class TestModulationConfig:
+    """Verify SF/BW/CR/preamble/LDRO get set on the radio in initialize()."""
+
+    def _initialize_with_mock(self, tx: LoRaTransmitter) -> MagicMock:
+        mock_radio = MagicMock()
+        with patch("adafruit_rfm9x.RFM9x", return_value=mock_radio):
+            assert tx.initialize() is True
+        return mock_radio
+
+    def test_default_long_range_preset_applied(self):
+        """Default constructor yields SF12/BW125/CR4-8/preamble12 with LDRO on."""
+        tx = LoRaTransmitter(cs_pin=7, reset_pin=25)
+        radio = self._initialize_with_mock(tx)
+        assert radio.spreading_factor == 12
+        assert radio.signal_bandwidth == 125000
+        assert radio.coding_rate == 8
+        assert radio.preamble_length == 12
+        assert radio.low_datarate_optimize is True
+
+    def test_kwargs_override_defaults(self):
+        tx = LoRaTransmitter(
+            cs_pin=7, reset_pin=25,
+            spreading_factor=9,
+            signal_bandwidth_hz=250000,
+            coding_rate=5,
+            preamble_length=8,
+        )
+        radio = self._initialize_with_mock(tx)
+        assert radio.spreading_factor == 9
+        assert radio.signal_bandwidth == 250000
+        assert radio.coding_rate == 5
+        assert radio.preamble_length == 8
+        # symbol_time = 512/250000 = 2.05 ms → LDRO off
+        assert radio.low_datarate_optimize is False
+
+    @pytest.mark.parametrize("sf,bw,expected_ldro", [
+        (12, 125000, True),    # 32.77 ms — well past threshold
+        (11, 125000, True),    # 16.38 ms — right at threshold
+        (10, 125000, False),   # 8.19 ms
+        (12, 250000, True),    # 16.38 ms — right at threshold
+        (12, 500000, False),   # 8.19 ms
+        (7, 125000, False),    # 1.02 ms
+    ])
+    def test_ldro_threshold(self, sf, bw, expected_ldro):
+        tx = LoRaTransmitter(
+            cs_pin=7, reset_pin=25,
+            spreading_factor=sf, signal_bandwidth_hz=bw,
+        )
+        radio = self._initialize_with_mock(tx)
+        assert radio.low_datarate_optimize is expected_ldro
+
+    def test_default_ack_timeout_is_20s(self):
+        tx = LoRaTransmitter(cs_pin=7, reset_pin=25)
+        assert tx._ack_timeout_seconds == 20.0
+
+    def test_ack_timeout_kwarg_threaded(self):
+        tx = LoRaTransmitter(cs_pin=7, reset_pin=25, ack_timeout_seconds=5.0)
+        assert tx._ack_timeout_seconds == 5.0
+
+
 class TestTransmitWithAck:
     def _make_initialized_tx(self, mock_rfm):
         """Return a LoRaTransmitter with a mocked radio."""

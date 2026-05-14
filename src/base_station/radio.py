@@ -22,11 +22,19 @@ class LoRaReceiver:
         reset_pin: int,
         frequency_mhz: float = 915.0,
         tx_power: int = 23,
+        spreading_factor: int = 12,
+        signal_bandwidth_hz: int = 125000,
+        coding_rate: int = 8,
+        preamble_length: int = 12,
     ) -> None:
         self._cs_pin = cs_pin
         self._reset_pin = reset_pin
         self._frequency_mhz = frequency_mhz
         self._tx_power = tx_power
+        self._spreading_factor = spreading_factor
+        self._signal_bandwidth_hz = signal_bandwidth_hz
+        self._coding_rate = coding_rate
+        self._preamble_length = preamble_length
 
         self._spi = None
         self._cs = None
@@ -60,6 +68,16 @@ class LoRaReceiver:
                 self._reset,
                 self._frequency_mhz,
                 high_power=True,
+            )
+            # Order matches sender (src/sensor/lora.py): BW writes the same
+            # register byte as CR, so set BW first then CR. SF/BW/CR/preamble
+            # MUST match the sender exactly or no packet decodes.
+            self._rfm9x.signal_bandwidth = self._signal_bandwidth_hz
+            self._rfm9x.coding_rate = self._coding_rate
+            self._rfm9x.spreading_factor = self._spreading_factor
+            self._rfm9x.preamble_length = self._preamble_length
+            self._rfm9x.low_datarate_optimize = (
+                (1 << self._spreading_factor) / self._signal_bandwidth_hz >= 0.016
             )
             self._rfm9x.tx_power = self._tx_power
             self._rfm9x.enable_crc = True

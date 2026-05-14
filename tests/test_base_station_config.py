@@ -166,6 +166,82 @@ metrics:
             load_config(_write(tmp_path, body))
 
 
+class TestLoraModulationConfig:
+    def test_defaults_are_long_range_preset(self, tmp_path):
+        cfg = load_config(_write(tmp_path, _VALID_MINIMAL))
+        assert cfg.lora.spreading_factor == 12
+        assert cfg.lora.signal_bandwidth_hz == 125000
+        assert cfg.lora.coding_rate == 8
+        assert cfg.lora.preamble_length == 12
+        assert cfg.lora.ack_timeout_seconds == 20.0
+
+    def test_full_modulation_block(self, tmp_path):
+        body = """\
+station:
+  station_id: "BASE-01"
+pins:
+  lora_cs: 7
+  lora_reset: 25
+lora:
+  frequency: 915.0
+  tx_power: 17
+  spreading_factor: 9
+  signal_bandwidth_hz: 250000
+  coding_rate: 5
+  preamble_length: 8
+  ack_timeout_seconds: 5.0
+stations:
+  - id: "DAVIES-01"
+"""
+        cfg = load_config(_write(tmp_path, body))
+        assert cfg.lora.spreading_factor == 9
+        assert cfg.lora.signal_bandwidth_hz == 250000
+        assert cfg.lora.coding_rate == 5
+        assert cfg.lora.preamble_length == 8
+        assert cfg.lora.ack_timeout_seconds == 5.0
+
+    @pytest.mark.parametrize("field,bad,match", [
+        ("spreading_factor", 5, "spreading_factor"),
+        ("spreading_factor", 13, "spreading_factor"),
+        ("signal_bandwidth_hz", 100000, "signal_bandwidth_hz"),
+        ("coding_rate", 4, "coding_rate"),
+        ("coding_rate", 9, "coding_rate"),
+        ("preamble_length", 0, "preamble_length"),
+        ("preamble_length", 65536, "preamble_length"),
+        ("ack_timeout_seconds", 0, "ack_timeout_seconds"),
+        ("ack_timeout_seconds", -1, "ack_timeout_seconds"),
+    ])
+    def test_modulation_validation_rejects_bad(self, tmp_path, field, bad, match):
+        body = f"""\
+station:
+  station_id: "BASE-01"
+pins:
+  lora_cs: 7
+  lora_reset: 25
+lora:
+  {field}: {bad}
+stations:
+  - id: "DAVIES-01"
+"""
+        with pytest.raises(ConfigError, match=match):
+            load_config(_write(tmp_path, body))
+
+    def test_tx_power_out_of_range(self, tmp_path):
+        body = """\
+station:
+  station_id: "BASE-01"
+pins:
+  lora_cs: 7
+  lora_reset: 25
+lora:
+  tx_power: 4
+stations:
+  - id: "DAVIES-01"
+"""
+        with pytest.raises(ConfigError, match="TX power"):
+            load_config(_write(tmp_path, body))
+
+
 class TestExampleFile:
     def test_example_loads(self):
         # The shipped receiver.example.yaml should always be a valid config
