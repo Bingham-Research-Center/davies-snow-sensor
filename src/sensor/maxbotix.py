@@ -5,7 +5,15 @@ from __future__ import annotations
 import statistics
 import time
 
-from src.sensor.ultrasonic import SensorResult, _median_absolute_deviation
+from src.sensor.ultrasonic import SensorResult
+
+
+def _median_absolute_deviation(values: list[float]) -> float:
+    """Return the median absolute deviation for the given values."""
+    if not values:
+        return 0.0
+    median = statistics.median(values)
+    return statistics.median(abs(value - median) for value in values)
 
 
 def parse_frame(frame: bytes) -> float | None:
