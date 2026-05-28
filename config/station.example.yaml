@@ -33,6 +33,8 @@ pins:
 # When `sensors.ultrasonic` is present, pins.hcsr04_* are optional.
 # Add `sensors.maxbotix` for MB7374 (HRXL-MaxSonar-WR) units wired through a
 # USB-to-TTL adapter (e.g. CP2102) — they appear as /dev/ttyUSB*.
+# JSN-SR04T waterproof probes in Mode 1 are HC-SR04-compatible; list them
+# under `sensors.ultrasonic` with their own trigger/echo pins.
 # sensors:
 #   ultrasonic:
 #     - id: "front"
@@ -41,6 +43,9 @@ pins:
 #     - id: "rear"
 #       trigger_pin: 13
 #       echo_pin: 19
+#     - id: "mast_jsn"        # JSN-SR04T waterproof, mode-select left open (Mode 1)
+#       trigger_pin: 20
+#       echo_pin: 21
 #   maxbotix:
 #     - id: "mast_mb"
 #       serial_port: "/dev/ttyUSB0"

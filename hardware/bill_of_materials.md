@@ -16,6 +16,7 @@ This document lists the components required to build one low-cost snow depth sen
 | Ultrasonic Sensor (weather-resistant) | MaxBotix MB7374-10 (HRXL-MaxSonar-WRST7), TTL serial, 5m cable | 0–1 per station | $124.95 | MaxBotix | 30–500 cm range, 1 mm resolution, self-compensates for temperature. Declared in `sensors.maxbotix`. |
 | MB7374 Mounting Bracket | MaxBotix MB7950-00 (3/4" NPS WR) | 1 per MB7374 | $4.99 | MaxBotix | Weather-resistant mount for the MB7374 housing. |
 | Ultrasonic Sensor (waterproof, low-cost) | DFRobot A02YYUW | 0–1 per station | ~$30 | DFRobot / Amazon | 3–450 cm range, 1 mm resolution, 4-byte serial frame. Declared in `sensors.a02yyuw`. |
+| Ultrasonic Sensor (waterproof probe) | JSN-SR04T (mode-select R19 left open → Mode 1) | 0+ per station | ~$15 | Amazon | 25–450 cm range, waterproof transducer on a pigtail. HC-SR04-compatible pulse-echo in Mode 1; declared as a `sensors.ultrasonic` entry. ECHO needs the same 1k/2k divider. |
 | USB-to-TTL Adapter | HiLetgo CP2102 (USB 2.0 to TTL serial) | 1 per serial sensor | $7.02 | HiLetgo / Amazon | Wires the MB7374's USB-A-terminated TTL cable to a Pi USB port; appears as `/dev/ttyUSB*`. |
 | Temperature Sensor | DS18B20 Waterproof Probe | 1 | ~$3 | Various | For speed-of-sound compensation |
 | Antenna | 915MHz 5.8dBi Fiberglass w/ Cable | 1 | ~$25 | Amazon | Waterproof, 20ft cable |
