@@ -102,9 +102,17 @@ class MaxbotixSensorConfig:
 
 
 @dataclass(frozen=True)
+class A02yyuwSensorConfig:
+    id: str
+    serial_port: str
+    baud_rate: int = 9600
+
+
+@dataclass(frozen=True)
 class SensorsConfig:
     ultrasonic: list[UltrasonicSensorConfig]
     maxbotix: list[MaxbotixSensorConfig] = field(default_factory=list)
+    a02yyuw: list[A02yyuwSensorConfig] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -263,7 +271,8 @@ def _parse_sensors(
         _check_pin_collisions({**base_pins, **all_pins})
 
         maxbotix = _parse_maxbotix_sensors(raw.get("maxbotix"), seen_ids)
-        return SensorsConfig(ultrasonic=ultrasonic, maxbotix=maxbotix)
+        a02yyuw = _parse_a02yyuw_sensors(raw.get("a02yyuw"), seen_ids)
+        return SensorsConfig(ultrasonic=ultrasonic, maxbotix=maxbotix, a02yyuw=a02yyuw)
 
     # Legacy: auto-convert from pins config
     if pins.hcsr04_trigger is None or pins.hcsr04_echo is None:
@@ -326,6 +335,55 @@ def _parse_maxbotix_sensors(
             )
 
         result.append(MaxbotixSensorConfig(id=sid, serial_port=serial_port, baud_rate=baud_rate))
+
+    return result
+
+
+def _parse_a02yyuw_sensors(
+    raw: object,
+    seen_ids: set[str],
+) -> list[A02yyuwSensorConfig]:
+    """Parse the optional `sensors.a02yyuw` list. Empty/missing means none configured."""
+    if raw is None:
+        return []
+    if not isinstance(raw, list):
+        raise ConfigError("'sensors.a02yyuw' must be a list")
+
+    result: list[A02yyuwSensorConfig] = []
+    for i, entry in enumerate(raw):
+        section = f"sensors.a02yyuw[{i}]"
+        if not isinstance(entry, dict):
+            raise ConfigError(f"'{section}' must be a mapping")
+
+        sid = _require(entry, "id", section)
+        if not isinstance(sid, str):
+            raise ConfigError(f"Field 'id' in '{section}' must be a string")
+        if sid in seen_ids:
+            raise ConfigError(f"Duplicate sensor id '{sid}'")
+        seen_ids.add(sid)
+
+        serial_port = _require(entry, "serial_port", section)
+        if not isinstance(serial_port, str):
+            raise ConfigError(
+                f"Field 'serial_port' in '{section}' must be a string"
+            )
+        if not serial_port.startswith("/dev/"):
+            raise ConfigError(
+                f"Field 'serial_port' in '{section}' must start with '/dev/' "
+                f"(got '{serial_port}')"
+            )
+
+        baud_rate = entry.get("baud_rate", 9600)
+        if not isinstance(baud_rate, int) or isinstance(baud_rate, bool):
+            raise ConfigError(
+                f"Field 'baud_rate' in '{section}' must be an integer"
+            )
+        if baud_rate <= 0:
+            raise ConfigError(
+                f"Field 'baud_rate' in '{section}' must be positive"
+            )
+
+        result.append(A02yyuwSensorConfig(id=sid, serial_port=serial_port, baud_rate=baud_rate))
 
     return result
 

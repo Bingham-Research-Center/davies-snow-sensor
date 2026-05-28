@@ -14,6 +14,7 @@ external dependencies, configuration, and error codes.
 | `temperature.py` | DS18B20 temperature readings | `w1thermsensor` | DS18B20 via 1-Wire |
 | `ultrasonic.py` | HC-SR04 distance readings | `gpiozero` (pigpio backend) | HC-SR04 via GPIO |
 | `maxbotix.py` | MB7374 (HRXL-MaxSonar-WR) distance readings | `pyserial` | MB7374 via TTL serial / USB-TTL adapter |
+| `a02yyuw.py` | DFRobot A02YYUW waterproof ultrasonic readings | `pyserial` | A02YYUW via TTL serial / USB-TTL adapter |
 | `lora.py` | LoRa radio DATA/ACK protocol | `adafruit-circuitpython-rfm9x`, Blinka | RFM95W via SPI |
 | `power_budget.py` | Standalone battery-autonomy estimator (planning tool) | `PyYAML` | — |
 | `main.py` | One-shot measurement orchestrator | — | All of the above |
@@ -40,9 +41,13 @@ StationConfig
 │   │   ├── id: str            (unique per station)
 │   │   ├── trigger_pin: int
 │   │   └── echo_pin: int
-│   └── maxbotix: list[MaxbotixSensorConfig]  (optional; default [])
+│   ├── maxbotix: list[MaxbotixSensorConfig]  (optional; default [])
+│   │   ├── id: str            (unique across all sensor types)
+│   │   ├── serial_port: str   (e.g. "/dev/ttyUSB0"; must start with /dev/)
+│   │   └── baud_rate: int     (default 9600)
+│   └── a02yyuw: list[A02yyuwSensorConfig]  (optional; default [])
 │       ├── id: str            (unique across all sensor types)
-│       ├── serial_port: str   (e.g. "/dev/ttyUSB0"; must start with /dev/)
+│       ├── serial_port: str   (e.g. "/dev/ttyUSB1"; must start with /dev/)
 │       └── baud_rate: int     (default 9600)
 ├── lora: LoraConfig
 │   ├── frequency: float            (default 915.0; must be in an ISM band)
@@ -70,7 +75,7 @@ Validation rules:
 - When `station.hardware_profile == "52pi-ep0123"`, ultrasonic trigger/echo pins in `{2,3,7,8,9,10,11,17,22,23,24,25}` are rejected (LoRa bonnet and 52Pi EP-0123 reservations).
 - `frequency` must be numeric and in an ISM band; integer fields (`tx_power`, `spreading_factor`, `coding_rate`, `preamble_length`, `cycle_interval_minutes`) must be integers; pin collisions across all ultrasonic and non-ultrasonic pins are rejected.
 - Sensor IDs (`sensors.ultrasonic[].id` and `sensors.maxbotix[].id`) share one namespace and must be unique across the whole station.
-- `sensors.maxbotix[].serial_port` must be a string starting with `/dev/`; the device is **not** stat'd at config-load time (so CI without hardware still validates).
+- `sensors.maxbotix[].serial_port` and `sensors.a02yyuw[].serial_port` must be strings starting with `/dev/`; the device is **not** stat'd at config-load time (so CI without hardware still validates).
 - `sensors`, `lora`, `qc`, and `timing` sections are optional (defaults apply).
 
 **Legacy single-sensor compatibility:** if a config has `pins.hcsr04_trigger`/`pins.hcsr04_echo` but no `sensors.ultrasonic` block, the loader synthesises a one-element `sensors.ultrasonic` list with `id="default"`. Existing configs keep working unchanged.
@@ -266,6 +271,48 @@ frames are counted as invalid samples and drop out of the median.
 
 `Serial.close()` releases the port. Our `cleanup()` swallows any close
 exceptions (the adapter may have been unplugged) and resets internal state.
+
+## a02yyuw.py
+
+Wraps `pyserial` for the DFRobot A02YYUW waterproof ultrasonic. Same role
+as `maxbotix.py` — different sensor, different wire format. Both feed the
+shared `SensorResult` shape so QC selection is sensor-type-agnostic.
+
+### Hardware
+
+- **DFRobot A02YYUW**: waterproof, 3–450 cm range, 1 mm resolution.
+- **Cable**: 4-wire pigtail (V+/GND/TX/RX). Pair with a USB-to-TTL adapter
+  (e.g. HiLetgo CP2102) so the sensor presents as `/dev/ttyUSB*` on the Pi.
+
+### Wire protocol
+
+The sensor streams 4-byte binary frames continuously:
+
+```
+[0xFF, high, low, checksum]
+```
+
+`checksum = (0xFF + high + low) & 0xFF` and the distance is
+`(high << 8) | low` in millimetres. Frames whose header is not 0xFF or whose
+checksum does not match are rejected and drop out of the median.
+
+### Reading behaviour
+
+- **Serial settings**: 9600 8N1 by default. Per-read timeout 1.0 s.
+- **Frame sync**: each read waits for a 0xFF header byte before consuming
+  the rest of the frame; a stale or partial byte at the start of a sample
+  window simply costs that sample, not the whole batch.
+- **Median filtering**: same as `maxbotix.py` — read `num_samples` frames,
+  keep the valid ones, return median + MAD.
+- **Buffer reset**: `reset_input_buffer()` is called at the start of every
+  read.
+- **Valid range**: 3.0 to 450.0 cm. Out-of-range medians are rejected.
+- **Kwarg parity**: `temperature_c` and `inter_pulse_delay_ms` are accepted
+  for signature parity with `UltrasonicSensor` but ignored.
+
+### Cleanup
+
+Same shape as `maxbotix.py` — close the port, swallow exceptions, reset state.
 
 ## lora.py
 
@@ -484,6 +531,11 @@ dtoverlay=w1-gpio,gpiopin=4
 | maxbotix | `maxbotix_read_error` | Exception during `read_until()` (cable unplugged mid-read) |
 | maxbotix | `maxbotix_unavailable` | All frames invalid or timed out (no valid readings) |
 | maxbotix | `maxbotix_out_of_range` | Median outside 30–500 cm |
+| a02yyuw | `a02yyuw_no_device` | pyserial not installed or `Serial(port, ...)` raised (e.g. /dev/ttyUSB1 missing) |
+| a02yyuw | `a02yyuw_not_initialized` | `read_distance_cm()` called before successful `initialize()` |
+| a02yyuw | `a02yyuw_read_error` | Exception during `serial.read()` (cable unplugged mid-read) |
+| a02yyuw | `a02yyuw_unavailable` | All frames invalid or timed out (no valid readings) |
+| a02yyuw | `a02yyuw_out_of_range` | Median outside 3–450 cm |
 | lora | `lora_no_device` | Blinka/rfm9x not installed or SPI init failed |
 | lora | `lora_not_initialized` | `transmit_with_ack()` called before successful `initialize()` |
 | lora | `lora_send_error` | Exception during `rfm9x.send()` |
