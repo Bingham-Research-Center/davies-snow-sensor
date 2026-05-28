@@ -42,6 +42,16 @@ Important behavior:
     - Bottom resistor: `2k` from divider junction to GND
     - Pi GPIO reads divider junction (~3.3V when ECHO is high)
 
+- Ultrasonic (JSN-SR04T, waterproof probe):
+  - Same 4-pin pulse-echo interface as HC-SR04: VCC (5V), TRIG, ECHO, GND.
+  - **Mode-select resistor R19 on the controller PCB MUST be left open** to
+    keep the module in Mode 1 (HC-SR04-compatible pulse-echo). Fitting
+    R19 = 47k / 120k / 360k switches the module to UART output modes, which
+    `src/sensor/ultrasonic.py` does not handle.
+  - ECHO needs the same 1k/2k voltage divider as the HC-SR04.
+  - The transducer hangs off the controller PCB on a cable — mount the
+    transducer downward at the snow target; keep the PCB in the enclosure.
+
 ### Known Issues — GPIO pins pulled LOW
 
 When the LoRa bonnet is seated on Row 1, the 52Pi EP-0123 multiplexing board
