@@ -10,8 +10,8 @@ import yaml
 from src.sensor.power_budget import (
     ComponentConfig,
     PowerBudgetError,
-    average_current_ma,
-    average_power_w,
+    average_current_per_unit_ma,
+    average_power_per_unit_w,
     estimate_power_budget,
     format_report,
     load_power_budget_config,
@@ -119,9 +119,13 @@ class TestLoadPowerBudgetConfig:
         with pytest.raises(PowerBudgetError, match="efficiency"):
             load_power_budget_config(_write_yaml(tmp_path, data))
 
+    def test_missing_file_raises_power_budget_error(self, tmp_path):
+        with pytest.raises(PowerBudgetError, match="Config file not found"):
+            load_power_budget_config(tmp_path / "missing.yaml")
+
 
 class TestPowerBudgetMath:
-    def test_average_current_formula(self):
+    def test_average_current_per_unit_formula(self):
         component = ComponentConfig(
             name="pi",
             quantity=1,
@@ -130,9 +134,9 @@ class TestPowerBudgetMath:
             sleep_current_ma=10.0,
             duty_cycle_fraction=0.25,
         )
-        assert average_current_ma(component) == pytest.approx(32.5)
+        assert average_current_per_unit_ma(component) == pytest.approx(32.5)
 
-    def test_average_power_formula(self):
+    def test_average_power_per_unit_formula(self):
         component = ComponentConfig(
             name="pi",
             quantity=1,
@@ -141,7 +145,7 @@ class TestPowerBudgetMath:
             sleep_current_ma=10.0,
             duty_cycle_fraction=0.25,
         )
-        assert average_power_w(component) == pytest.approx(0.1625)
+        assert average_power_per_unit_w(component) == pytest.approx(0.1625)
 
     def test_estimate_power_budget(self, tmp_path):
         config = load_power_budget_config(_write_yaml(tmp_path, VALID_CONFIG))

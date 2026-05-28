@@ -230,7 +230,7 @@ def load_power_budget_config(path: str | Path) -> PowerBudgetConfig:
     try:
         text = p.read_text(encoding="utf-8")
     except FileNotFoundError:
-        raise
+        raise PowerBudgetError(f"Config file not found: {p}") from None
     except OSError as exc:
         raise PowerBudgetError(f"Cannot read {p}: {exc}") from exc
 
@@ -302,7 +302,7 @@ def load_power_budget_config(path: str | Path) -> PowerBudgetConfig:
     )
 
 
-def average_current_ma(component: ComponentConfig) -> float:
+def average_current_per_unit_ma(component: ComponentConfig) -> float:
     return (
         component.sleep_current_ma
         + component.duty_cycle_fraction
@@ -310,8 +310,8 @@ def average_current_ma(component: ComponentConfig) -> float:
     )
 
 
-def average_power_w(component: ComponentConfig) -> float:
-    return component.supply_voltage_v * average_current_ma(component) / 1000.0
+def average_power_per_unit_w(component: ComponentConfig) -> float:
+    return component.supply_voltage_v * average_current_per_unit_ma(component) / 1000.0
 
 
 def estimate_power_budget(config: PowerBudgetConfig) -> PowerBudgetResult:
@@ -319,10 +319,10 @@ def estimate_power_budget(config: PowerBudgetConfig) -> PowerBudgetResult:
     total_average_power_w = 0.0
 
     for component in config.components:
-        avg_current_per_unit_ma = average_current_ma(component)
-        avg_power_per_unit_w = average_power_w(component)
-        avg_current_ma = avg_current_per_unit_ma * component.quantity
-        avg_power_w = avg_power_per_unit_w * component.quantity
+        per_unit_current_ma = average_current_per_unit_ma(component)
+        per_unit_power_w = average_power_per_unit_w(component)
+        avg_current_ma = per_unit_current_ma * component.quantity
+        avg_power_w = per_unit_power_w * component.quantity
         total_average_power_w += avg_power_w
         component_estimates.append(
             ComponentEstimate(
@@ -330,8 +330,8 @@ def estimate_power_budget(config: PowerBudgetConfig) -> PowerBudgetResult:
                 quantity=component.quantity,
                 supply_voltage_v=component.supply_voltage_v,
                 duty_cycle_fraction=component.duty_cycle_fraction,
-                average_current_per_unit_ma=avg_current_per_unit_ma,
-                average_power_per_unit_w=avg_power_per_unit_w,
+                average_current_per_unit_ma=per_unit_current_ma,
+                average_power_per_unit_w=per_unit_power_w,
                 average_current_ma=avg_current_ma,
                 average_power_w=avg_power_w,
             )
@@ -417,7 +417,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         config = load_power_budget_config(args.config)
         result = estimate_power_budget(config)
-    except (FileNotFoundError, PowerBudgetError) as exc:
+    except PowerBudgetError as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return 1
 
