@@ -189,12 +189,29 @@ Used for development and testing.
 
 | Component | Model/Spec | Quantity | Est. Cost | Notes |
 |-----------|------------|----------|-----------|-------|
-| Battery | 12V 7Ah SLA or LiFePO4 | 1 | $25-50 | Main power. Size against the model in `config/power_budget.yaml`. |
-| Solar Panel | 10-20W 12V | 1 | $25-40 | Recharging |
-| Charge Controller | PWM or MPPT | 1 | $15-30 | Battery management |
+| Battery | 12V 30Ah SLA or LiFePO4 | 1 | $100-300 | Main power. Pi 4 idle (~700 mA) dominates the budget — see [Power Budget](#power-budget) below. |
+| Solar Panel | 30W 12V | 1 | $40-80 | Sized for ~90 Wh/day generation; bump up for low-sun deployments. |
+| Charge Controller | 10A MPPT | 1 | $25-50 | Battery management |
 | Voltage Regulator | 5V 3A Buck Converter | 1 | $5 | Pi power |
 
-> **Sizing the battery and solar panel:** Run `python3 scripts/power_budget.py --config config/power_budget.yaml` after editing the component list. The tool prints the required battery capacity (Wh and Ah at 12V) for the configured autonomy target and depth-of-discharge. Re-run any time you add or remove sensors.
+### Power Budget
+
+The as-built per-station model lives in [`config/power_budget.yaml`](../config/power_budget.yaml). Re-derive after any component change:
+
+```bash
+python3 scripts/power_budget.py --config config/power_budget.yaml
+```
+
+Current model output (one of each sensor type + 2× CP2102 + 1× Pi4):
+
+| Metric | Value |
+|--------|-------|
+| Total average power | 3.81 W |
+| Daily energy | 91.5 Wh/day |
+| Required capacity (Wh) | 381 Wh @ 3-day autonomy, 80 % DoD, 90 % efficiency |
+| Required capacity (Ah) | **31.8 Ah @ 12 V** |
+
+The Pi 4 idle current accounts for ~93 % of the total. Until/unless the Pi is replaced with a lower-power MCU or aggressive idle is wired up, the battery and solar sizes above are the realistic floor.
 
 ### Enclosure & Mounting
 
@@ -236,13 +253,17 @@ Used for development and testing.
 
 ## Cost Summary Per Station
 
+Reflects the as-built multi-vendor sensor station (1× HC-SR04 + 1× MB7374 + 1× A02YYUW + 1× JSN-SR04T + 2× CP2102, plus a 30 Ah battery sized to absorb the Pi 4 idle draw).
+
 | Category | Low Estimate | High Estimate |
 |----------|--------------|---------------|
-| Core Electronics | $90 | $140 |
-| Power System | $70 | $120 |
+| Core Electronics | $320 | $400 |
+| Power System | $170 | $400 |
 | Enclosure & Mounting | $45 | $90 |
 | Cables & Misc | $15 | $25 |
-| **Total** | **$220** | **$375** |
+| **Total** | **$550** | **$915** |
+
+The jump from earlier drafts (~$220–$375) is driven mainly by the MB7374 (~$125) and the larger battery (~$100–300 vs. $25–50 for the placeholder 7 Ah cell). Stations that skip cross-vendor evaluation and run only the HC-SR04 + JSN-SR04T pair land much closer to the original range.
 
 ## Base Station Components
 
