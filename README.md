@@ -3,12 +3,12 @@
 A dense network of low-cost snow depth stations that outperforms expensive single-point research instruments through spatial coverage, redundancy, and volume of data.
 
 ![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)
-![Tests: 264 passing](https://img.shields.io/badge/tests-264%20passing-brightgreen)
+![Tests: 470 passing](https://img.shields.io/badge/tests-470%20passing-brightgreen)
 ![License: MIT](https://img.shields.io/badge/license-MIT-green)
 
 ## About
 
-Each station reads snow depth with an HC-SR04 ultrasonic sensor, compensates for air temperature using a DS18B20 probe, transmits the reading over LoRa radio, and logs to local CSV storage — all on a 15-minute cycle orchestrated by a Raspberry Pi 4.
+Each station reads snow depth with one or more HC-SR04 ultrasonic sensors, compensates for air temperature using a DS18B20 probe, transmits the reading over LoRa radio, and logs to local CSV storage — all on a 15-minute cycle orchestrated by a Raspberry Pi 4.
 
 ### Research Hypothesis
 
@@ -35,19 +35,25 @@ DAVIES-01 — the first prototype station — is in continuous **bench test** as
 
 ```
 davies-snow-sensor/
-├── src/sensor/              # Station software package
-│   ├── main.py              # One-shot measurement cycle orchestrator
-│   ├── config.py            # YAML config loader and validation
-│   ├── temperature.py       # DS18B20 temperature readings
-│   ├── ultrasonic.py        # HC-SR04 distance readings (temp-compensated)
-│   ├── lora.py              # LoRa DATA/ACK radio protocol
-│   └── storage.py           # Append-only CSV storage
-├── tests/                   # 264 unit tests (pytest)
-├── scripts/
-│   └── station_setup.sh     # Interactive station configuration wizard
+├── src/
+│   ├── sensor/              # Sensor station software (station-side)
+│   │   ├── main.py          # One-shot measurement cycle orchestrator
+│   │   ├── config.py        # YAML config loader and validation
+│   │   ├── cycle.py         # Boot/cycle ID tracking
+│   │   ├── qc.py            # Quality-control filtering and selection
+│   │   ├── temperature.py   # DS18B20 temperature readings
+│   │   ├── ultrasonic.py    # HC-SR04 distance readings (temp-compensated)
+│   │   ├── lora.py          # LoRa DATA/ACK radio protocol
+│   │   ├── storage.py       # Append-only CSV storage
+│   │   └── power_budget.py  # Battery-autonomy planning tool
+│   ├── base_station/        # LoRa receiver software (see docs/base_station.md)
+│   └── protocol/            # Shared DATA/ACK wire format
+├── tests/                   # 470 unit tests (pytest)
+├── scripts/                 # Setup, deploy, calibration, diagnostics
 ├── config/
 │   ├── station.yaml         # Per-station configuration (gitignored)
 │   ├── station.example.yaml # Canonical example — copy to station.yaml
+│   ├── power_budget.yaml    # Sample power-budget assumptions
 │   └── config.txt           # Drop-in Raspberry Pi /boot/firmware/config.txt
 ├── systemd/                 # snow-sensor.service + .timer (15-min cycle)
 ├── docs/                    # Research methodology and software docs
@@ -140,17 +146,28 @@ Key fields:
 | `station.id` | Unique station identifier (convention: `DAVIES-XX`) | *(required)* |
 | `station.sensor_height_cm` | Distance from sensor face to bare ground (cm) | *(required)* |
 | `station.hardware_profile` | Opt into board-specific pin validation. Set to `"52pi-ep0123"` to reject ultrasonic pins reserved by the LoRa bonnet and 52Pi multiplexing board. | *(none)* |
-| `pins.hcsr04_trigger` | HC-SR04 trigger GPIO | *(required)* |
-| `pins.hcsr04_echo` | HC-SR04 echo GPIO | *(required)* |
+| `sensors.ultrasonic` | List of HC-SR04 sensors (`id`, `trigger_pin`, `echo_pin`). Use this instead of `pins.hcsr04_*` for multi-sensor stations. | *(optional)* |
+| `pins.hcsr04_trigger` | HC-SR04 trigger GPIO (legacy single-sensor path) | *(required unless `sensors.ultrasonic` is set)* |
+| `pins.hcsr04_echo` | HC-SR04 echo GPIO (legacy single-sensor path) | *(required unless `sensors.ultrasonic` is set)* |
 | `pins.ds18b20_data` | DS18B20 1-Wire data GPIO | *(required)* |
 | `pins.lora_cs` | LoRa SPI chip-select GPIO | *(required)* |
 | `pins.lora_reset` | LoRa reset GPIO | *(required)* |
-| `lora.frequency` | LoRa frequency in MHz | `915.0` |
-| `lora.tx_power` | LoRa transmit power in dBm | `23` |
+| `lora.frequency` | LoRa frequency in MHz (must be in an ISM band: 169/433/868/915) | `915.0` |
+| `lora.tx_power` | LoRa transmit power in dBm (5–23) | `23` |
+| `lora.spreading_factor` | LoRa spreading factor (6–12; higher = longer range) | `12` |
+| `lora.signal_bandwidth_hz` | LoRa bandwidth (e.g. `125000`, `250000`, `500000`) | `125000` |
+| `lora.coding_rate` | LoRa FEC coding rate (5..8, i.e. 4/5..4/8) | `8` |
+| `lora.preamble_length` | LoRa preamble length in symbols | `12` |
+| `lora.ack_timeout_seconds` | Seconds to wait for ACK after a DATA send | `20.0` |
+| `qc.num_samples` | Ultrasonic samples per reading (odd, median-friendly) | `31` |
+| `qc.min_valid_fraction` | Fraction of samples that must be valid to accept | `0.5` |
+| `qc.max_spread_cm` | Maximum MAD-based spread before flagging as noisy | `5.0` |
 | `storage.csv_path` | Path to CSV data file | *(required)* |
 | `timing.cycle_interval_minutes` | Minutes between readings | `15` |
 
 Pin assignments and LoRa settings have sensible defaults; see the config file comments for details.
+
+> **Critical:** Every `lora.*` modulation parameter (frequency, spreading_factor, signal_bandwidth_hz, coding_rate, preamble_length) MUST match the peer's `lora` block on the base station. A mismatch causes 100% silent packet loss — the radios will not even error.
 
 > **Note:** `sensor_height_cm` is the measured distance from the sensor face to bare ground — this is a critical setup step, as snow depth is computed by subtracting each distance reading from this value.
 
@@ -196,16 +213,21 @@ The unit is a `Type=oneshot` service triggered by `OnCalendar=*:0/15` with `Pers
 
 ## Architecture
 
-Each measurement cycle follows a linear pipeline: initialize hardware → read DS18B20 temperature → read HC-SR04 distance (using temperature-compensated speed of sound) → transmit DATA message via LoRa and wait for ACK → append reading to CSV → clean up GPIO and SPI resources. Signal handlers (SIGINT/SIGTERM) ensure graceful hardware cleanup on shutdown.
+Each measurement cycle follows a linear pipeline: initialize hardware → read DS18B20 temperature → read each configured HC-SR04 distance (using temperature-compensated speed of sound) → run QC selection across sensors → transmit DATA message via LoRa and wait for ACK → append reading to CSV → clean up GPIO and SPI resources. Signal handlers (SIGINT/SIGTERM) ensure graceful hardware cleanup on shutdown.
 
 | Module | Purpose |
 |--------|---------|
 | `config.py` | Load and validate YAML config into frozen dataclasses |
+| `cycle.py` | Boot ID and monotonic cycle counter |
+| `qc.py` | Per-cycle quality bitmask and best-sensor selection |
 | `temperature.py` | DS18B20 readings with retry logic and range validation |
 | `ultrasonic.py` | HC-SR04 median-filtered distance with temperature compensation |
 | `lora.py` | LoRa DATA/ACK protocol with retries and CRC |
 | `storage.py` | Append-only CSV with auto-initialization |
+| `power_budget.py` | Standalone battery-autonomy estimator (planning tool, not in the runtime loop) |
 | `main.py` | One-shot cycle orchestrator and CLI entry point |
+
+The `src/base_station/` package implements the LoRa receiver — see [docs/base_station.md](docs/base_station.md). The `src/protocol/` package holds the DATA/ACK wire format shared between sensor and base station.
 
 See [docs/software_architecture.md](docs/software_architecture.md) for full module documentation, error codes, and library details.
 
@@ -223,14 +245,14 @@ See [hardware/multiplexing_board_wiring.md](hardware/multiplexing_board_wiring.m
 ## Roadmap
 
 - [x] Sensor software stack (temperature, ultrasonic, LoRa, storage, config)
-- [x] 264 unit tests with full module coverage
+- [x] 470 unit tests with full module coverage
 - [x] LoRa DATA/ACK protocol with retries and CRC
 - [x] Interactive station setup script
 - [x] Raspberry Pi drop-in boot config
 - [x] systemd service + timer for unattended operation
 - [x] Prototype development (2 stations)
 - [x] First station (DAVIES-01) running continuous 15-min cycles on real hardware (bench test)
-- [ ] Base station receiver software
+- [x] Base station receiver software
 - [ ] Initial deployment and field testing
 - [ ] Scale to 10 stations
 - [ ] Data collection period
