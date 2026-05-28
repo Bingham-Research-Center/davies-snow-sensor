@@ -8,11 +8,16 @@ external dependencies, configuration, and error codes.
 | Module | Purpose | External Library | Hardware |
 |--------|---------|-----------------|----------|
 | `config.py` | Load and validate YAML config | `PyYAML` | — |
-| `storage.py` | Append-only CSV storage | stdlib `csv` | — |
+| `cycle.py` | Boot ID and monotonic cycle counter | stdlib `uuid` | — |
+| `qc.py` | Per-cycle quality bitmask and best-sensor selection | — | — |
+| `storage.py` | Append-only CSV storage (main + per-sensor) | stdlib `csv` | — |
 | `temperature.py` | DS18B20 temperature readings | `w1thermsensor` | DS18B20 via 1-Wire |
-| `ultrasonic.py` | HC-SR04 distance readings | `gpiozero` | HC-SR04 via GPIO |
+| `ultrasonic.py` | HC-SR04 distance readings | `gpiozero` (pigpio backend) | HC-SR04 via GPIO |
 | `lora.py` | LoRa radio DATA/ACK protocol | `adafruit-circuitpython-rfm9x`, Blinka | RFM95W via SPI |
+| `power_budget.py` | Standalone battery-autonomy estimator (planning tool) | `PyYAML` | — |
 | `main.py` | One-shot measurement orchestrator | — | All of the above |
+
+The receiver-side (`src/base_station/`) and the shared DATA/ACK wire format (`src/protocol/`) are documented separately — see [base_station.md](base_station.md) and the docstrings in `src/protocol/wire.py`.
 
 ## config.py
 
@@ -23,15 +28,30 @@ StationConfig
 ├── station_id: str          (required)
 ├── sensor_height_cm: float  (required)
 ├── hardware_profile: str    (optional; "52pi-ep0123" enables reserved-pin checks)
-├── pins: PinsConfig         (required — no safe defaults for GPIO)
-│   ├── hcsr04_trigger: int
-│   ├── hcsr04_echo: int
+├── pins: PinsConfig         (required for non-ultrasonic GPIO)
+│   ├── hcsr04_trigger: int  (legacy; optional if `sensors.ultrasonic` is set)
+│   ├── hcsr04_echo: int     (legacy; optional if `sensors.ultrasonic` is set)
 │   ├── ds18b20_data: int
 │   ├── lora_cs: int
 │   └── lora_reset: int
+├── sensors: SensorsConfig   (multi-sensor list; auto-derived from pins.hcsr04_* if absent)
+│   └── ultrasonic: list[UltrasonicSensorConfig]
+│       ├── id: str            (unique per station)
+│       ├── trigger_pin: int
+│       └── echo_pin: int
 ├── lora: LoraConfig
-│   ├── frequency: float     (default 915.0)
-│   └── tx_power: int        (default 23)
+│   ├── frequency: float            (default 915.0; must be in an ISM band)
+│   ├── tx_power: int               (default 23 dBm; 5–23)
+│   ├── spreading_factor: int       (default 12; 6–12)
+│   ├── signal_bandwidth_hz: int    (default 125000)
+│   ├── coding_rate: int            (default 8; 5..8 = 4/5..4/8 FEC)
+│   ├── preamble_length: int        (default 12 symbols)
+│   └── ack_timeout_seconds: float  (default 20.0)
+├── qc: QcConfig
+│   ├── num_samples: int            (default 31; odd for median)
+│   ├── inter_pulse_delay_ms: int   (default 60)
+│   ├── min_valid_fraction: float   (default 0.5)
+│   └── max_spread_cm: float        (default 5.0)
 ├── storage: StorageConfig
 │   ├── csv_path: str        (required)
 │   └── fsync: bool          (default false)
@@ -43,8 +63,11 @@ Validation rules:
 - `station`, `pins`, and `storage` sections are required; missing keys raise `ConfigError`.
 - All pin values must be integers in the range 0–27.
 - When `station.hardware_profile == "52pi-ep0123"`, ultrasonic trigger/echo pins in `{2,3,7,8,9,10,11,17,22,23,24,25}` are rejected (LoRa bonnet and 52Pi EP-0123 reservations).
-- `frequency` must be numeric; `tx_power` and `cycle_interval_minutes` must be integers.
-- `lora` and `timing` sections are optional (defaults apply).
+- `frequency` must be numeric and in an ISM band; integer fields (`tx_power`, `spreading_factor`, `coding_rate`, `preamble_length`, `cycle_interval_minutes`) must be integers; pin collisions across all ultrasonic and non-ultrasonic pins are rejected.
+- `sensors.ultrasonic` sensor IDs must be unique within a station.
+- `sensors`, `lora`, `qc`, and `timing` sections are optional (defaults apply).
+
+**Legacy single-sensor compatibility:** if a config has `pins.hcsr04_trigger`/`pins.hcsr04_echo` but no `sensors.ultrasonic` block, the loader synthesises a one-element `sensors.ultrasonic` list with `id="default"`. Existing configs keep working unchanged.
 
 ## storage.py
 
@@ -256,10 +279,18 @@ Three options are supported (from the Adafruit documentation):
 | `frequency` | `915.0` (configurable)               | ISM band frequency in MHz              |
 | `high_power`| `True`                               | Enable PA_BOOST for +5 to +20 dBm     |
 
-Post-construction settings:
+Post-construction settings (all configurable from `lora.*` in the YAML):
 
-- `tx_power`: default 23 (dBm), configurable.
-- `enable_crc`: `True` for packet error detection.
+| Setting | Default | Range | Notes |
+|---------|---------|-------|-------|
+| `tx_power` | 23 dBm | 5–23 | PA_BOOST output |
+| `spreading_factor` | 12 | 6–12 | Higher = longer range, longer time-on-air |
+| `signal_bandwidth` | 125000 Hz | 7800..500000 | Standard LoRa bandwidths |
+| `coding_rate` | 8 | 5..8 | 4/5..4/8 FEC; higher = stronger correction |
+| `preamble_length` | 12 | symbols | Longer helps RX lock at low SNR |
+| `enable_crc` | `True` | — | Packet error detection |
+
+> **Critical — silent loss on mismatch.** Every modulation parameter (frequency, spreading_factor, signal_bandwidth, coding_rate, preamble_length) MUST match the peer's `lora` block on the base station. The radios cannot decode a packet that uses different modulation settings, and they do not surface this as an error — you simply receive nothing. The defaults above are the "max range" preset (SF12/BW125/CR4-8); change them on both ends together.
 
 ### Power management
 
@@ -328,11 +359,14 @@ SIGINT and SIGTERM trigger graceful cleanup of all hardware resources before exi
 
 | Extra | Packages |
 |-------|----------|
-| *(base)* | `PyYAML>=6.0` |
-| `[hardware]` | `RPi.GPIO>=0.7.1`, `gpiozero>=2.0`, `adafruit-blinka>=8.0.0`, `adafruit-circuitpython-rfm9x>=2.0.0`, `w1thermsensor>=2.0` |
+| *(base)* | `PyYAML>=6.0,<7.0` |
+| `[hardware]` | `RPi.GPIO>=0.7.1`, `gpiozero>=2.0`, `adafruit-blinka>=8.0.0`, `adafruit-circuitpython-rfm9x>=2.0.0`, `w1thermsensor>=2.0`, `lgpio>=0.2.2`, `pigpio>=1.78` |
+| `[dev]` | `pytest>=8.0` |
 
 Install base: `pip install -e .`
 Install with hardware: `pip install -e .[hardware]`
+
+**Runtime pin factory: `pigpio`.** The systemd unit sets `GPIOZERO_PIN_FACTORY=pigpio` and `Requires=pigpiod.service`, so `gpiozero` talks to GPIO via the `pigpiod` daemon (DMA-based sampling, accurate timing). `lgpio` is bundled as a fallback. Install `pigpiod` system-side: `sudo apt install pigpio` and ensure it is enabled (`sudo systemctl enable --now pigpiod`).
 
 ### System packages
 
