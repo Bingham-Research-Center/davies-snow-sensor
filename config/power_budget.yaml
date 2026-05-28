@@ -1,12 +1,21 @@
 # Planning estimate for one Davies snow sensor station.
-# This models average load from component duty cycles rather than direct measurement.
+# Models average load from component duty cycles rather than direct measurement.
 #
-# Assumptions in this sample:
-# - 15-minute measurement cycle
-# - Pi is more active for roughly 2 minutes per hour
-# - LoRa transmits for less than 1 second every 15 minutes
-# - HC-SR04 sampling window is about 2 seconds every 15 minutes
-# - DS18B20 conversion/read time is about 1 second every 15 minutes
+# As-built station mix (one of each ultrasonic vendor for cross-vendor evaluation):
+# - 1x Pi 4 (no true low-power sleep; idle current dominates)
+# - 1x Adafruit RFM95W LoRa bonnet (TX <1 s every 15-min cycle)
+# - 2x HiLetgo CP2102 USB-to-TTL adapters (always-on while a serial sensor is)
+# - 1x HC-SR04 ultrasonic (pulse-echo, ~2 s sampling window per cycle)
+# - 1x MaxBotix MB7374 (TTL serial, always-on at ~3.4 mA)
+# - 1x DFRobot A02YYUW (TTL serial, always-on at ~8 mA)
+# - 1x JSN-SR04T (Mode 1 pulse-echo, ~2 s sampling per cycle, similar to HC-SR04)
+# - 1x DS18B20 temperature probe (1-Wire, ~1 s conversion per cycle)
+#
+# NOTE: the Pi 4 has no real sleep state; its ~700 mA idle current is by far
+# the largest line in this budget. The required-capacity number below
+# reflects that reality — plan for a ~30 Ah battery, not the 8 Ah hinted in
+# earlier drafts. Re-run after any component-list change:
+#   python3 scripts/power_budget.py --config config/power_budget.yaml
 
 report_voltage_v: 5.0
 battery_voltage_v: 12.0
@@ -29,15 +38,43 @@ components:
     sleep_current_ma: 0.3
     active_minutes_per_hour: 0.07
 
+  - name: cp2102_usb_to_ttl
+    quantity: 2
+    supply_voltage_v: 5.0
+    active_current_ma: 20.0
+    sleep_current_ma: 20.0
+    duty_cycle_fraction: 1.0
+
   - name: hc_sr04
-    quantity: 4
+    quantity: 1
+    supply_voltage_v: 5.0
+    active_current_ma: 15.0
+    sleep_current_ma: 2.0
+    active_minutes_per_hour: 0.13
+
+  - name: maxbotix_mb7374
+    quantity: 1
+    supply_voltage_v: 5.0
+    active_current_ma: 3.4
+    sleep_current_ma: 3.4
+    duty_cycle_fraction: 1.0
+
+  - name: dfrobot_a02yyuw
+    quantity: 1
+    supply_voltage_v: 5.0
+    active_current_ma: 8.0
+    sleep_current_ma: 8.0
+    duty_cycle_fraction: 1.0
+
+  - name: jsn_sr04t
+    quantity: 1
     supply_voltage_v: 5.0
     active_current_ma: 15.0
     sleep_current_ma: 2.0
     active_minutes_per_hour: 0.13
 
   - name: ds18b20
-    quantity: 2
+    quantity: 1
     supply_voltage_v: 3.3
     active_current_ma: 1.5
     sleep_current_ma: 0.0
