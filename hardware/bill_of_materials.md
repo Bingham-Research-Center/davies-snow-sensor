@@ -13,6 +13,9 @@ This document lists the components required to build one low-cost snow depth sen
 | GPIO Breakout Board | 52Pi Easy Multiplexing Board (EP-0123) | 1 | ~$15 | 52Pi / Amazon | Row 1 hosts the LoRa bonnet; other rows wire external sensors. See `hardware/multiplexing_board_wiring.md`. |
 | LoRa Radio Module | Adafruit RFM95W Bonnet | 1 | $20 | Adafruit | 915MHz for US, includes OLED |
 | Ultrasonic Sensor | HC-SR04 (with 1k/2k voltage divider on ECHO) | 1+ | ~$2 each | Various | Snow depth measurement. Multi-sensor stations declare each in `sensors.ultrasonic`. HC-SR04P variant works without the divider. |
+| Ultrasonic Sensor (weather-resistant) | MaxBotix MB7374-10 (HRXL-MaxSonar-WRST7), TTL serial, 5m cable | 0–1 per station | $124.95 | MaxBotix | 30–500 cm range, 1 mm resolution, self-compensates for temperature. Declared in `sensors.maxbotix`. |
+| MB7374 Mounting Bracket | MaxBotix MB7950-00 (3/4" NPS WR) | 1 per MB7374 | $4.99 | MaxBotix | Weather-resistant mount for the MB7374 housing. |
+| USB-to-TTL Adapter | HiLetgo CP2102 (USB 2.0 to TTL serial) | 1 per serial sensor | $7.02 | HiLetgo / Amazon | Wires the MB7374's USB-A-terminated TTL cable to a Pi USB port; appears as `/dev/ttyUSB*`. |
 | Temperature Sensor | DS18B20 Waterproof Probe | 1 | ~$3 | Various | For speed-of-sound compensation |
 | Antenna | 915MHz 5.8dBi Fiberglass w/ Cable | 1 | ~$25 | Amazon | Waterproof, 20ft cable |
 | Pull-up Resistor | 4.7kΩ | 1 | <$1 | Various | For DS18B20 1-Wire data line |

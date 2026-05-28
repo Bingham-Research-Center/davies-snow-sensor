@@ -15,6 +15,7 @@ from src.sensor.config import (
     QCConfig,
     StorageConfig,
     TimingConfig,
+    MaxbotixSensorConfig,
     UltrasonicSensorConfig,
     config_id,
     load_config,
@@ -786,3 +787,176 @@ class TestEncoding:
         p.write_bytes(body.encode("utf-8"))
         cfg = load_config(p)
         assert cfg.station_id == "DAVIES-01"
+
+
+# ── MaxBotix serial sensors ─────────────────────────────────────
+
+
+MAXBOTIX_CONFIG = {
+    **MULTI_SENSOR_CONFIG,
+    "sensors": {
+        "ultrasonic": [
+            {"id": "north", "trigger_pin": 5, "echo_pin": 6},
+        ],
+        "maxbotix": [
+            {"id": "mast_mb", "serial_port": "/dev/ttyUSB0"},
+        ],
+    },
+}
+
+
+class TestMaxbotixConfig:
+    def test_parses_single_maxbotix(self, tmp_path):
+        cfg = load_config(_write_yaml(tmp_path, MAXBOTIX_CONFIG))
+        assert len(cfg.sensors.maxbotix) == 1
+        mb = cfg.sensors.maxbotix[0]
+        assert isinstance(mb, MaxbotixSensorConfig)
+        assert mb.id == "mast_mb"
+        assert mb.serial_port == "/dev/ttyUSB0"
+        assert mb.baud_rate == 9600
+
+    def test_parses_custom_baud(self, tmp_path):
+        data = {
+            **MULTI_SENSOR_CONFIG,
+            "sensors": {
+                "ultrasonic": [{"id": "north", "trigger_pin": 5, "echo_pin": 6}],
+                "maxbotix": [
+                    {"id": "mb1", "serial_port": "/dev/ttyUSB0", "baud_rate": 19200},
+                ],
+            },
+        }
+        cfg = load_config(_write_yaml(tmp_path, data))
+        assert cfg.sensors.maxbotix[0].baud_rate == 19200
+
+    def test_maxbotix_absent_defaults_to_empty_list(self, tmp_path):
+        cfg = load_config(_write_yaml(tmp_path, MULTI_SENSOR_CONFIG))
+        assert cfg.sensors.maxbotix == []
+
+    def test_legacy_config_has_empty_maxbotix(self, tmp_path):
+        cfg = load_config(_write_yaml(tmp_path, VALID_CONFIG))
+        assert cfg.sensors.maxbotix == []
+
+    def test_multiple_maxbotix(self, tmp_path):
+        data = {
+            **MULTI_SENSOR_CONFIG,
+            "sensors": {
+                "ultrasonic": [{"id": "north", "trigger_pin": 5, "echo_pin": 6}],
+                "maxbotix": [
+                    {"id": "mb1", "serial_port": "/dev/ttyUSB0"},
+                    {"id": "mb2", "serial_port": "/dev/ttyUSB1"},
+                ],
+            },
+        }
+        cfg = load_config(_write_yaml(tmp_path, data))
+        assert len(cfg.sensors.maxbotix) == 2
+        assert cfg.sensors.maxbotix[1].serial_port == "/dev/ttyUSB1"
+
+
+class TestMaxbotixValidation:
+    def test_maxbotix_must_be_list(self, tmp_path):
+        data = {
+            **MULTI_SENSOR_CONFIG,
+            "sensors": {
+                "ultrasonic": [{"id": "north", "trigger_pin": 5, "echo_pin": 6}],
+                "maxbotix": "not-a-list",
+            },
+        }
+        with pytest.raises(ConfigError, match="must be a list"):
+            load_config(_write_yaml(tmp_path, data))
+
+    def test_maxbotix_entry_must_be_mapping(self, tmp_path):
+        data = {
+            **MULTI_SENSOR_CONFIG,
+            "sensors": {
+                "ultrasonic": [{"id": "north", "trigger_pin": 5, "echo_pin": 6}],
+                "maxbotix": ["not-a-dict"],
+            },
+        }
+        with pytest.raises(ConfigError, match="must be a mapping"):
+            load_config(_write_yaml(tmp_path, data))
+
+    def test_missing_id(self, tmp_path):
+        data = {
+            **MULTI_SENSOR_CONFIG,
+            "sensors": {
+                "ultrasonic": [{"id": "north", "trigger_pin": 5, "echo_pin": 6}],
+                "maxbotix": [{"serial_port": "/dev/ttyUSB0"}],
+            },
+        }
+        with pytest.raises(ConfigError, match="id"):
+            load_config(_write_yaml(tmp_path, data))
+
+    def test_missing_serial_port(self, tmp_path):
+        data = {
+            **MULTI_SENSOR_CONFIG,
+            "sensors": {
+                "ultrasonic": [{"id": "north", "trigger_pin": 5, "echo_pin": 6}],
+                "maxbotix": [{"id": "mb1"}],
+            },
+        }
+        with pytest.raises(ConfigError, match="serial_port"):
+            load_config(_write_yaml(tmp_path, data))
+
+    def test_serial_port_must_start_with_dev(self, tmp_path):
+        data = {
+            **MULTI_SENSOR_CONFIG,
+            "sensors": {
+                "ultrasonic": [{"id": "north", "trigger_pin": 5, "echo_pin": 6}],
+                "maxbotix": [{"id": "mb1", "serial_port": "ttyUSB0"}],
+            },
+        }
+        with pytest.raises(ConfigError, match="/dev/"):
+            load_config(_write_yaml(tmp_path, data))
+
+    def test_baud_rate_must_be_positive(self, tmp_path):
+        data = {
+            **MULTI_SENSOR_CONFIG,
+            "sensors": {
+                "ultrasonic": [{"id": "north", "trigger_pin": 5, "echo_pin": 6}],
+                "maxbotix": [
+                    {"id": "mb1", "serial_port": "/dev/ttyUSB0", "baud_rate": 0},
+                ],
+            },
+        }
+        with pytest.raises(ConfigError, match="positive"):
+            load_config(_write_yaml(tmp_path, data))
+
+    def test_baud_rate_must_be_integer(self, tmp_path):
+        data = {
+            **MULTI_SENSOR_CONFIG,
+            "sensors": {
+                "ultrasonic": [{"id": "north", "trigger_pin": 5, "echo_pin": 6}],
+                "maxbotix": [
+                    {"id": "mb1", "serial_port": "/dev/ttyUSB0", "baud_rate": 9600.5},
+                ],
+            },
+        }
+        with pytest.raises(ConfigError, match="integer"):
+            load_config(_write_yaml(tmp_path, data))
+
+    def test_duplicate_id_across_ultrasonic_and_maxbotix(self, tmp_path):
+        data = {
+            **MULTI_SENSOR_CONFIG,
+            "sensors": {
+                "ultrasonic": [{"id": "shared", "trigger_pin": 5, "echo_pin": 6}],
+                "maxbotix": [
+                    {"id": "shared", "serial_port": "/dev/ttyUSB0"},
+                ],
+            },
+        }
+        with pytest.raises(ConfigError, match="Duplicate sensor id"):
+            load_config(_write_yaml(tmp_path, data))
+
+    def test_duplicate_id_within_maxbotix(self, tmp_path):
+        data = {
+            **MULTI_SENSOR_CONFIG,
+            "sensors": {
+                "ultrasonic": [{"id": "north", "trigger_pin": 5, "echo_pin": 6}],
+                "maxbotix": [
+                    {"id": "mb1", "serial_port": "/dev/ttyUSB0"},
+                    {"id": "mb1", "serial_port": "/dev/ttyUSB1"},
+                ],
+            },
+        }
+        with pytest.raises(ConfigError, match="Duplicate sensor id"):
+            load_config(_write_yaml(tmp_path, data))

@@ -13,6 +13,7 @@ from pathlib import Path
 from src.sensor.config import QCConfig, StationConfig, config_id, load_config
 from src.sensor.cycle import get_boot_id, read_and_increment_cycle_id
 from src.sensor.lora import LoRaTransmitter
+from src.sensor.maxbotix import MaxbotixSensor
 from src.sensor.qc import compute_quality_flag, min_valid_samples
 from src.sensor.storage import Reading, SensorReading, SensorStorage, Storage
 from src.sensor.temperature import TemperatureSensor
@@ -62,6 +63,14 @@ class SensorStation:
                 echo_pin=s.echo_pin,
             )
             for s in sensor_list
+        }
+        maxbotix_list = config.sensors.maxbotix if config.sensors is not None else []
+        self._maxbotixes: dict[str, MaxbotixSensor] = {
+            s.id: MaxbotixSensor(
+                serial_port=s.serial_port,
+                baud_rate=s.baud_rate,
+            )
+            for s in maxbotix_list
         }
         self._lora = LoRaTransmitter(
             cs_pin=config.pins.lora_cs,
@@ -135,6 +144,29 @@ class SensorStation:
                 else:
                     logger.info(
                         "Ultrasonic %s distance: %.1f cm (spread: %s)",
+                        sensor_id, result.distance_cm, result.spread_cm,
+                    )
+                sensor_results[sensor_id] = result
+
+        # Read MaxBotix serial sensors sequentially
+        for sensor_id, sensor in self._maxbotixes.items():
+            if not sensor.initialize():
+                err = sensor.get_last_error_reason() or "maxbotix_init_error"
+                errors.append(f"{sensor_id}:{err}")
+                logger.warning("MaxBotix %s init failed: %s", sensor_id, err)
+                sensor_results[sensor_id] = SensorResult(
+                    distance_cm=None, num_samples=0, num_valid=0,
+                    spread_cm=None, error=err,
+                )
+            else:
+                result = sensor.read_distance_cm(num_samples=qc.num_samples)
+                if result.distance_cm is None:
+                    err = result.error or "maxbotix_read_error"
+                    errors.append(f"{sensor_id}:{err}")
+                    logger.warning("MaxBotix %s read failed: %s", sensor_id, err)
+                else:
+                    logger.info(
+                        "MaxBotix %s distance: %.1f cm (spread: %s)",
                         sensor_id, result.distance_cm, result.spread_cm,
                     )
                 sensor_results[sensor_id] = result
@@ -255,6 +287,8 @@ class SensorStation:
         resources: list[tuple[str, object]] = [("temperature", self._temp)]
         for sid, sensor in self._ultrasonics.items():
             resources.append((f"ultrasonic:{sid}", sensor))
+        for sid, sensor in self._maxbotixes.items():
+            resources.append((f"maxbotix:{sid}", sensor))
         resources.append(("lora", self._lora))
         for name, resource in resources:
             try:
