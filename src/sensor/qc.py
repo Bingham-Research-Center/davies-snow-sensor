@@ -5,11 +5,12 @@ from __future__ import annotations
 import math
 
 from src.sensor.config import QCConfig
-from src.sensor.ultrasonic import SensorResult, UltrasonicSensor
+from src.sensor.ultrasonic import SensorResult
 
 TEMP_MISSING = 1 << 0
 ALL_ULTRASONIC_FAILED = 1 << 1
-SELECTED_DISTANCE_OOR = 1 << 2
+# bit 2 reserved (was SELECTED_DISTANCE_OOR, removed when multi-vendor sensors
+# landed — driver-level range validation makes a global OOR check unsound)
 SELECTED_TOO_FEW_VALID = 1 << 3
 SELECTED_TOO_NOISY = 1 << 4
 SNOW_DEPTH_NEGATIVE = 1 << 5
@@ -51,12 +52,6 @@ def compute_quality_flag(
             flag |= SELECTED_TOO_FEW_VALID
         if selected_result.spread_cm is not None and selected_result.spread_cm > qc.max_spread_cm:
             flag |= SELECTED_TOO_NOISY
-        if selected_result.distance_cm is not None:
-            if (
-                selected_result.distance_cm < UltrasonicSensor.MIN_VALID_CM
-                or selected_result.distance_cm > UltrasonicSensor.MAX_VALID_CM
-            ):
-                flag |= SELECTED_DISTANCE_OOR
 
     if snow_depth_cm is not None:
         if snow_depth_cm < 0:

@@ -49,7 +49,7 @@ Each bit indicates a condition detected during the cycle. Value 0 means no issue
 |---|---|---|---|
 | 0 | 1 | TEMP_MISSING | Temperature sensor read failed |
 | 1 | 2 | ALL_ULTRASONIC_FAILED | No ultrasonic sensor returned a distance |
-| 2 | 4 | SELECTED_DISTANCE_OOR | Selected sensor distance outside 2–400 cm |
+| 2 | 4 | *(reserved)* | Was `SELECTED_DISTANCE_OOR` — removed when multi-vendor sensors landed; drivers now validate their own ranges (HC-SR04 2–400 cm, MaxBotix 30–500 cm, A02YYUW 3–450 cm). Never set on new records. |
 | 3 | 8 | SELECTED_TOO_FEW_VALID | Selected sensor valid count below `min_valid_fraction` |
 | 4 | 16 | SELECTED_TOO_NOISY | Selected sensor spread exceeds `max_spread_cm` |
 | 5 | 32 | SNOW_DEPTH_NEGATIVE | Computed snow depth < 0 |
