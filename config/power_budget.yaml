@@ -1,0 +1,44 @@
+# Planning estimate for one Davies snow sensor station.
+# This models average load from component duty cycles rather than direct measurement.
+#
+# Assumptions in this sample:
+# - 15-minute measurement cycle
+# - Pi is more active for roughly 2 minutes per hour
+# - LoRa transmits for less than 1 second every 15 minutes
+# - HC-SR04 sampling window is about 2 seconds every 15 minutes
+# - DS18B20 conversion/read time is about 1 second every 15 minutes
+
+report_voltage_v: 5.0
+battery_voltage_v: 12.0
+autonomy_days: 3.0
+depth_of_discharge: 0.8
+efficiency: 0.9
+
+components:
+  - name: raspberry_pi_4
+    quantity: 1
+    supply_voltage_v: 5.0
+    active_current_ma: 900.0
+    sleep_current_ma: 700.0
+    active_minutes_per_hour: 2.0
+
+  - name: lora_bonnet
+    quantity: 1
+    supply_voltage_v: 3.3
+    active_current_ma: 120.0
+    sleep_current_ma: 0.3
+    active_minutes_per_hour: 0.07
+
+  - name: hc_sr04
+    quantity: 4
+    supply_voltage_v: 5.0
+    active_current_ma: 15.0
+    sleep_current_ma: 2.0
+    active_minutes_per_hour: 0.13
+
+  - name: ds18b20
+    quantity: 2
+    supply_voltage_v: 3.3
+    active_current_ma: 1.5
+    sleep_current_ma: 0.0
+    active_minutes_per_hour: 0.07
