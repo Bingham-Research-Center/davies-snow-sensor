@@ -21,6 +21,7 @@ hardware = [
     "w1thermsensor>=2.0,<3.0",
     "lgpio>=0.2.2,<1.0",
     "pigpio>=1.78,<2.0",
+    "pyserial>=3.5,<4.0",
 ]
 dev = [
     "pytest>=8.0",

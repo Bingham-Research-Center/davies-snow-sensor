@@ -31,6 +31,8 @@ pins:
 
 # Alternative: define multiple ultrasonic sensors instead of single pins.hcsr04_*.
 # When `sensors.ultrasonic` is present, pins.hcsr04_* are optional.
+# Add `sensors.maxbotix` for MB7374 (HRXL-MaxSonar-WR) units wired through a
+# USB-to-TTL adapter (e.g. CP2102) — they appear as /dev/ttyUSB*.
 # sensors:
 #   ultrasonic:
 #     - id: "front"
@@ -39,6 +41,10 @@ pins:
 #     - id: "rear"
 #       trigger_pin: 13
 #       echo_pin: 19
+#   maxbotix:
+#     - id: "mast_mb"
+#       serial_port: "/dev/ttyUSB0"
+#       baud_rate: 9600           # optional; 9600 is the MB7374 default
 
 lora:
   # CRITICAL: every field below MUST match the peer's lora block on the base

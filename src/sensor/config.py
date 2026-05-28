@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import yaml
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 
@@ -95,8 +95,16 @@ class UltrasonicSensorConfig:
 
 
 @dataclass(frozen=True)
+class MaxbotixSensorConfig:
+    id: str
+    serial_port: str
+    baud_rate: int = 9600
+
+
+@dataclass(frozen=True)
 class SensorsConfig:
     ultrasonic: list[UltrasonicSensorConfig]
+    maxbotix: list[MaxbotixSensorConfig] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -253,7 +261,9 @@ def _parse_sensors(
             "lora_reset": pins.lora_reset,
         }
         _check_pin_collisions({**base_pins, **all_pins})
-        return SensorsConfig(ultrasonic=ultrasonic)
+
+        maxbotix = _parse_maxbotix_sensors(raw.get("maxbotix"), seen_ids)
+        return SensorsConfig(ultrasonic=ultrasonic, maxbotix=maxbotix)
 
     # Legacy: auto-convert from pins config
     if pins.hcsr04_trigger is None or pins.hcsr04_echo is None:
@@ -269,6 +279,55 @@ def _parse_sensors(
             )
         ]
     )
+
+
+def _parse_maxbotix_sensors(
+    raw: object,
+    seen_ids: set[str],
+) -> list[MaxbotixSensorConfig]:
+    """Parse the optional `sensors.maxbotix` list. Empty/missing means none configured."""
+    if raw is None:
+        return []
+    if not isinstance(raw, list):
+        raise ConfigError("'sensors.maxbotix' must be a list")
+
+    result: list[MaxbotixSensorConfig] = []
+    for i, entry in enumerate(raw):
+        section = f"sensors.maxbotix[{i}]"
+        if not isinstance(entry, dict):
+            raise ConfigError(f"'{section}' must be a mapping")
+
+        sid = _require(entry, "id", section)
+        if not isinstance(sid, str):
+            raise ConfigError(f"Field 'id' in '{section}' must be a string")
+        if sid in seen_ids:
+            raise ConfigError(f"Duplicate sensor id '{sid}'")
+        seen_ids.add(sid)
+
+        serial_port = _require(entry, "serial_port", section)
+        if not isinstance(serial_port, str):
+            raise ConfigError(
+                f"Field 'serial_port' in '{section}' must be a string"
+            )
+        if not serial_port.startswith("/dev/"):
+            raise ConfigError(
+                f"Field 'serial_port' in '{section}' must start with '/dev/' "
+                f"(got '{serial_port}')"
+            )
+
+        baud_rate = entry.get("baud_rate", 9600)
+        if not isinstance(baud_rate, int) or isinstance(baud_rate, bool):
+            raise ConfigError(
+                f"Field 'baud_rate' in '{section}' must be an integer"
+            )
+        if baud_rate <= 0:
+            raise ConfigError(
+                f"Field 'baud_rate' in '{section}' must be positive"
+            )
+
+        result.append(MaxbotixSensorConfig(id=sid, serial_port=serial_port, baud_rate=baud_rate))
+
+    return result
 
 
 def _parse_lora(raw: dict | None) -> LoraConfig:

@@ -13,6 +13,7 @@ external dependencies, configuration, and error codes.
 | `storage.py` | Append-only CSV storage (main + per-sensor) | stdlib `csv` | — |
 | `temperature.py` | DS18B20 temperature readings | `w1thermsensor` | DS18B20 via 1-Wire |
 | `ultrasonic.py` | HC-SR04 distance readings | `gpiozero` (pigpio backend) | HC-SR04 via GPIO |
+| `maxbotix.py` | MB7374 (HRXL-MaxSonar-WR) distance readings | `pyserial` | MB7374 via TTL serial / USB-TTL adapter |
 | `lora.py` | LoRa radio DATA/ACK protocol | `adafruit-circuitpython-rfm9x`, Blinka | RFM95W via SPI |
 | `power_budget.py` | Standalone battery-autonomy estimator (planning tool) | `PyYAML` | — |
 | `main.py` | One-shot measurement orchestrator | — | All of the above |
@@ -35,10 +36,14 @@ StationConfig
 │   ├── lora_cs: int
 │   └── lora_reset: int
 ├── sensors: SensorsConfig   (multi-sensor list; auto-derived from pins.hcsr04_* if absent)
-│   └── ultrasonic: list[UltrasonicSensorConfig]
-│       ├── id: str            (unique per station)
-│       ├── trigger_pin: int
-│       └── echo_pin: int
+│   ├── ultrasonic: list[UltrasonicSensorConfig]
+│   │   ├── id: str            (unique per station)
+│   │   ├── trigger_pin: int
+│   │   └── echo_pin: int
+│   └── maxbotix: list[MaxbotixSensorConfig]  (optional; default [])
+│       ├── id: str            (unique across all sensor types)
+│       ├── serial_port: str   (e.g. "/dev/ttyUSB0"; must start with /dev/)
+│       └── baud_rate: int     (default 9600)
 ├── lora: LoraConfig
 │   ├── frequency: float            (default 915.0; must be in an ISM band)
 │   ├── tx_power: int               (default 23 dBm; 5–23)
@@ -64,7 +69,8 @@ Validation rules:
 - All pin values must be integers in the range 0–27.
 - When `station.hardware_profile == "52pi-ep0123"`, ultrasonic trigger/echo pins in `{2,3,7,8,9,10,11,17,22,23,24,25}` are rejected (LoRa bonnet and 52Pi EP-0123 reservations).
 - `frequency` must be numeric and in an ISM band; integer fields (`tx_power`, `spreading_factor`, `coding_rate`, `preamble_length`, `cycle_interval_minutes`) must be integers; pin collisions across all ultrasonic and non-ultrasonic pins are rejected.
-- `sensors.ultrasonic` sensor IDs must be unique within a station.
+- Sensor IDs (`sensors.ultrasonic[].id` and `sensors.maxbotix[].id`) share one namespace and must be unique across the whole station.
+- `sensors.maxbotix[].serial_port` must be a string starting with `/dev/`; the device is **not** stat'd at config-load time (so CI without hardware still validates).
 - `sensors`, `lora`, `qc`, and `timing` sections are optional (defaults apply).
 
 **Legacy single-sensor compatibility:** if a config has `pins.hcsr04_trigger`/`pins.hcsr04_echo` but no `sensors.ultrasonic` block, the loader synthesises a one-element `sensors.ultrasonic` list with `id="default"`. Existing configs keep working unchanged.
@@ -213,6 +219,53 @@ compensation).
 `sensor.close()` releases the GPIO pins back to the system. Our `cleanup()`
 method calls this and then resets internal state so the wrapper can be
 re-initialized if needed.
+
+## maxbotix.py
+
+Wraps `pyserial` for the MaxBotix HRXL-MaxSonar-WR series (MB7374). The
+sensor produces snow depth readings over a TTL UART; we present them
+through the same `SensorResult` dataclass as `ultrasonic.py`, so QC
+selection treats both sensor types uniformly.
+
+### Hardware
+
+- **MB7374-10 (HRXL-MaxSonar-WRST7)**: weather-resistant, 30–500 cm range,
+  1 mm resolution, internal temperature compensation, ~3.4 mA active.
+- **Cable**: ships terminated in a USB-A shell but is electrically TTL serial
+  (4-wire harness). Pair with a USB-to-TTL adapter (e.g. HiLetgo CP2102) so
+  the sensor presents as `/dev/ttyUSB*` on the Pi.
+
+### Wire protocol
+
+The sensor streams ASCII frames continuously at ~6 Hz:
+
+```
+R<digits>\r
+```
+
+`<digits>` is a zero-padded distance in millimetres (e.g. `R0250\r` = 25.0 cm).
+The frame parser rejects anything that does not match this shape; malformed
+frames are counted as invalid samples and drop out of the median.
+
+### Reading behaviour
+
+- **Serial settings**: 9600 8N1 by default (`baud_rate` configurable per
+  sensor). Per-read timeout 1.0 s.
+- **Median filtering**: read `num_samples` frames (default 31), parse each,
+  keep only the valid ones, return their median plus MAD as spread.
+- **Buffer reset**: `reset_input_buffer()` is called at the start of every
+  read so each cycle samples fresh frames rather than draining the OS buffer.
+- **Valid range**: 30.0 to 500.0 cm. Out-of-range medians are rejected.
+- **No temperature compensation needed**: the MB7374 self-compensates via an
+  embedded thermistor, so `read_distance_cm(temperature_c=...)` accepts the
+  argument for signature parity with `UltrasonicSensor` but ignores it.
+- **No inter-pulse delay needed**: the sensor self-paces at ~6 Hz, so the
+  `inter_pulse_delay_ms` argument is also accepted and ignored.
+
+### Cleanup
+
+`Serial.close()` releases the port. Our `cleanup()` swallows any close
+exceptions (the adapter may have been unplugged) and resets internal state.
 
 ## lora.py
 
@@ -426,6 +479,11 @@ dtoverlay=w1-gpio,gpiopin=4
 | ultrasonic | `ultrasonic_read_error` | Exception during pulse sampling |
 | ultrasonic | `ultrasonic_unavailable` | All samples were None (no valid readings at all) |
 | ultrasonic | `ultrasonic_out_of_range` | Median outside 2–400 cm |
+| maxbotix | `maxbotix_no_device` | pyserial not installed or `Serial(port, ...)` raised (e.g. /dev/ttyUSB0 missing) |
+| maxbotix | `maxbotix_not_initialized` | `read_distance_cm()` called before successful `initialize()` |
+| maxbotix | `maxbotix_read_error` | Exception during `read_until()` (cable unplugged mid-read) |
+| maxbotix | `maxbotix_unavailable` | All frames invalid or timed out (no valid readings) |
+| maxbotix | `maxbotix_out_of_range` | Median outside 30–500 cm |
 | lora | `lora_no_device` | Blinka/rfm9x not installed or SPI init failed |
 | lora | `lora_not_initialized` | `transmit_with_ack()` called before successful `initialize()` |
 | lora | `lora_send_error` | Exception during `rfm9x.send()` |
