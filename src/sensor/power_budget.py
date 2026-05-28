@@ -143,7 +143,7 @@ def _int_or_default(
     if key not in data:
         return default
     value = data[key]
-    if not isinstance(value, int):
+    if not isinstance(value, int) or isinstance(value, bool):
         raise PowerBudgetError(
             f"Field '{key}' in '{section}' must be an integer, got {type(value).__name__}"
         )
