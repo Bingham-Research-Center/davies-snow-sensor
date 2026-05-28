@@ -353,6 +353,35 @@ SIGINT and SIGTERM trigger graceful cleanup of all hardware resources before exi
 - **CSV** (`error_flags` column): pipe-delimited — `temp_no_device|ultrasonic_unavailable`
 - **LoRa** (DATA message): comma-delimited — `temp_no_device,ultrasonic_unavailable`
 
+## power_budget.py
+
+Standalone CLI utility for sizing the battery and solar panel against the station's component mix. Not invoked by the runtime measurement loop.
+
+### Usage
+
+```bash
+python3 scripts/power_budget.py --config config/power_budget.yaml
+```
+
+Prints a per-component current/power breakdown and the required battery capacity in Wh and Ah at the configured battery voltage.
+
+### Inputs (`config/power_budget.yaml`)
+
+| Field | Meaning |
+|-------|---------|
+| `report_voltage_v` | Reference voltage for the "equivalent average current" total (default 5.0) |
+| `battery_voltage_v` | Nominal battery voltage (default 12.0) |
+| `autonomy_days` | Days of operation without recharge |
+| `depth_of_discharge` | Usable fraction of nameplate capacity (0–1; default 0.8) |
+| `efficiency` | Charge-and-conversion efficiency factor (0–1; default 0.9) |
+| `components[]` | List of `{name, quantity, supply_voltage_v, active_current_ma, sleep_current_ma}` plus one of `duty_cycle_fraction` or `active_minutes_per_hour` per entry |
+
+### Model
+
+For each component: `avg_current = sleep + duty × (active − sleep)`, scaled by quantity. Total power sums across rails. Required battery capacity is `daily_energy_wh × autonomy_days ÷ (depth_of_discharge × efficiency)`.
+
+Update the YAML and re-run whenever the component list, duty cycles, or autonomy target changes. The output guides the `Battery` and `Solar Panel` rows in [hardware/bill_of_materials.md](../hardware/bill_of_materials.md).
+
 ## Dependencies
 
 ### Python packages (`pyproject.toml`)

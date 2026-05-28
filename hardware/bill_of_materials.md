@@ -10,11 +10,13 @@ This document lists the components required to build one low-cost snow depth sen
 |-----------|------------|----------|-----------|----------|-------|
 | Single Board Computer | Raspberry Pi 4 Model B (2GB+) | 1 | $45-55 | Various | Main controller |
 | MicroSD Card | 32GB+ Class 10 | 1 | $10 | Various | For OS and data backup |
+| GPIO Breakout Board | 52Pi Easy Multiplexing Board (EP-0123) | 1 | ~$15 | 52Pi / Amazon | Row 1 hosts the LoRa bonnet; other rows wire external sensors. See `hardware/multiplexing_board_wiring.md`. |
 | LoRa Radio Module | Adafruit RFM95W Bonnet | 1 | $20 | Adafruit | 915MHz for US, includes OLED |
-| Ultrasonic Sensor | [TBD - see options below] | 1 | $15-50 | Various | Snow depth measurement |
+| Ultrasonic Sensor | HC-SR04 (with 1k/2k voltage divider on ECHO) | 1+ | ~$2 each | Various | Snow depth measurement. Multi-sensor stations declare each in `sensors.ultrasonic`. HC-SR04P variant works without the divider. |
 | Temperature Sensor | DS18B20 Waterproof Probe | 1 | ~$3 | Various | For speed-of-sound compensation |
 | Antenna | 915MHz 5.8dBi Fiberglass w/ Cable | 1 | ~$25 | Amazon | Waterproof, 20ft cable |
 | Pull-up Resistor | 4.7kΩ | 1 | <$1 | Various | For DS18B20 1-Wire data line |
+| Echo Voltage Divider Resistors | 1kΩ + 2kΩ | 1 pair per HC-SR04 | <$1 | Various | Drops the 5V ECHO line to ~3.3V for the Pi GPIO. Omit when using HC-SR04P. |
 
 ### Raspberry Pi 4 Model B Detailed Specifications
 
@@ -182,10 +184,12 @@ Used for development and testing.
 
 | Component | Model/Spec | Quantity | Est. Cost | Notes |
 |-----------|------------|----------|-----------|-------|
-| Battery | 12V 7Ah SLA or LiFePO4 | 1 | $25-50 | Main power |
+| Battery | 12V 7Ah SLA or LiFePO4 | 1 | $25-50 | Main power. Size against the model in `config/power_budget.yaml`. |
 | Solar Panel | 10-20W 12V | 1 | $25-40 | Recharging |
 | Charge Controller | PWM or MPPT | 1 | $15-30 | Battery management |
 | Voltage Regulator | 5V 3A Buck Converter | 1 | $5 | Pi power |
+
+> **Sizing the battery and solar panel:** Run `python3 scripts/power_budget.py --config config/power_budget.yaml` after editing the component list. The tool prints the required battery capacity (Wh and Ah at 12V) for the configured autonomy target and depth-of-discharge. Re-run any time you add or remove sensors.
 
 ### Enclosure & Mounting
 
