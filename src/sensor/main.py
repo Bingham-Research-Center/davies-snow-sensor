@@ -10,6 +10,7 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+from src.sensor.a02yyuw import A02yyuwSensor
 from src.sensor.config import QCConfig, StationConfig, config_id, load_config
 from src.sensor.cycle import get_boot_id, read_and_increment_cycle_id
 from src.sensor.lora import LoRaTransmitter
@@ -71,6 +72,14 @@ class SensorStation:
                 baud_rate=s.baud_rate,
             )
             for s in maxbotix_list
+        }
+        a02yyuw_list = config.sensors.a02yyuw if config.sensors is not None else []
+        self._a02yyuws: dict[str, A02yyuwSensor] = {
+            s.id: A02yyuwSensor(
+                serial_port=s.serial_port,
+                baud_rate=s.baud_rate,
+            )
+            for s in a02yyuw_list
         }
         self._lora = LoRaTransmitter(
             cs_pin=config.pins.lora_cs,
@@ -167,6 +176,29 @@ class SensorStation:
                 else:
                     logger.info(
                         "MaxBotix %s distance: %.1f cm (spread: %s)",
+                        sensor_id, result.distance_cm, result.spread_cm,
+                    )
+                sensor_results[sensor_id] = result
+
+        # Read A02YYUW serial sensors sequentially
+        for sensor_id, sensor in self._a02yyuws.items():
+            if not sensor.initialize():
+                err = sensor.get_last_error_reason() or "a02yyuw_init_error"
+                errors.append(f"{sensor_id}:{err}")
+                logger.warning("A02YYUW %s init failed: %s", sensor_id, err)
+                sensor_results[sensor_id] = SensorResult(
+                    distance_cm=None, num_samples=0, num_valid=0,
+                    spread_cm=None, error=err,
+                )
+            else:
+                result = sensor.read_distance_cm(num_samples=qc.num_samples)
+                if result.distance_cm is None:
+                    err = result.error or "a02yyuw_read_error"
+                    errors.append(f"{sensor_id}:{err}")
+                    logger.warning("A02YYUW %s read failed: %s", sensor_id, err)
+                else:
+                    logger.info(
+                        "A02YYUW %s distance: %.1f cm (spread: %s)",
                         sensor_id, result.distance_cm, result.spread_cm,
                     )
                 sensor_results[sensor_id] = result
@@ -289,6 +321,8 @@ class SensorStation:
             resources.append((f"ultrasonic:{sid}", sensor))
         for sid, sensor in self._maxbotixes.items():
             resources.append((f"maxbotix:{sid}", sensor))
+        for sid, sensor in self._a02yyuws.items():
+            resources.append((f"a02yyuw:{sid}", sensor))
         resources.append(("lora", self._lora))
         for name, resource in resources:
             try:

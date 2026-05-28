@@ -45,6 +45,10 @@ pins:
 #     - id: "mast_mb"
 #       serial_port: "/dev/ttyUSB0"
 #       baud_rate: 9600           # optional; 9600 is the MB7374 default
+#   a02yyuw:
+#     - id: "mast_a02"
+#       serial_port: "/dev/ttyUSB1"
+#       baud_rate: 9600           # optional; 9600 is the A02YYUW default
 
 lora:
   # CRITICAL: every field below MUST match the peer's lora block on the base
