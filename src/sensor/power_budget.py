@@ -226,9 +226,20 @@ def _parse_component(raw: object, index: int) -> ComponentConfig:
 
 
 def load_power_budget_config(path: str | Path) -> PowerBudgetConfig:
-    raw = yaml.safe_load(Path(path).read_text())
-    data = _require_mapping(raw, "root")
+    p = Path(path)
+    try:
+        text = p.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        raise
+    except OSError as exc:
+        raise PowerBudgetError(f"Cannot read {p}: {exc}") from exc
 
+    try:
+        raw = yaml.safe_load(text)
+    except yaml.YAMLError as exc:
+        raise PowerBudgetError(f"Invalid YAML in {p}: {exc}") from exc
+
+    data = _require_mapping(raw, "root")
     components_raw = data.get("components")
     if not isinstance(components_raw, list) or not components_raw:
         raise PowerBudgetError("'components' must be a non-empty list")
