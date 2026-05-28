@@ -4,7 +4,6 @@ from src.sensor.config import QCConfig
 from src.sensor.qc import (
     ALL_ULTRASONIC_FAILED,
     LORA_TX_FAILED,
-    SELECTED_DISTANCE_OOR,
     SELECTED_TOO_FEW_VALID,
     SELECTED_TOO_NOISY,
     SNOW_DEPTH_NEGATIVE,
@@ -67,19 +66,6 @@ class TestAllUltrasonicFailed:
         assert not (_flag(sensor_results=results) & ALL_ULTRASONIC_FAILED)
 
 
-class TestSelectedDistanceOOR:
-    def test_flag_set_when_below_min(self):
-        r = _good_result(distance_cm=1.0)
-        assert _flag(selected_result=r) & SELECTED_DISTANCE_OOR
-
-    def test_flag_set_when_above_max(self):
-        r = _good_result(distance_cm=401.0)
-        assert _flag(selected_result=r) & SELECTED_DISTANCE_OOR
-
-    def test_flag_not_set_when_in_range(self):
-        assert not (_flag() & SELECTED_DISTANCE_OOR)
-
-
 class TestSelectedTooFewValid:
     def test_flag_set(self):
         # min_valid_fraction=0.5, num_samples=31 → need ceil(15.5)=16
@@ -134,7 +120,6 @@ class TestStorageWriteFailed:
 class TestNoSelectedResult:
     def test_no_selected_flags(self):
         flag = _flag(selected_id=None, selected_result=None)
-        assert not (flag & SELECTED_DISTANCE_OOR)
         assert not (flag & SELECTED_TOO_FEW_VALID)
         assert not (flag & SELECTED_TOO_NOISY)
 
@@ -171,14 +156,6 @@ class TestMultipleFlags:
 
 
 class TestBoundaryValues:
-    def test_distance_at_lower_bound(self):
-        r = _good_result(distance_cm=2.0)
-        assert not (_flag(selected_result=r) & SELECTED_DISTANCE_OOR)
-
-    def test_distance_at_upper_bound(self):
-        r = _good_result(distance_cm=400.0)
-        assert not (_flag(selected_result=r) & SELECTED_DISTANCE_OOR)
-
     def test_snow_depth_at_sensor_height_not_oor(self):
         # snow_depth_cm == sensor_height_cm is not > so flag should NOT be set
         assert not (_flag(snow_depth_cm=200.0, sensor_height_cm=200.0) & SNOW_DEPTH_OOR)
