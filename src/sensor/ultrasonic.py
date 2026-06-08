@@ -92,7 +92,6 @@ class UltrasonicSensor:
                 spread_cm=None, error="ultrasonic_not_initialized",
             )
 
-        # Apply temperature compensation
         if temperature_c is not None:
             self._sensor.speed_of_sound = speed_of_sound_m_s(temperature_c)
         else:

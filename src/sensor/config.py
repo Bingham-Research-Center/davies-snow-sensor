@@ -7,31 +7,24 @@ import yaml
 from dataclasses import dataclass, field
 from pathlib import Path
 
-
-class ConfigError(Exception):
-    """Raised when station configuration is missing or invalid."""
-
-
-# Valid ISM frequency bands in MHz (lo, hi) inclusive.
-_ISM_BANDS = (
-    (169.4, 169.475),
-    (433.05, 434.79),
-    (863.0, 870.0),
-    (902.0, 928.0),
+from src.protocol.validation import (
+    ConfigError,
+    ISM_BANDS,
+    MAX_PREAMBLE_LENGTH,
+    VALID_BANDWIDTHS_HZ,
+    VALID_CODING_RATES,
+    VALID_SPREADING_FACTORS,
+    parse_int,
+    parse_int_in,
+    parse_int_range,
+    parse_number,
+    parse_positive_number,
+    require,
+    require_int,
+    validate_pin,
 )
 
-# LoRa modulation validation. Bandwidth bins match adafruit_rfm9x.bw_bins
-# exactly (note 31250 not 31200); 500000 is handled by the library's
-# fall-through branch.
-_VALID_SPREADING_FACTORS = frozenset({6, 7, 8, 9, 10, 11, 12})
-_VALID_CODING_RATES = frozenset({5, 6, 7, 8})
-_VALID_BANDWIDTHS_HZ = frozenset(
-    {7800, 10400, 15600, 20800, 31250, 41700, 62500, 125000, 250000, 500000}
-)
-_MAX_PREAMBLE_LENGTH = 65535
 
-# Hardware profiles recognized by the config loader. Profiles gate
-# board-specific pin reservations (see _check_sensor_pin_reserved).
 _VALID_HARDWARE_PROFILES = frozenset({"52pi-ep0123"})
 
 # Pins unusable for an ultrasonic sensor when the 52Pi Easy Multiplexing
@@ -53,8 +46,6 @@ class PinsConfig:
     ds18b20_data: int
     lora_cs: int
     lora_reset: int
-    hcsr04_trigger: int | None = None
-    hcsr04_echo: int | None = None
 
 
 @dataclass(frozen=True)
@@ -128,27 +119,6 @@ class StationConfig:
     hardware_profile: str | None = None
 
 
-def _require(data: dict, key: str, section: str) -> object:
-    """Extract a required key from a dict, raising ConfigError if missing."""
-    if key not in data:
-        raise ConfigError(f"Missing required field '{key}' in '{section}'")
-    return data[key]
-
-
-def _require_int(data: dict, key: str, section: str) -> int:
-    val = _require(data, key, section)
-    if not isinstance(val, int):
-        raise ConfigError(
-            f"Field '{key}' in '{section}' must be an integer, got {type(val).__name__}"
-        )
-    return val
-
-
-def _validate_pin(name: str, val: int) -> None:
-    if val < 0 or val > 27:
-        raise ConfigError(f"Pin '{name}' value {val} is out of range (must be 0-27)")
-
-
 def _check_sensor_pin_reserved(name: str, val: int, hardware_profile: str | None) -> None:
     if hardware_profile != "52pi-ep0123":
         return
@@ -171,54 +141,28 @@ def _check_pin_collisions(pin_fields: dict[str, int]) -> None:
         seen[val] = name
 
 
-def _parse_pins(
-    raw: dict,
-    require_hcsr04: bool = True,
-    hardware_profile: str | None = None,
-) -> PinsConfig:
+def _parse_pins(raw: dict) -> PinsConfig:
     section = "pins"
     if not isinstance(raw, dict):
         raise ConfigError(f"'{section}' must be a mapping")
 
-    ds18b20_data = _require_int(raw, "ds18b20_data", section)
-    lora_cs = _require_int(raw, "lora_cs", section)
-    lora_reset = _require_int(raw, "lora_reset", section)
+    ds18b20_data = require_int(raw, "ds18b20_data", section)
+    lora_cs = require_int(raw, "lora_cs", section)
+    lora_reset = require_int(raw, "lora_reset", section)
 
-    hcsr04_trigger = None
-    hcsr04_echo = None
-    if require_hcsr04:
-        hcsr04_trigger = _require_int(raw, "hcsr04_trigger", section)
-        hcsr04_echo = _require_int(raw, "hcsr04_echo", section)
-    else:
-        if "hcsr04_trigger" in raw:
-            hcsr04_trigger = _require_int(raw, "hcsr04_trigger", section)
-        if "hcsr04_echo" in raw:
-            hcsr04_echo = _require_int(raw, "hcsr04_echo", section)
-
-    pin_fields: dict[str, int] = {
+    pin_fields = {
         "ds18b20_data": ds18b20_data,
         "lora_cs": lora_cs,
         "lora_reset": lora_reset,
     }
-    if hcsr04_trigger is not None:
-        pin_fields["hcsr04_trigger"] = hcsr04_trigger
-    if hcsr04_echo is not None:
-        pin_fields["hcsr04_echo"] = hcsr04_echo
-
     for name, val in pin_fields.items():
-        _validate_pin(name, val)
-    if hcsr04_trigger is not None:
-        _check_sensor_pin_reserved("hcsr04_trigger", hcsr04_trigger, hardware_profile)
-    if hcsr04_echo is not None:
-        _check_sensor_pin_reserved("hcsr04_echo", hcsr04_echo, hardware_profile)
+        validate_pin(name, val)
     _check_pin_collisions(pin_fields)
 
     return PinsConfig(
         ds18b20_data=ds18b20_data,
         lora_cs=lora_cs,
         lora_reset=lora_reset,
-        hcsr04_trigger=hcsr04_trigger,
-        hcsr04_echo=hcsr04_echo,
     )
 
 
@@ -243,7 +187,7 @@ def _parse_sensors(
             section = f"sensors.ultrasonic[{i}]"
             if not isinstance(entry, dict):
                 raise ConfigError(f"'{section}' must be a mapping")
-            sid = _require(entry, "id", section)
+            sid = require(entry, "id", section)
             if not isinstance(sid, str):
                 raise ConfigError(
                     f"Field 'id' in '{section}' must be a string"
@@ -251,10 +195,10 @@ def _parse_sensors(
             if sid in seen_ids:
                 raise ConfigError(f"Duplicate sensor id '{sid}'")
             seen_ids.add(sid)
-            trig = _require_int(entry, "trigger_pin", section)
-            echo = _require_int(entry, "echo_pin", section)
-            _validate_pin(f"{sid}.trigger_pin", trig)
-            _validate_pin(f"{sid}.echo_pin", echo)
+            trig = require_int(entry, "trigger_pin", section)
+            echo = require_int(entry, "echo_pin", section)
+            validate_pin(f"{sid}.trigger_pin", trig)
+            validate_pin(f"{sid}.echo_pin", echo)
             _check_sensor_pin_reserved(f"{sid}.trigger_pin", trig, hardware_profile)
             _check_sensor_pin_reserved(f"{sid}.echo_pin", echo, hardware_profile)
             all_pins[f"{sid}.trigger_pin"] = trig
@@ -306,14 +250,14 @@ def _parse_maxbotix_sensors(
         if not isinstance(entry, dict):
             raise ConfigError(f"'{section}' must be a mapping")
 
-        sid = _require(entry, "id", section)
+        sid = require(entry, "id", section)
         if not isinstance(sid, str):
             raise ConfigError(f"Field 'id' in '{section}' must be a string")
         if sid in seen_ids:
             raise ConfigError(f"Duplicate sensor id '{sid}'")
         seen_ids.add(sid)
 
-        serial_port = _require(entry, "serial_port", section)
+        serial_port = require(entry, "serial_port", section)
         if not isinstance(serial_port, str):
             raise ConfigError(
                 f"Field 'serial_port' in '{section}' must be a string"
@@ -355,14 +299,14 @@ def _parse_a02yyuw_sensors(
         if not isinstance(entry, dict):
             raise ConfigError(f"'{section}' must be a mapping")
 
-        sid = _require(entry, "id", section)
+        sid = require(entry, "id", section)
         if not isinstance(sid, str):
             raise ConfigError(f"Field 'id' in '{section}' must be a string")
         if sid in seen_ids:
             raise ConfigError(f"Duplicate sensor id '{sid}'")
         seen_ids.add(sid)
 
-        serial_port = _require(entry, "serial_port", section)
+        serial_port = require(entry, "serial_port", section)
         if not isinstance(serial_port, str):
             raise ConfigError(
                 f"Field 'serial_port' in '{section}' must be a string"
@@ -395,77 +339,27 @@ def _parse_lora(raw: dict | None) -> LoraConfig:
         raise ConfigError("'lora' must be a mapping")
     defaults = LoraConfig()
 
-    freq = raw.get("frequency", defaults.frequency)
-    if not isinstance(freq, (int, float)) or isinstance(freq, bool):
-        raise ConfigError(
-            f"Field 'frequency' in 'lora' must be a number, got {type(freq).__name__}"
-        )
-    freq = float(freq)
-    if not any(lo <= freq <= hi for lo, hi in _ISM_BANDS):
-        raise ConfigError(
-            f"Frequency {freq} MHz is not in a valid ISM band"
-        )
+    freq = parse_number(raw, "frequency", "lora", defaults.frequency)
+    if not any(lo <= freq <= hi for lo, hi in ISM_BANDS):
+        raise ConfigError(f"Frequency {freq} MHz is not in a valid ISM band")
 
-    tx = raw.get("tx_power", defaults.tx_power)
-    if not isinstance(tx, int) or isinstance(tx, bool):
-        raise ConfigError(
-            f"Field 'tx_power' in 'lora' must be an integer, got {type(tx).__name__}"
-        )
+    tx = parse_int(raw, "tx_power", "lora", defaults.tx_power)
     if tx < 5 or tx > 23:
-        raise ConfigError(
-            f"TX power {tx} dBm is out of range (must be 5-23)"
-        )
+        raise ConfigError(f"TX power {tx} dBm is out of range (must be 5-23)")
 
-    sf = raw.get("spreading_factor", defaults.spreading_factor)
-    if not isinstance(sf, int) or isinstance(sf, bool):
-        raise ConfigError(
-            f"Field 'spreading_factor' in 'lora' must be an integer, got {type(sf).__name__}"
-        )
-    if sf not in _VALID_SPREADING_FACTORS:
-        raise ConfigError(
-            f"spreading_factor {sf} is invalid (must be one of {sorted(_VALID_SPREADING_FACTORS)})"
-        )
+    sf = parse_int_in(raw, "spreading_factor", "lora", VALID_SPREADING_FACTORS, defaults.spreading_factor)
+    bw = parse_int_in(raw, "signal_bandwidth_hz", "lora", VALID_BANDWIDTHS_HZ, defaults.signal_bandwidth_hz)
 
-    bw = raw.get("signal_bandwidth_hz", defaults.signal_bandwidth_hz)
-    if not isinstance(bw, int) or isinstance(bw, bool):
-        raise ConfigError(
-            f"Field 'signal_bandwidth_hz' in 'lora' must be an integer, got {type(bw).__name__}"
-        )
-    if bw not in _VALID_BANDWIDTHS_HZ:
-        raise ConfigError(
-            f"signal_bandwidth_hz {bw} is invalid (must be one of {sorted(_VALID_BANDWIDTHS_HZ)})"
-        )
-
-    cr = raw.get("coding_rate", defaults.coding_rate)
-    if not isinstance(cr, int) or isinstance(cr, bool):
-        raise ConfigError(
-            f"Field 'coding_rate' in 'lora' must be an integer, got {type(cr).__name__}"
-        )
-    if cr not in _VALID_CODING_RATES:
+    cr = parse_int(raw, "coding_rate", "lora", defaults.coding_rate)
+    if cr not in VALID_CODING_RATES:
         raise ConfigError(
             f"coding_rate {cr} is invalid (must be 5, 6, 7, or 8 — representing 4/5..4/8)"
         )
 
-    preamble = raw.get("preamble_length", defaults.preamble_length)
-    if not isinstance(preamble, int) or isinstance(preamble, bool):
-        raise ConfigError(
-            f"Field 'preamble_length' in 'lora' must be an integer, got {type(preamble).__name__}"
-        )
-    if preamble < 1 or preamble > _MAX_PREAMBLE_LENGTH:
-        raise ConfigError(
-            f"preamble_length {preamble} is out of range (must be 1..{_MAX_PREAMBLE_LENGTH})"
-        )
-
-    ack = raw.get("ack_timeout_seconds", defaults.ack_timeout_seconds)
-    if not isinstance(ack, (int, float)) or isinstance(ack, bool):
-        raise ConfigError(
-            f"Field 'ack_timeout_seconds' in 'lora' must be a number, got {type(ack).__name__}"
-        )
-    ack = float(ack)
-    if ack <= 0:
-        raise ConfigError(
-            f"ack_timeout_seconds must be > 0, got {ack}"
-        )
+    preamble = parse_int_range(
+        raw, "preamble_length", "lora", 1, MAX_PREAMBLE_LENGTH, defaults.preamble_length
+    )
+    ack = parse_positive_number(raw, "ack_timeout_seconds", "lora", defaults.ack_timeout_seconds)
 
     return LoraConfig(
         frequency=freq,
@@ -485,7 +379,7 @@ def _parse_storage(raw: dict | None) -> StorageConfig:
         )
     if not isinstance(raw, dict):
         raise ConfigError("'storage' must be a mapping")
-    csv_path = _require(raw, "csv_path", "storage")
+    csv_path = require(raw, "csv_path", "storage")
     if not isinstance(csv_path, str):
         raise ConfigError(
             f"Field 'csv_path' in 'storage' must be a string, got {type(csv_path).__name__}"
@@ -503,12 +397,7 @@ def _parse_timing(raw: dict | None) -> TimingConfig:
         return TimingConfig()
     if not isinstance(raw, dict):
         raise ConfigError("'timing' must be a mapping")
-    interval = raw.get("cycle_interval_minutes", 15)
-    if not isinstance(interval, int):
-        raise ConfigError(
-            f"Field 'cycle_interval_minutes' in 'timing' must be an integer, "
-            f"got {type(interval).__name__}"
-        )
+    interval = parse_int(raw, "cycle_interval_minutes", "timing", 15)
     if interval < 1:
         raise ConfigError(
             f"cycle_interval_minutes must be >= 1, got {interval}"
@@ -516,47 +405,25 @@ def _parse_timing(raw: dict | None) -> TimingConfig:
     return TimingConfig(cycle_interval_minutes=interval)
 
 
-
 def _parse_qc(raw: dict | None) -> QCConfig:
     if raw is None:
         return QCConfig()
     if not isinstance(raw, dict):
         raise ConfigError("'qc' must be a mapping")
-    num_samples = raw.get("num_samples", 31)
-    if not isinstance(num_samples, int):
-        raise ConfigError(
-            f"Field 'num_samples' in 'qc' must be an integer, got {type(num_samples).__name__}"
-        )
+    num_samples = parse_int(raw, "num_samples", "qc", 31)
     if num_samples < 1:
         raise ConfigError(f"num_samples must be >= 1, got {num_samples}")
-    inter_pulse_delay_ms = raw.get("inter_pulse_delay_ms", 60)
-    if not isinstance(inter_pulse_delay_ms, int):
-        raise ConfigError(
-            f"Field 'inter_pulse_delay_ms' in 'qc' must be an integer, "
-            f"got {type(inter_pulse_delay_ms).__name__}"
-        )
+    inter_pulse_delay_ms = parse_int(raw, "inter_pulse_delay_ms", "qc", 60)
     if inter_pulse_delay_ms < 0:
-        raise ConfigError(f"inter_pulse_delay_ms must be >= 0, got {inter_pulse_delay_ms}")
-    min_valid_fraction = raw.get("min_valid_fraction", 0.5)
-    if not isinstance(min_valid_fraction, (int, float)):
         raise ConfigError(
-            f"Field 'min_valid_fraction' in 'qc' must be a number, "
-            f"got {type(min_valid_fraction).__name__}"
+            f"inter_pulse_delay_ms must be >= 0, got {inter_pulse_delay_ms}"
         )
-    min_valid_fraction = float(min_valid_fraction)
+    min_valid_fraction = parse_number(raw, "min_valid_fraction", "qc", 0.5)
     if not (0.0 < min_valid_fraction <= 1.0):
         raise ConfigError(
             f"min_valid_fraction must be in (0, 1], got {min_valid_fraction}"
         )
-    max_spread_cm = raw.get("max_spread_cm", 5.0)
-    if not isinstance(max_spread_cm, (int, float)):
-        raise ConfigError(
-            f"Field 'max_spread_cm' in 'qc' must be a number, "
-            f"got {type(max_spread_cm).__name__}"
-        )
-    max_spread_cm = float(max_spread_cm)
-    if max_spread_cm <= 0:
-        raise ConfigError(f"max_spread_cm must be > 0, got {max_spread_cm}")
+    max_spread_cm = parse_positive_number(raw, "max_spread_cm", "qc", 5.0)
     return QCConfig(
         num_samples=num_samples,
         inter_pulse_delay_ms=inter_pulse_delay_ms,
@@ -588,18 +455,17 @@ def load_config(path: str | Path) -> StationConfig:
     if not isinstance(raw, dict):
         raise ConfigError("Config file must contain a YAML mapping")
 
-    # Station section
-    station_raw = _require(raw, "station", "root")
+    station_raw = require(raw, "station", "root")
     if not isinstance(station_raw, dict):
         raise ConfigError("'station' must be a mapping")
-    station_id = _require(station_raw, "id", "station")
+    station_id = require(station_raw, "id", "station")
     if not isinstance(station_id, str):
         raise ConfigError(
             f"Field 'id' in 'station' must be a string, got {type(station_id).__name__}"
         )
 
-    sensor_height_raw = _require(station_raw, "sensor_height_cm", "station")
-    if not isinstance(sensor_height_raw, (int, float)):
+    sensor_height_raw = require(station_raw, "sensor_height_cm", "station")
+    if not isinstance(sensor_height_raw, (int, float)) or isinstance(sensor_height_raw, bool):
         raise ConfigError(
             f"Field 'sensor_height_cm' in 'station' must be a number, "
             f"got {type(sensor_height_raw).__name__}"
@@ -625,19 +491,9 @@ def load_config(path: str | Path) -> StationConfig:
             )
         hardware_profile = hardware_profile_raw
 
-    # Pins section (required — no safe defaults for hardware pins)
-    has_sensors = "sensors" in raw
-    pins_raw = _require(raw, "pins", "root")
-    pins = _parse_pins(
-        pins_raw,
-        require_hcsr04=not has_sensors,
-        hardware_profile=hardware_profile,
-    )
-
-    # Sensors section (or auto-convert from legacy pins)
+    pins = _parse_pins(require(raw, "pins", "root"))
     sensors = _parse_sensors(raw.get("sensors"), pins, hardware_profile=hardware_profile)
 
-    # Optional sections with defaults
     lora = _parse_lora(raw.get("lora"))
     storage = _parse_storage(raw.get("storage"))
     timing = _parse_timing(raw.get("timing"))

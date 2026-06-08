@@ -92,7 +92,6 @@ def _make_station_config(
         sensor_height_cm=sensor_height_cm,
         pins=PinsConfig(
             ds18b20_data=4, lora_cs=8, lora_reset=25,
-            hcsr04_trigger=5, hcsr04_echo=6,
         ),
         lora=LoraConfig(),
         storage=StorageConfig(csv_path="/tmp/x.csv"),
@@ -575,11 +574,15 @@ class TestMainIntegration:
             f"  hardware_profile: \"52pi-ep0123\"\n"
             f"\n"
             f"pins:\n"
-            f"  hcsr04_trigger: {pin_trig}\n"
-            f"  hcsr04_echo: {pin_echo}\n"
             f"  ds18b20_data: 4\n"
             f"  lora_cs: 8\n"
             f"  lora_reset: 25\n"
+            f"\n"
+            f"sensors:\n"
+            f"  ultrasonic:\n"
+            f"    - id: default\n"
+            f"      trigger_pin: {pin_trig}\n"
+            f"      echo_pin: {pin_echo}\n"
             f"\n"
             f"storage:\n"
             f"  csv_path: \"/tmp/x.csv\"\n",

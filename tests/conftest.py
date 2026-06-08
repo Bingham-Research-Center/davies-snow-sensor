@@ -36,8 +36,6 @@ def station_config(csv_path: Path) -> StationConfig:
             ds18b20_data=4,
             lora_cs=5,
             lora_reset=25,
-            hcsr04_trigger=23,
-            hcsr04_echo=24,
         ),
         lora=LoraConfig(frequency=915.0, tx_power=23),
         storage=StorageConfig(csv_path=str(csv_path)),

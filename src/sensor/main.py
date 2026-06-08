@@ -113,7 +113,6 @@ class SensorStation:
             logger.warning("Storage initialization failed", exc_info=True)
             storage_failed = True
 
-        # Read temperature
         temperature_c: float | None = None
         if not self._temp.initialize():
             err = self._temp.get_last_error_reason() or "temp_init_error"
@@ -128,7 +127,6 @@ class SensorStation:
             else:
                 logger.info("Temperature: %.2f °C", temperature_c)
 
-        # Read ultrasonic sensors sequentially
         qc = self._config.qc
         sensor_results: dict[str, SensorResult] = {}
         for sensor_id, sensor in self._ultrasonics.items():
@@ -203,13 +201,11 @@ class SensorStation:
                     )
                 sensor_results[sensor_id] = result
 
-        # Reproducibility fields
         cycle_id = read_and_increment_cycle_id(self._config.storage.csv_path)
         boot_id = get_boot_id()
         software_version = os.environ.get("SNOW_SENSOR_VERSION", "unknown")
         cfg_id = self._config_id
 
-        # Write per-sensor rows
         for sensor_id, result in sensor_results.items():
             sr = SensorReading(
                 timestamp=timestamp,
@@ -227,19 +223,16 @@ class SensorStation:
                 logger.warning("Sensor CSV append failed for %s", sensor_id, exc_info=True)
                 storage_failed = True
 
-        # Select best sensor by QC criteria
         best = _select_best_sensor(sensor_results, qc)
         selected_ultrasonic_id: str | None = best[0] if best else None
         distance_raw_cm: float | None = best[1].distance_cm if best else None
 
-        # Compute snow depth
         snow_depth_cm: float | None = None
         if distance_raw_cm is not None:
             snow_depth_cm = round(
                 self._config.sensor_height_cm - distance_raw_cm, 1
             )
 
-        # Transmit via LoRa
         lora_tx_success = False
         if not self._lora.initialize():
             err = self._lora.get_last_error_reason() or "lora_init_error"
@@ -264,10 +257,8 @@ class SensorStation:
                 logger.info("LoRa transmit OK (RSSI: %s)", self._lora.get_last_rssi())
             self._lora.sleep()
 
-        # Build error flags once, after all errors are collected
         error_flags_csv = "|".join(errors)
 
-        # Compute QC bitmask
         selected_result = best[1] if best else None
         quality_flag = compute_quality_flag(
             temperature_c=temperature_c,
@@ -281,7 +272,6 @@ class SensorStation:
             qc=qc,
         )
 
-        # Save to CSV with tx result already known
         reading = Reading(
             timestamp=timestamp,
             station_id=self._config.station_id,
@@ -353,7 +343,6 @@ def main(argv: list[str] | None = None) -> int:
 
     station = SensorStation(config, config_path=args.config)
 
-    # Register signal handlers for graceful shutdown
     def handle_signal(signum: int, frame: object) -> None:
         logger.info("Received signal %d, cleaning up", signum)
         station.cleanup()
