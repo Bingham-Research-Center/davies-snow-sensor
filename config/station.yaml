@@ -19,11 +19,13 @@ sensors:
     - id: "west_1"
       trigger_pin: 20
       echo_pin: 21
-    # west_2 disabled 2026-05-15: VCC conductor open mid-bundle
-    # (Pi end 5 V, sensor end 0 V). Re-enable after final wiring fixes the bundle.
-    # - id: "west_2"
-    #   trigger_pin: 27
-    #   echo_pin: 26
+    # west_2 (HC-SR04, GPIO 27/26) retired 2026-06-08: VCC conductor open
+    # mid-bundle, never reliable. Replaced by MaxBotix MB7374 on USB-TTL serial
+    # (see sensors.maxbotix below).
+  maxbotix:
+    - id: "west_mb"            # MaxBotix MB7374-10B (HRXL-MaxSonar-WR)
+      serial_port: "/dev/ttyUSB0"
+      baud_rate: 9600          # MB7374 default; TTL 8N1, streams R<mm> at ~6 Hz
 
 lora:
   # CRITICAL: every field below MUST match the peer's lora block on the base
