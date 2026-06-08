@@ -52,6 +52,15 @@ Important behavior:
   - The transducer hangs off the controller PCB on a cable — mount the
     transducer downward at the snow target; keep the PCB in the enclosure.
 
+- Ultrasonic (MaxBotix MB7374, TTL serial):
+  - **No GPIO and no voltage divider.** The MB7374's USB-A-terminated TTL
+    cable plugs into a USB-to-TTL adapter (CP2102) on a Pi USB port; it
+    enumerates as `/dev/ttyUSB*` and is declared under `sensors.maxbotix`.
+  - Self-powered at 5V, self-compensates for temperature; 30–500 cm range,
+    streams `R<mm>` frames at 9600 8N1.
+  - On DAVIES-01 this occupies the `west_2` position, replacing the retired
+    HC-SR04 (open VCC conductor mid-bundle).
+
 ### Known Issues — GPIO pins pulled LOW
 
 When the LoRa bonnet is seated on Row 1, the 52Pi EP-0123 multiplexing board
