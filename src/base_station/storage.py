@@ -11,40 +11,40 @@ Layout under config.storage.data_dir (default /home/admin/data):
 
 from __future__ import annotations
 
-import csv
-import os
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from pathlib import Path
 
-
-class StorageError(Exception):
-    """Raised when a storage write operation fails."""
+from src.protocol.csv_helpers import (
+    StorageError,
+    append_csv,
+    row_dict,
+)
 
 
 PACKET_COLUMNS = (
-    "recv_timestamp",     # UTC ISO 8601 when the receiver got it
-    "station_id",         # from packet
-    "timestamp",          # sender's timestamp (when sender created it)
+    "recv_timestamp",
+    "station_id",
+    "timestamp",
     "snow_depth_cm",
     "distance_raw_cm",
     "temperature_c",
     "sensor_height_cm",
-    "error_flags",        # pipe-delimited as on wire
-    "rssi",               # dBm, int
-    "snr",                # dB, float
+    "error_flags",
+    "rssi",
+    "snr",
 )
 
 
 METRICS_COLUMNS = (
-    "timestamp",          # UTC ISO 8601 when sample was taken
-    "cpu_percent",        # float
-    "mem_used_mb",        # int
-    "mem_total_mb",       # int
-    "load_1m",            # float
-    "uptime_seconds",     # int
-    "core_voltage_v",     # float (vcgencmd measure_volts core)
-    "throttled_flags",    # hex string from vcgencmd get_throttled (e.g. 0x0)
-    "soc_temp_c",         # float (vcgencmd measure_temp)
+    "timestamp",
+    "cpu_percent",
+    "mem_used_mb",
+    "mem_total_mb",
+    "load_1m",
+    "uptime_seconds",
+    "core_voltage_v",
+    "throttled_flags",
+    "soc_temp_c",
 )
 
 
@@ -61,9 +61,6 @@ class PacketRow:
     rssi: int | None = None
     snr: float | None = None
 
-    def to_row(self) -> dict:
-        return {k: ("" if v is None else v) for k, v in asdict(self).items()}
-
 
 @dataclass(frozen=True)
 class MetricsRow:
@@ -77,40 +74,6 @@ class MetricsRow:
     throttled_flags: str = ""
     soc_temp_c: float | None = None
 
-    def to_row(self) -> dict:
-        return {k: ("" if v is None else v) for k, v in asdict(self).items()}
-
-
-def _append_csv(
-    path: Path, columns: tuple[str, ...], row: dict, fsync: bool = False,
-) -> None:
-    """Append a single dict row to a CSV, creating the file with header if needed."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-
-    write_header = not path.exists() or path.stat().st_size == 0
-    if not write_header:
-        # Validate the existing header matches expectations to catch column drift
-        with open(path, newline="") as f:
-            reader = csv.reader(f)
-            try:
-                header = next(reader)
-            except StopIteration:
-                write_header = True
-            else:
-                if tuple(header) != columns:
-                    raise StorageError(
-                        f"CSV at {path} has header {header} but expected {list(columns)}"
-                    )
-
-    with open(path, "a", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=columns)
-        if write_header:
-            writer.writeheader()
-        writer.writerow(row)
-        if fsync:
-            f.flush()
-            os.fsync(f.fileno())
-
 
 class PacketStorage:
     """Append-only CSV writer, one packets.csv per station."""
@@ -123,10 +86,10 @@ class PacketStorage:
         return self._data_dir / station_id / "packets.csv"
 
     def append(self, row: PacketRow) -> None:
-        _append_csv(
+        append_csv(
             self.path_for(row.station_id),
             PACKET_COLUMNS,
-            row.to_row(),
+            row_dict(row),
             fsync=self._fsync,
         )
 
@@ -143,4 +106,4 @@ class MetricsStorage:
         return self._path
 
     def append(self, row: MetricsRow) -> None:
-        _append_csv(self._path, METRICS_COLUMNS, row.to_row(), fsync=self._fsync)
+        append_csv(self._path, METRICS_COLUMNS, row_dict(row), fsync=self._fsync)

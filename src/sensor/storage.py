@@ -3,13 +3,15 @@
 from __future__ import annotations
 
 import csv
-import os
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass
 from pathlib import Path
 
-
-class StorageError(Exception):
-    """Raised when a storage write operation fails."""
+from src.protocol.csv_helpers import (
+    StorageError,
+    append_csv,
+    ensure_csv_header,
+    row_dict,
+)
 
 
 COLUMNS = (
@@ -49,10 +51,6 @@ class Reading:
     lora_rssi: int | None = None
     error_flags: str = ""
 
-    def to_row(self) -> dict:
-        """Convert to a dict suitable for csv.DictWriter."""
-        return {k: ("" if v is None else v) for k, v in asdict(self).items()}
-
 
 SENSOR_COLUMNS = (
     "timestamp",
@@ -77,10 +75,6 @@ class SensorReading:
     spread_cm: float | None = None
     error: str | None = None
 
-    def to_row(self) -> dict:
-        """Convert to a dict suitable for csv.DictWriter."""
-        return {k: ("" if v is None else v) for k, v in asdict(self).items()}
-
 
 class Storage:
     """Append-only CSV storage for sensor readings."""
@@ -90,50 +84,12 @@ class Storage:
         self._fsync = fsync
 
     def initialize(self) -> None:
-        """Create parent dirs and write CSV header if the file doesn't exist or is empty.
-
-        Raises StorageError if the file already has content but its header does not match
-        the expected COLUMNS (schema mismatch), to prevent silent column misalignment.
-        """
-        self._path.parent.mkdir(parents=True, exist_ok=True)
-        if self._path.exists() and self._path.stat().st_size > 0:
-            try:
-                with open(self._path, newline="") as f:
-                    first_line = f.readline().strip()
-            except OSError as e:
-                raise StorageError(f"Failed to read CSV header: {e}") from e
-            existing_cols = tuple(first_line.split(","))
-            if existing_cols != COLUMNS:
-                raise StorageError(
-                    f"CSV schema mismatch: expected {COLUMNS}, found {existing_cols}"
-                )
-        else:
-            try:
-                with open(self._path, "w", newline="") as f:
-                    writer = csv.DictWriter(f, fieldnames=COLUMNS)
-                    writer.writeheader()
-            except OSError as e:
-                raise StorageError(f"Failed to initialize CSV: {e}") from e
+        ensure_csv_header(self._path, COLUMNS)
 
     def append(self, reading: Reading) -> None:
-        """Append a single reading to the CSV file.
-
-        Calls initialize() automatically if the file doesn't exist or is empty.
-        """
-        if not self._path.exists() or self._path.stat().st_size == 0:
-            self.initialize()
-        try:
-            with open(self._path, "a", newline="") as f:
-                writer = csv.DictWriter(f, fieldnames=COLUMNS)
-                writer.writerow(reading.to_row())
-                f.flush()
-                if self._fsync:
-                    os.fsync(f.fileno())
-        except OSError as e:
-            raise StorageError(f"Failed to append reading: {e}") from e
+        append_csv(self._path, COLUMNS, row_dict(reading), fsync=self._fsync)
 
     def read_all(self) -> list[Reading]:
-        """Read all rows back as Reading objects."""
         if not self._path.exists():
             return []
         with open(self._path, newline="") as f:
@@ -149,32 +105,12 @@ class SensorStorage:
         self._fsync = fsync
 
     def initialize(self) -> None:
-        """Create parent dirs and write CSV header if the file doesn't exist or is empty."""
-        self._path.parent.mkdir(parents=True, exist_ok=True)
-        if not self._path.exists() or self._path.stat().st_size == 0:
-            try:
-                with open(self._path, "w", newline="") as f:
-                    writer = csv.DictWriter(f, fieldnames=SENSOR_COLUMNS)
-                    writer.writeheader()
-            except OSError as e:
-                raise StorageError(f"Failed to initialize sensor CSV: {e}") from e
+        ensure_csv_header(self._path, SENSOR_COLUMNS)
 
     def append(self, reading: SensorReading) -> None:
-        """Append a single sensor reading to the CSV file."""
-        if not self._path.exists() or self._path.stat().st_size == 0:
-            self.initialize()
-        try:
-            with open(self._path, "a", newline="") as f:
-                writer = csv.DictWriter(f, fieldnames=SENSOR_COLUMNS)
-                writer.writerow(reading.to_row())
-                f.flush()
-                if self._fsync:
-                    os.fsync(f.fileno())
-        except OSError as e:
-            raise StorageError(f"Failed to append sensor reading: {e}") from e
+        append_csv(self._path, SENSOR_COLUMNS, row_dict(reading), fsync=self._fsync)
 
     def read_all(self) -> list[SensorReading]:
-        """Read all rows back as SensorReading objects."""
         if not self._path.exists():
             return []
         with open(self._path, newline="") as f:
@@ -183,7 +119,6 @@ class SensorStorage:
 
 
 def _row_to_reading(row: dict) -> Reading:
-    """Deserialize a CSV row dict back into a Reading."""
     return Reading(
         timestamp=row.get("timestamp", ""),
         station_id=row.get("station_id", ""),
@@ -204,7 +139,6 @@ def _row_to_reading(row: dict) -> Reading:
 
 
 def _row_to_sensor_reading(row: dict) -> SensorReading:
-    """Deserialize a CSV row dict back into a SensorReading."""
     return SensorReading(
         timestamp=row.get("timestamp", ""),
         cycle_id=int(row.get("cycle_id") or 0),

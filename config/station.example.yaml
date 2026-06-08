@@ -23,8 +23,6 @@ station:
   hardware_profile: "52pi-ep0123"  # Opt into board-specific pin validation. Remove for non-52Pi builds.
 
 pins:
-  hcsr04_trigger: 5         # HC-SR04 TRIG (BCM GPIO)
-  hcsr04_echo: 6            # HC-SR04 ECHO via 1k/2k divider to 3.3V
   ds18b20_data: 4           # DS18B20 1-Wire DATA (BCM GPIO4 with 4.7k pull-up to 3.3V)
   lora_cs: 7                # RFM95W SPI chip select
   lora_reset: 25            # RFM95W reset

@@ -12,21 +12,15 @@ import asyncio
 import logging
 import signal
 import sys
-from datetime import datetime, timezone
 
 from src.base_station.config import ReceiverConfig, load_config
-from src.base_station.metrics import sample as sample_metrics
+from src.base_station.metrics import sample as sample_metrics, utc_now_iso
 from src.base_station.radio import LoRaReceiver
 from src.base_station.registry import StationRegistry
 from src.base_station.storage import MetricsStorage, PacketRow, PacketStorage
 from src.protocol import wire
 
 log = logging.getLogger("base_station")
-
-
-def _utc_now_iso_ms() -> str:
-    now = datetime.now(timezone.utc)
-    return now.strftime("%Y-%m-%dT%H:%M:%S.") + f"{now.microsecond // 1000:03d}Z"
 
 
 async def metrics_loop(
@@ -87,7 +81,7 @@ async def receive_loop(
             # Keep going — we still want to log the packet.
 
         row = PacketRow(
-            recv_timestamp=_utc_now_iso_ms(),
+            recv_timestamp=utc_now_iso(),
             station_id=station_id,
             timestamp=packet["timestamp"],
             snow_depth_cm=packet["snow_depth_cm"],

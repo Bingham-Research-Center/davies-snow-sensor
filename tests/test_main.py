@@ -30,8 +30,6 @@ def _make_config(**overrides) -> StationConfig:
             ds18b20_data=4,
             lora_cs=5,
             lora_reset=25,
-            hcsr04_trigger=23,
-            hcsr04_echo=24,
         ),
         lora=LoraConfig(frequency=915.0, tx_power=23),
         storage=StorageConfig(csv_path="/tmp/test_snow.csv"),
@@ -403,11 +401,14 @@ station:
   id: TEST01
   sensor_height_cm: 200.0
 pins:
-  hcsr04_trigger: 23
-  hcsr04_echo: 24
   ds18b20_data: 4
   lora_cs: 5
   lora_reset: 25
+sensors:
+  ultrasonic:
+    - id: default
+      trigger_pin: 23
+      echo_pin: 24
 storage:
   csv_path: "/tmp/test_snow.csv"
 """
@@ -436,11 +437,14 @@ station:
   id: TEST01
   sensor_height_cm: 200.0
 pins:
-  hcsr04_trigger: 23
-  hcsr04_echo: 24
   ds18b20_data: 4
   lora_cs: 5
   lora_reset: 25
+sensors:
+  ultrasonic:
+    - id: default
+      trigger_pin: 23
+      echo_pin: 24
 storage:
   csv_path: "/tmp/test_snow.csv"
 """
@@ -456,11 +460,14 @@ station:
   id: TEST01
   sensor_height_cm: 200.0
 pins:
-  hcsr04_trigger: 23
-  hcsr04_echo: 24
   ds18b20_data: 4
   lora_cs: 5
   lora_reset: 25
+sensors:
+  ultrasonic:
+    - id: default
+      trigger_pin: 23
+      echo_pin: 24
 storage:
   csv_path: "/tmp/test_snow.csv"
 """

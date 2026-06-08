@@ -448,10 +448,6 @@ def append_history_csv(path: Path, row: dict) -> None:
         writer.writerow({k: row.get(k, "") for k in HISTORY_HEADERS})
 
 
-def _cycle_to_dict(c: Cycle) -> dict:
-    return asdict(c)
-
-
 def _effective_samples_per_cycle(
     args: argparse.Namespace, cfg: StationConfig
 ) -> int:
@@ -522,8 +518,8 @@ def write_logs(
             "echo_pin": usc.echo_pin,
         },
         "stats": stats,
-        "cycles": [_cycle_to_dict(c) for c in cycles],
-        "verify_cycle": _cycle_to_dict(verify_cycle) if verify_cycle else None,
+        "cycles": [asdict(c) for c in cycles],
+        "verify_cycle": asdict(verify_cycle) if verify_cycle else None,
     }
 
     write_json_log(json_path, payload)
@@ -539,14 +535,12 @@ def write_logs(
         ),
         "n_cycles": len(cycles),
         "n_kept": stats["n_kept"],
-        "median_cm": stats.get("median_cm") if stats.get("median_cm") is not None else "",
-        "trimmed_mean_cm": stats.get("trimmed_mean_cm") if stats.get("trimmed_mean_cm") is not None else "",
-        "stdev_cm": stats.get("stdev_cm") if stats.get("stdev_cm") is not None else "",
-        "iqr_cm": stats.get("iqr_cm") if stats.get("iqr_cm") is not None else "",
-        "mean_temperature_c": stats.get("mean_temperature_c") if stats.get("mean_temperature_c") is not None else "",
         "applied": applied,
         "git_sha": git_sha or "",
     }
+    for k in ("median_cm", "trimmed_mean_cm", "stdev_cm", "iqr_cm", "mean_temperature_c"):
+        v = stats.get(k)
+        history_row[k] = "" if v is None else v
     append_history_csv(history_path, history_row)
     return json_path
 

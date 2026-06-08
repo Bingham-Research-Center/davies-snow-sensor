@@ -20,8 +20,8 @@ _THROTTLED_RE = re.compile(r"throttled=(0x[0-9a-fA-F]+)")
 
 
 def utc_now_iso() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.") + \
-        f"{datetime.now(timezone.utc).microsecond // 1000:03d}Z"
+    now = datetime.now(timezone.utc)
+    return now.strftime("%Y-%m-%dT%H:%M:%S.") + f"{now.microsecond // 1000:03d}Z"
 
 
 def _vcgencmd(args: list[str], timeout: float = 1.0) -> str | None:

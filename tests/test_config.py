@@ -25,16 +25,34 @@ from src.sensor.config import (
 VALID_CONFIG = {
     "station": {"id": "DAVIES-01", "sensor_height_cm": 200.0},
     "pins": {
-        "hcsr04_trigger": 23,
-        "hcsr04_echo": 24,
         "ds18b20_data": 4,
         "lora_cs": 7,
         "lora_reset": 25,
+    },
+    "sensors": {
+        "ultrasonic": [
+            {"id": "default", "trigger_pin": 23, "echo_pin": 24},
+        ],
     },
     "lora": {"frequency": 915.0, "tx_power": 23},
     "storage": {"csv_path": "/tmp/test.csv"},
     "timing": {"cycle_interval_minutes": 10},
 }
+
+
+def _with_sensor(trigger_pin: int | None = None, echo_pin: int | None = None) -> dict:
+    """Build a VALID_CONFIG variant with a single sensor whose pins are overridden."""
+    base = {**VALID_CONFIG}
+    base["sensors"] = {
+        "ultrasonic": [
+            {
+                "id": "default",
+                "trigger_pin": trigger_pin if trigger_pin is not None else 23,
+                "echo_pin": echo_pin if echo_pin is not None else 24,
+            },
+        ],
+    }
+    return base
 
 
 def _write_yaml(tmp_path: Path, data: dict) -> Path:
@@ -49,8 +67,8 @@ class TestLoadConfigValid:
         assert isinstance(cfg, StationConfig)
         assert cfg.station_id == "DAVIES-01"
         assert cfg.sensor_height_cm == 200.0
-        assert cfg.pins.hcsr04_trigger == 23
-        assert cfg.pins.hcsr04_echo == 24
+        assert cfg.sensors.ultrasonic[0].trigger_pin == 23
+        assert cfg.sensors.ultrasonic[0].echo_pin == 24
         assert cfg.pins.ds18b20_data == 4
         assert cfg.pins.lora_cs == 7
         assert cfg.pins.lora_reset == 25
@@ -63,11 +81,14 @@ class TestLoadConfigValid:
         minimal = {
             "station": {"id": "DAVIES-02", "sensor_height_cm": 150},
             "pins": {
-                "hcsr04_trigger": 1,
-                "hcsr04_echo": 2,
                 "ds18b20_data": 3,
                 "lora_cs": 4,
                 "lora_reset": 5,
+            },
+            "sensors": {
+                "ultrasonic": [
+                    {"id": "default", "trigger_pin": 1, "echo_pin": 2},
+                ],
             },
             "storage": {"csv_path": "/tmp/test.csv"},
         }
@@ -108,15 +129,15 @@ class TestLoadConfigMissingFields:
             load_config(_write_yaml(tmp_path, data))
 
     def test_missing_single_pin(self, tmp_path):
-        pins = {k: v for k, v in VALID_CONFIG["pins"].items() if k != "hcsr04_echo"}
+        pins = {k: v for k, v in VALID_CONFIG["pins"].items() if k != "ds18b20_data"}
         data = {**VALID_CONFIG, "pins": pins}
-        with pytest.raises(ConfigError, match="hcsr04_echo"):
+        with pytest.raises(ConfigError, match="ds18b20_data"):
             load_config(_write_yaml(tmp_path, data))
 
 
 class TestLoadConfigInvalidTypes:
     def test_pin_as_string(self, tmp_path):
-        pins = {**VALID_CONFIG["pins"], "hcsr04_trigger": "not_a_number"}
+        pins = {**VALID_CONFIG["pins"], "ds18b20_data": "not_a_number"}
         data = {**VALID_CONFIG, "pins": pins}
         with pytest.raises(ConfigError, match="integer"):
             load_config(_write_yaml(tmp_path, data))
@@ -182,32 +203,28 @@ class TestLoadConfigFileErrors:
 
 class TestLoadConfigValueValidation:
     def test_pin_out_of_range_negative(self, tmp_path):
-        pins = {**VALID_CONFIG["pins"], "hcsr04_trigger": -1}
-        data = {**VALID_CONFIG, "pins": pins}
+        data = _with_sensor(trigger_pin=-1)
         with pytest.raises(ConfigError, match="out of range"):
             load_config(_write_yaml(tmp_path, data))
 
     def test_pin_out_of_range_high(self, tmp_path):
-        pins = {**VALID_CONFIG["pins"], "hcsr04_trigger": 28}
-        data = {**VALID_CONFIG, "pins": pins}
+        data = _with_sensor(trigger_pin=28)
         with pytest.raises(ConfigError, match="out of range"):
             load_config(_write_yaml(tmp_path, data))
 
     def test_pin_boundary_zero(self, tmp_path):
-        pins = {**VALID_CONFIG["pins"], "hcsr04_trigger": 0}
-        data = {**VALID_CONFIG, "pins": pins}
+        data = _with_sensor(trigger_pin=0)
         cfg = load_config(_write_yaml(tmp_path, data))
-        assert cfg.pins.hcsr04_trigger == 0
+        assert cfg.sensors.ultrasonic[0].trigger_pin == 0
 
     def test_pin_boundary_27(self, tmp_path):
-        pins = {**VALID_CONFIG["pins"], "hcsr04_trigger": 27}
-        data = {**VALID_CONFIG, "pins": pins}
+        data = _with_sensor(trigger_pin=27)
         cfg = load_config(_write_yaml(tmp_path, data))
-        assert cfg.pins.hcsr04_trigger == 27
+        assert cfg.sensors.ultrasonic[0].trigger_pin == 27
 
     def test_pin_collision(self, tmp_path):
-        pins = {**VALID_CONFIG["pins"], "hcsr04_echo": 23}  # same as trigger
-        data = {**VALID_CONFIG, "pins": pins}
+        # echo_pin same as trigger_pin
+        data = _with_sensor(trigger_pin=23, echo_pin=23)
         with pytest.raises(ConfigError, match="collision"):
             load_config(_write_yaml(tmp_path, data))
 
@@ -287,8 +304,12 @@ class TestLoraModulationConfig:
         minimal = {
             "station": {"id": "X", "sensor_height_cm": 100},
             "pins": {
-                "hcsr04_trigger": 1, "hcsr04_echo": 2,
                 "ds18b20_data": 3, "lora_cs": 4, "lora_reset": 5,
+            },
+            "sensors": {
+                "ultrasonic": [
+                    {"id": "default", "trigger_pin": 1, "echo_pin": 2},
+                ],
             },
             "storage": {"csv_path": "/tmp/test.csv"},
         }
@@ -380,11 +401,14 @@ class TestQCConfig:
         minimal = {
             "station": {"id": "DAVIES-02", "sensor_height_cm": 150},
             "pins": {
-                "hcsr04_trigger": 1,
-                "hcsr04_echo": 2,
                 "ds18b20_data": 3,
                 "lora_cs": 4,
                 "lora_reset": 5,
+            },
+            "sensors": {
+                "ultrasonic": [
+                    {"id": "default", "trigger_pin": 1, "echo_pin": 2},
+                ],
             },
             "storage": {"csv_path": "/tmp/test.csv"},
         }
@@ -486,11 +510,6 @@ class TestMultiSensorConfig:
         assert cfg.sensors.ultrasonic[1].trigger_pin == 13
         assert cfg.sensors.ultrasonic[1].echo_pin == 19
 
-    def test_hcsr04_pins_not_required_with_sensors(self, tmp_path):
-        cfg = load_config(_write_yaml(tmp_path, MULTI_SENSOR_CONFIG))
-        assert cfg.pins.hcsr04_trigger is None
-        assert cfg.pins.hcsr04_echo is None
-
     def test_four_sensors(self, tmp_path):
         data = {
             **MULTI_SENSOR_CONFIG,
@@ -505,21 +524,6 @@ class TestMultiSensorConfig:
         }
         cfg = load_config(_write_yaml(tmp_path, data))
         assert len(cfg.sensors.ultrasonic) == 4
-
-
-class TestMultiSensorBackwardCompat:
-    def test_legacy_config_auto_converts(self, tmp_path):
-        cfg = load_config(_write_yaml(tmp_path, VALID_CONFIG))
-        assert cfg.sensors is not None
-        assert len(cfg.sensors.ultrasonic) == 1
-        assert cfg.sensors.ultrasonic[0].id == "default"
-        assert cfg.sensors.ultrasonic[0].trigger_pin == 23
-        assert cfg.sensors.ultrasonic[0].echo_pin == 24
-
-    def test_legacy_pins_still_set(self, tmp_path):
-        cfg = load_config(_write_yaml(tmp_path, VALID_CONFIG))
-        assert cfg.pins.hcsr04_trigger == 23
-        assert cfg.pins.hcsr04_echo == 24
 
 
 class TestMultiSensorValidation:
@@ -630,12 +634,11 @@ class TestHardwareProfile:
 
     def test_profile_roundtrips(self, tmp_path):
         data = {
-            **VALID_CONFIG,
+            **_with_sensor(trigger_pin=5, echo_pin=6),
             "station": {
                 **VALID_CONFIG["station"],
                 "hardware_profile": "52pi-ep0123",
             },
-            "pins": {**VALID_CONFIG["pins"], "hcsr04_trigger": 5, "hcsr04_echo": 6},
         }
         cfg = load_config(_write_yaml(tmp_path, data))
         assert cfg.hardware_profile == "52pi-ep0123"
@@ -643,63 +646,55 @@ class TestHardwareProfile:
     def test_no_profile_allows_reserved_sensor_pin(self, tmp_path):
         # Pin 17 is pulled LOW by the 52Pi board, but without the profile
         # opt-in the loader does not enforce the reservation.
-        data = {
-            **VALID_CONFIG,
-            "pins": {**VALID_CONFIG["pins"], "hcsr04_trigger": 17},
-        }
+        data = _with_sensor(trigger_pin=17, echo_pin=6)
         cfg = load_config(_write_yaml(tmp_path, data))
-        assert cfg.pins.hcsr04_trigger == 17
+        assert cfg.sensors.ultrasonic[0].trigger_pin == 17
 
     def test_52pi_profile_rejects_reserved_trigger(self, tmp_path):
         data = {
-            **VALID_CONFIG,
+            **_with_sensor(trigger_pin=17, echo_pin=6),
             "station": {
                 **VALID_CONFIG["station"],
                 "hardware_profile": "52pi-ep0123",
             },
-            "pins": {**VALID_CONFIG["pins"], "hcsr04_trigger": 17, "hcsr04_echo": 6},
         }
-        with pytest.raises(ConfigError, match="hcsr04_trigger.*reserved"):
+        with pytest.raises(ConfigError, match="trigger_pin.*reserved"):
             load_config(_write_yaml(tmp_path, data))
 
     def test_52pi_profile_rejects_reserved_echo(self, tmp_path):
         data = {
-            **VALID_CONFIG,
+            **_with_sensor(trigger_pin=5, echo_pin=22),
             "station": {
                 **VALID_CONFIG["station"],
                 "hardware_profile": "52pi-ep0123",
             },
-            "pins": {**VALID_CONFIG["pins"], "hcsr04_trigger": 5, "hcsr04_echo": 22},
         }
-        with pytest.raises(ConfigError, match="hcsr04_echo.*reserved"):
+        with pytest.raises(ConfigError, match="echo_pin.*reserved"):
             load_config(_write_yaml(tmp_path, data))
 
     def test_52pi_profile_accepts_safe_pins(self, tmp_path):
         data = {
-            **VALID_CONFIG,
+            **_with_sensor(trigger_pin=5, echo_pin=6),
             "station": {
                 **VALID_CONFIG["station"],
                 "hardware_profile": "52pi-ep0123",
             },
-            "pins": {**VALID_CONFIG["pins"], "hcsr04_trigger": 5, "hcsr04_echo": 6},
         }
         cfg = load_config(_write_yaml(tmp_path, data))
-        assert cfg.pins.hcsr04_trigger == 5
-        assert cfg.pins.hcsr04_echo == 6
+        assert cfg.sensors.ultrasonic[0].trigger_pin == 5
+        assert cfg.sensors.ultrasonic[0].echo_pin == 6
 
     def test_52pi_profile_allows_lora_pins_in_reserved_set(self, tmp_path):
         # lora_cs=7 and lora_reset=25 are in the reserved set but are
         # LEGITIMATELY used by the LoRa bonnet itself; the check is scoped
         # to ultrasonic sensor pins only.
         data = {
-            **VALID_CONFIG,
+            **_with_sensor(trigger_pin=5, echo_pin=6),
             "station": {
                 **VALID_CONFIG["station"],
                 "hardware_profile": "52pi-ep0123",
             },
             "pins": {
-                "hcsr04_trigger": 5,
-                "hcsr04_echo": 6,
                 "ds18b20_data": 4,
                 "lora_cs": 7,
                 "lora_reset": 25,
