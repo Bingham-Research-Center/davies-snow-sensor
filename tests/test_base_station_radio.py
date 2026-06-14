@@ -46,8 +46,8 @@ class TestModulationConfig:
         radio = _init_with_mock(rx)
         assert radio.spreading_factor == 12
         assert radio.signal_bandwidth == 125000
-        assert radio.coding_rate == 8
-        assert radio.preamble_length == 12
+        assert radio.coding_rate == 5
+        assert radio.preamble_length == 8
         assert radio.low_datarate_optimize is True
 
     def test_kwargs_override_defaults(self):
@@ -79,3 +79,27 @@ class TestModulationConfig:
         )
         radio = _init_with_mock(rx)
         assert radio.low_datarate_optimize is expected_ldro
+
+
+class TestSendAck:
+    def test_sets_toa_aware_xmit_timeout(self):
+        rx = LoRaReceiver(cs_pin=7, reset_pin=25, spreading_factor=12)
+        radio = _init_with_mock(rx)
+        radio.send.return_value = True
+
+        assert rx.send_ack("DAVIES-01", "20260613T120000Z") is True
+        # The ACK at SF12 must get a window above the library's 2.0 s default.
+        assert radio.xmit_timeout > 2.0
+
+    def test_xmit_timeout_scales_with_sf(self):
+        rx_lo = LoRaReceiver(cs_pin=7, reset_pin=25, spreading_factor=7,
+                             coding_rate=5, preamble_length=8)
+        radio_lo = _init_with_mock(rx_lo)
+        rx_lo.send_ack("DAVIES-01", "20260613T120000Z")
+
+        rx_hi = LoRaReceiver(cs_pin=7, reset_pin=25, spreading_factor=12,
+                             coding_rate=5, preamble_length=8)
+        radio_hi = _init_with_mock(rx_hi)
+        rx_hi.send_ack("DAVIES-01", "20260613T120000Z")
+
+        assert radio_hi.xmit_timeout > radio_lo.xmit_timeout

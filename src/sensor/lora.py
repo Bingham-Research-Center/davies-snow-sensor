@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import time
 
-from src.protocol import wire
+from src.protocol import airtime, wire
 
 
 class LoRaTransmitter:
@@ -18,9 +18,9 @@ class LoRaTransmitter:
         tx_power: int = 23,
         spreading_factor: int = 12,
         signal_bandwidth_hz: int = 125000,
-        coding_rate: int = 8,
-        preamble_length: int = 12,
-        ack_timeout_seconds: float = 20.0,
+        coding_rate: int = 5,
+        preamble_length: int = 8,
+        ack_timeout_seconds: float = 6.0,
     ) -> None:
         self._cs_pin = cs_pin
         self._reset_pin = reset_pin
@@ -90,6 +90,32 @@ class LoRaTransmitter:
             self._last_error = "lora_no_device"
             return False
 
+    def transmit(self, data: bytes) -> bool:
+        """Send one message one-way, sizing xmit_timeout to its time-on-air.
+
+        Returns send()'s own bool: True on a completed transmission, False if
+        adafruit_rfm9x.send() hit its (now ToA-sized) xmit_timeout. Sizing the
+        timeout to the packet duration is what lets high-SF frames transmit
+        without truncation -- the library's fixed 2.0 s default is shorter than
+        an SF12/BW125 DATA packet (~3-4.5 s), so the stock setting silently cut
+        every such packet off mid-air.
+        """
+        if not self._initialized or self._rfm9x is None:
+            self._last_error = "lora_not_initialized"
+            return False
+        self._rfm9x.xmit_timeout = airtime.transmit_timeout_s(
+            len(data),
+            self._spreading_factor,
+            self._signal_bandwidth_hz,
+            self._coding_rate,
+            self._preamble_length,
+        )
+        try:
+            return bool(self._rfm9x.send(data))
+        except Exception:
+            self._last_error = "lora_send_error"
+            return False
+
     def transmit_with_ack(
         self,
         payload: dict,
@@ -106,16 +132,20 @@ class LoRaTransmitter:
             else timeout_seconds
         )
         message = wire.format_data(payload)
+        encoded = message.encode("utf-8")
         expected_station_id = str(payload.get("station_id", ""))
         expected_timestamp = str(payload.get("timestamp", ""))
 
         start = time.monotonic()
 
         for _attempt in range(max(retries, 1)):
-            try:
-                self._rfm9x.send(message.encode("utf-8"))
-            except Exception:
-                self._last_error = "lora_send_error"
+            if not self.transmit(encoded):
+                # transmit() sets lora_send_error on an exception; otherwise the
+                # packet's time-on-air exceeded xmit_timeout and send() truncated
+                # it. Surface that distinctly instead of letting it masquerade as
+                # a missing ACK -- the silent failure that hid the SF12 problem.
+                if self._last_error != "lora_send_error":
+                    self._last_error = "lora_tx_timeout"
                 continue
 
             deadline = time.monotonic() + timeout

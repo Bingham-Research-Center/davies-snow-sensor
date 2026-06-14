@@ -316,9 +316,9 @@ class TestLoraModulationConfig:
         cfg = load_config(_write_yaml(tmp_path, minimal))
         assert cfg.lora.spreading_factor == 12
         assert cfg.lora.signal_bandwidth_hz == 125000
-        assert cfg.lora.coding_rate == 8
-        assert cfg.lora.preamble_length == 12
-        assert cfg.lora.ack_timeout_seconds == 20.0
+        assert cfg.lora.coding_rate == 5
+        assert cfg.lora.preamble_length == 8
+        assert cfg.lora.ack_timeout_seconds == 6.0
 
     @pytest.mark.parametrize("sf", [6, 7, 8, 9, 10, 11, 12])
     def test_spreading_factor_accepted(self, tmp_path, sf):

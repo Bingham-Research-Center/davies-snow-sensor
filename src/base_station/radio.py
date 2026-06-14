@@ -6,6 +6,8 @@ receive-with-ACK API instead of transmit-with-ACK.
 
 from __future__ import annotations
 
+from src.protocol import airtime
+
 
 class LoRaReceiver:
     """Listen for DATA packets and send matching ACKs.
@@ -24,8 +26,8 @@ class LoRaReceiver:
         tx_power: int = 23,
         spreading_factor: int = 12,
         signal_bandwidth_hz: int = 125000,
-        coding_rate: int = 8,
-        preamble_length: int = 12,
+        coding_rate: int = 5,
+        preamble_length: int = 8,
     ) -> None:
         self._cs_pin = cs_pin
         self._reset_pin = reset_pin
@@ -117,6 +119,16 @@ class LoRaReceiver:
             return False
         from src.protocol import wire
         msg = wire.format_ack(station_id, timestamp).encode("utf-8")
+        # Size the transmit window to the ACK's time-on-air so send() doesn't
+        # truncate it at the library's fixed 2.0 s default (matters at high SF
+        # / CR8, where even the short ACK can approach that ceiling).
+        self._rfm9x.xmit_timeout = airtime.transmit_timeout_s(
+            len(msg),
+            self._spreading_factor,
+            self._signal_bandwidth_hz,
+            self._coding_rate,
+            self._preamble_length,
+        )
         try:
             self._rfm9x.send(msg)
         except Exception:

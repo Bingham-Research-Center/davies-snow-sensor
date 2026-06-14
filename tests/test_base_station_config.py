@@ -9,6 +9,7 @@ import pytest
 
 from src.base_station.config import (
     ConfigError,
+    DisplayConfig,
     LoraConfig,
     MetricsConfig,
     StationEntry,
@@ -171,9 +172,9 @@ class TestLoraModulationConfig:
         cfg = load_config(_write(tmp_path, _VALID_MINIMAL))
         assert cfg.lora.spreading_factor == 12
         assert cfg.lora.signal_bandwidth_hz == 125000
-        assert cfg.lora.coding_rate == 8
-        assert cfg.lora.preamble_length == 12
-        assert cfg.lora.ack_timeout_seconds == 20.0
+        assert cfg.lora.coding_rate == 5
+        assert cfg.lora.preamble_length == 8
+        assert cfg.lora.ack_timeout_seconds == 6.0
 
     def test_full_modulation_block(self, tmp_path):
         body = """\
@@ -239,6 +240,23 @@ stations:
   - id: "DAVIES-01"
 """
         with pytest.raises(ConfigError, match="TX power"):
+            load_config(_write(tmp_path, body))
+
+
+class TestDisplayConfig:
+    def test_default_enabled(self, tmp_path):
+        cfg = load_config(_write(tmp_path, _VALID_MINIMAL))
+        assert cfg.display == DisplayConfig()
+        assert cfg.display.enabled is True
+
+    def test_can_disable(self, tmp_path):
+        body = _VALID_MINIMAL + "display:\n  enabled: false\n"
+        cfg = load_config(_write(tmp_path, body))
+        assert cfg.display.enabled is False
+
+    def test_non_bool_rejected(self, tmp_path):
+        body = _VALID_MINIMAL + "display:\n  enabled: 1\n"
+        with pytest.raises(ConfigError, match="enabled"):
             load_config(_write(tmp_path, body))
 
 
