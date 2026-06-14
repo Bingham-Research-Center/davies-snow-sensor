@@ -50,13 +50,15 @@ class PinsConfig:
 
 @dataclass(frozen=True)
 class LoraConfig:
+    # Corrected long-range preset; MUST match the peer's lora block exactly.
+    # CR5 (not CR8) keeps time-on-air sane while SF12 carries the range.
     frequency: float = 915.0
     tx_power: int = 23
     spreading_factor: int = 12
     signal_bandwidth_hz: int = 125000
-    coding_rate: int = 8
-    preamble_length: int = 12
-    ack_timeout_seconds: float = 20.0
+    coding_rate: int = 5
+    preamble_length: int = 8
+    ack_timeout_seconds: float = 6.0
 
 
 @dataclass(frozen=True)

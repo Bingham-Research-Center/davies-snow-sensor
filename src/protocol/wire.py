@@ -16,6 +16,12 @@ PROTOCOL_VERSION = "v2"
 DATA_FIELD_COUNT = 8
 ACK_FIELD_COUNT = 3
 
+# Generous upper bound on a DATA message's length in bytes. A typical frame is
+# ~60 B; this leaves headroom for long pipe-delimited error_flags and stays well
+# under the radio FIFO limit (252 B incl. header). Used to size the receiver's
+# listen window to the worst-case time-on-air (see src/protocol/airtime.py).
+MAX_DATA_PAYLOAD_BYTES = 128
+
 
 def format_data(payload: dict) -> str:
     """Format a sensor payload dict into a DATA message string."""

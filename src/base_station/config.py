@@ -33,14 +33,16 @@ class PinsConfig:
 
 @dataclass(frozen=True)
 class LoraConfig:
+    # Corrected long-range preset; MUST match the peer's lora block exactly.
+    # CR5 (not CR8) keeps time-on-air sane while SF12 carries the range.
     frequency: float = 915.0
     tx_power: int = 23
     spreading_factor: int = 12
     signal_bandwidth_hz: int = 125000
-    coding_rate: int = 8
-    preamble_length: int = 12
+    coding_rate: int = 5
+    preamble_length: int = 8
     # Sender-only; kept here so a single YAML shape works on both Pis.
-    ack_timeout_seconds: float = 20.0
+    ack_timeout_seconds: float = 6.0
 
 
 @dataclass(frozen=True)
@@ -51,6 +53,13 @@ class StorageConfig:
 @dataclass(frozen=True)
 class MetricsConfig:
     sample_interval_seconds: int = 30
+
+
+@dataclass(frozen=True)
+class DisplayConfig:
+    # On-bonnet SSD1306 OLED link-status readout. Default on; a missing OLED
+    # degrades gracefully at runtime, so this is just an explicit off switch.
+    enabled: bool = True
 
 
 @dataclass(frozen=True)
@@ -67,6 +76,7 @@ class ReceiverConfig:
     lora: LoraConfig = field(default_factory=LoraConfig)
     storage: StorageConfig = field(default_factory=StorageConfig)
     metrics: MetricsConfig = field(default_factory=MetricsConfig)
+    display: DisplayConfig = field(default_factory=DisplayConfig)
 
 
 def _parse_pins(raw: dict) -> PinsConfig:
@@ -147,6 +157,17 @@ def _parse_metrics(raw: dict | None) -> MetricsConfig:
     return MetricsConfig(sample_interval_seconds=interval)
 
 
+def _parse_display(raw: dict | None) -> DisplayConfig:
+    if raw is None:
+        return DisplayConfig()
+    if not isinstance(raw, dict):
+        raise ConfigError("Section 'display' must be a mapping")
+    enabled = raw.get("enabled", True)
+    if not isinstance(enabled, bool):
+        raise ConfigError("Field 'enabled' in 'display' must be a boolean")
+    return DisplayConfig(enabled=enabled)
+
+
 def _parse_stations(raw: object) -> tuple[StationEntry, ...]:
     if not isinstance(raw, list) or not raw:
         raise ConfigError(
@@ -200,4 +221,5 @@ def load_config(path: str | Path) -> ReceiverConfig:
         lora=_parse_lora(raw.get("lora")),
         storage=_parse_storage(raw.get("storage")),
         metrics=_parse_metrics(raw.get("metrics")),
+        display=_parse_display(raw.get("display")),
     )

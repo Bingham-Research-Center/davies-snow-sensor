@@ -12,13 +12,15 @@ import asyncio
 import logging
 import signal
 import sys
+import time
 
 from src.base_station.config import ReceiverConfig, load_config
 from src.base_station.metrics import sample as sample_metrics, utc_now_iso
+from src.base_station.oled_display import LinkStatus, OledDisplay, status_lines
 from src.base_station.radio import LoRaReceiver
 from src.base_station.registry import StationRegistry
 from src.base_station.storage import MetricsStorage, PacketRow, PacketStorage
-from src.protocol import wire
+from src.protocol import airtime, wire
 
 log = logging.getLogger("base_station")
 
@@ -50,10 +52,12 @@ async def receive_loop(
     registry: StationRegistry,
     storage: PacketStorage,
     stop: asyncio.Event,
+    recv_timeout: float = 1.0,
+    status: LinkStatus | None = None,
 ) -> None:
     """Block on radio.receive_packet, parse, ACK, store. Loop until stop."""
     while not stop.is_set():
-        result = await asyncio.to_thread(radio.receive_packet, 1.0)
+        result = await asyncio.to_thread(radio.receive_packet, recv_timeout)
         if result is None:
             continue
         payload_bytes, rssi, snr = result
@@ -104,6 +108,35 @@ async def receive_loop(
             rssi, snr, packet["error_flags"], "ok" if sent else "fail",
         )
 
+        if status is not None:
+            status.station_id = station_id
+            status.rssi = rssi
+            status.snr = snr
+            status.last_recv_monotonic = time.monotonic()
+            status.packet_count += 1
+            status.error_flags = packet["error_flags"]
+
+
+async def display_loop(
+    display: OledDisplay,
+    status: LinkStatus,
+    station_id: str,
+    stop: asyncio.Event,
+    interval_seconds: float = 2.0,
+) -> None:
+    """Refresh the OLED with last-packet link status; tick the age between packets."""
+    while not stop.is_set():
+        try:
+            lines = status_lines(status, station_id, time.monotonic())
+            await asyncio.to_thread(display.show_lines, lines)
+        except Exception:
+            log.debug("oled refresh failed; continuing", exc_info=True)
+        try:
+            await asyncio.wait_for(stop.wait(), timeout=interval_seconds)
+            return  # stop was set during the wait
+        except asyncio.TimeoutError:
+            pass
+
 
 async def run(config: ReceiverConfig) -> int:
     log.info(
@@ -136,18 +169,49 @@ async def run(config: ReceiverConfig) -> int:
     packet_storage = PacketStorage(config.storage.data_dir)
     metrics_storage = MetricsStorage(config.storage.data_dir)
 
+    # Size the listen window to the configured modulation. At high SF a DATA
+    # frame is several seconds on air; the library re-arms RX (listen()) at the
+    # start of every receive() call, so a fixed 1 s poll would re-enter RX
+    # mid-packet and risk dropping it. At SF7 this stays at the 1 s floor.
+    recv_timeout = airtime.receive_window_s(
+        wire.MAX_DATA_PAYLOAD_BYTES,
+        config.lora.spreading_factor,
+        config.lora.signal_bandwidth_hz,
+        config.lora.coding_rate,
+        config.lora.preamble_length,
+    )
+    log.info(
+        "receive window sized to %.1f s for SF%d",
+        recv_timeout, config.lora.spreading_factor,
+    )
+
+    # Optional OLED link readout. A missing/flaky panel must never take down
+    # reception, so an init failure simply drops the display task.
+    status = LinkStatus()
+    display = OledDisplay()
+    display_enabled = config.display.enabled and display.initialize()
+    if config.display.enabled and not display_enabled:
+        log.warning("OLED unavailable (%s); continuing without display",
+                    display.get_last_error_reason())
+
     stop = asyncio.Event()
     loop = asyncio.get_running_loop()
     for sig in (signal.SIGINT, signal.SIGTERM):
         loop.add_signal_handler(sig, stop.set)
 
+    tasks = [
+        receive_loop(radio, registry, packet_storage, stop, recv_timeout, status),
+        metrics_loop(metrics_storage, config.metrics.sample_interval_seconds, stop),
+    ]
+    if display_enabled:
+        tasks.append(display_loop(display, status, config.station_id, stop))
+
     try:
-        await asyncio.gather(
-            receive_loop(radio, registry, packet_storage, stop),
-            metrics_loop(metrics_storage, config.metrics.sample_interval_seconds, stop),
-        )
+        await asyncio.gather(*tasks)
     finally:
         radio.cleanup()
+        if display_enabled:
+            display.cleanup()
         log.info("base-station stopped")
     return 0
 

@@ -61,6 +61,9 @@ Optional sections:
 - `lora.tx_power` (default 23 dBm) — used for ACK transmissions
 - `storage.data_dir` (default `/home/admin/data`)
 - `metrics.sample_interval_seconds` (default 30) — Pi-metrics cadence
+- `display.enabled` (default true) — show last-packet RSSI/SNR/age on the
+  bonnet's SSD1306 OLED. A missing OLED is ignored at runtime; set false to skip
+  it. See [lora_range_tuning.md](lora_range_tuning.md) for aiming with `--oled`.
 
 ## Storage layout
 
@@ -151,7 +154,8 @@ scripts/deploy-receiver.sh` is safe and refreshes the venv + unit file.
 
 | Symptom | Likely cause | Where to look |
 |---|---|---|
-| Senders keep getting `lora_ack_timeout` | Receiver not running, or different frequency | `systemctl status base-station.service`; check `lora.frequency` matches sender |
+| Senders keep getting `lora_ack_timeout` | Receiver not running, or the sender/receiver `lora` blocks differ (SF/BW/CR/preamble/frequency) | `systemctl status base-station.service`; confirm both `lora` blocks match — see [lora_range_tuning.md](lora_range_tuning.md) |
+| Senders log `lora_tx_timeout` | Packet time-on-air exceeded the radio's transmit window (SF too high for the payload, or a wedged radio) | Now sized automatically from ToA; if it appears, see [lora_range_tuning.md](lora_range_tuning.md) |
 | `packet: malformed` lines in journal | RF noise or another LoRa device on band | RSSI of malformed lines; check SNR |
 | `packet: unknown sender X` | Sender not in `stations:` allowlist | Add to `receiver.yaml`, restart |
 | `radio init failed: lora_no_device` | SPI not enabled, bonnet seating, or wrong CS/RST pins | `dtparam=spi=on`; reseat bonnet; check `pins:` |
