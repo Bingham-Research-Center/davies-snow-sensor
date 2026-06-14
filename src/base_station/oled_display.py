@@ -15,12 +15,17 @@ The 128x32 panel fits 4 rows of ~21 chars in the built-in 6x8 font; the pure
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 
 DISPLAY_WIDTH = 128
 DISPLAY_HEIGHT = 32
 DISPLAY_ADDRESS = 0x3C
 MAX_LINES = 4
 MAX_LINE_CHARS = 21  # 128 px / 6 px per glyph
+# adafruit_framebuf opens this relative to CWD by default, so under systemd
+# (WorkingDirectory=/run/base-station) text() silently renders nothing. Pin
+# the path next to this module so it works regardless of CWD.
+FONT_PATH = str(Path(__file__).resolve().parent / "font5x8.bin")
 
 
 @dataclass
@@ -136,7 +141,9 @@ class OledDisplay:
         try:
             self._oled.fill(0)
             for i, text in enumerate(lines[:MAX_LINES]):
-                self._oled.text(str(text)[:MAX_LINE_CHARS], 0, i * 8, 1)
+                self._oled.text(
+                    str(text)[:MAX_LINE_CHARS], 0, i * 8, 1, font_name=FONT_PATH,
+                )
             self._oled.show()
         except Exception:
             self._last_error = "oled_write_error"
