@@ -23,8 +23,10 @@ sensors:
     # mid-bundle, never reliable. Replaced by MaxBotix MB7374 on USB-TTL serial
     # (see sensors.maxbotix below).
   maxbotix:
-    - id: "west_mb"            # MaxBotix MB7374-10B (HRXL-MaxSonar-WR)
-      serial_port: "/dev/ttyUSB0"
+    - id: "mb7374"            # MaxBotix MB7374 (HRXL-MaxSonar-WRS), serial MBBZRJTT
+      # pinned by serial-number path so it survives ttyUSB* renumbering when the
+      # A02YYUW adapter is added later
+      serial_port: "/dev/serial/by-id/usb-MaxBotix_MB7374-1XX_HRXL-MaxSonar-WRS_MBBZRJTT-if00-port0"
       baud_rate: 9600          # MB7374 default; TTL 8N1, streams R<mm> at ~6 Hz
 
 lora:
@@ -33,7 +35,7 @@ lora:
   # RFM9x never decodes the preamble and you'll only see lora_ack_timeout.
   frequency: 915.0
   tx_power: 23
-  spreading_factor: 7           # rolled back to lib defaults — SF12 max-range preset wasn't ACKing on this hardware
+  spreading_factor: 12          # matched to BASE-01 receiver.yaml for ~4700 ft range; safe now that airtime.py sizes xmit_timeout (old fixed 2.0s timeout silently truncated SF12)
   signal_bandwidth_hz: 125000
   coding_rate: 5
   preamble_length: 8
