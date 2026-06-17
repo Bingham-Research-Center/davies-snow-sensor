@@ -7,8 +7,6 @@ import types
 import math
 from unittest.mock import MagicMock, patch, PropertyMock
 
-import pytest
-
 # Provide a fake gpiozero package so tests run without the real library.
 _gpiozero = types.ModuleType("gpiozero")
 _gpiozero.DistanceSensor = MagicMock

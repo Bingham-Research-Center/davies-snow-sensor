@@ -6,8 +6,6 @@ import sys
 import types
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 # Provide a fake w1thermsensor package so tests run without the real library.
 _errors = types.ModuleType("w1thermsensor.errors")
 

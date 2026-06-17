@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import sys
-import time
 import types
 from unittest.mock import MagicMock, patch, call
 
@@ -72,7 +71,7 @@ class TestInitialize:
         tx = LoRaTransmitter(cs_pin=7, reset_pin=25)
         with patch("adafruit_rfm9x.RFM9x") as MockRFM, \
              patch("digitalio.DigitalInOut") as MockDIO, \
-             patch("busio.SPI") as MockSPI:
+             patch("busio.SPI"):
             MockRFM.return_value = MagicMock()
             tx.initialize()
 

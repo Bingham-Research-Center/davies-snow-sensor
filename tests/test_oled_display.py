@@ -6,8 +6,6 @@ import sys
 import types
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 
 # Other test modules register fake board/busio (with SPI) via setdefault, and
 # this module imports after them. Add the I2C/SSD1306 attributes directly onto

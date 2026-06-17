@@ -9,7 +9,6 @@ import pytest
 from zoneinfo import ZoneInfo
 
 from src.base_station.enrich import (
-    DERIVED_COLUMNS,
     OUTPUT_COLUMNS,
     enrich_file,
     enrich_row,

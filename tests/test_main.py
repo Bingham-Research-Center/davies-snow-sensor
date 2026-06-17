@@ -18,7 +18,6 @@ from src.sensor.config import (
     UltrasonicSensorConfig,
 )
 from src.sensor.main import SensorStation, _select_best_sensor, main
-from src.sensor.storage import Reading
 from src.sensor.ultrasonic import SensorResult
 
 
@@ -579,7 +578,7 @@ def mock_multi_deps():
 
 class TestMultiSensorOrchestration:
     def test_creates_sensor_per_config(self, mock_multi_deps):
-        station = SensorStation(_make_multi_sensor_config())
+        SensorStation(_make_multi_sensor_config())
         assert mock_multi_deps["MockUltra"].call_count == 2
 
     def test_reads_all_sensors(self, mock_multi_deps):
