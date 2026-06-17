@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
+import io
 import subprocess
 from unittest.mock import patch
-
-import pytest
 
 from src.base_station import metrics
 
@@ -68,18 +67,22 @@ class TestProcReaders:
 
 
 class TestCpuPercent:
-    def test_first_call_returns_none(self):
-        # Reset module state
+    def test_first_call_sets_baseline_then_second_returns_percent(self):
         metrics._LAST_CPU = None
-        assert metrics.read_cpu_percent() is not None or metrics._LAST_CPU is not None
-        # First call may return None (no baseline) — second call yields a value
-        metrics._LAST_CPU = None
-        first = metrics.read_cpu_percent()
-        # First call sets baseline and returns None
+        first_stat = io.StringIO("cpu  0 0 0 100 0 0 0\n")
+        second_stat = io.StringIO("cpu  10 0 0 110 0 0 0\n")
+        with patch("builtins.open", side_effect=[first_stat, second_stat]):
+            first = metrics.read_cpu_percent()
+            second = metrics.read_cpu_percent()
         assert first is None
-        second = metrics.read_cpu_percent()
-        # Second call may still be None if no time elapsed; or a float
-        assert second is None or isinstance(second, float)
+        assert second == 50.0
+        metrics._LAST_CPU = None
+
+    def test_missing_proc_stat_returns_none(self):
+        metrics._LAST_CPU = None
+        with patch("builtins.open", side_effect=OSError):
+            assert metrics.read_cpu_percent() is None
+        assert metrics._LAST_CPU is None
 
 
 class TestSample:

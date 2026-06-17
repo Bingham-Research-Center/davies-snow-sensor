@@ -46,6 +46,8 @@ class PinsConfig:
     ds18b20_data: int
     lora_cs: int
     lora_reset: int
+    hcsr04_trigger: int | None = None
+    hcsr04_echo: int | None = None
 
 
 @dataclass(frozen=True)
@@ -151,6 +153,8 @@ def _parse_pins(raw: dict) -> PinsConfig:
     ds18b20_data = require_int(raw, "ds18b20_data", section)
     lora_cs = require_int(raw, "lora_cs", section)
     lora_reset = require_int(raw, "lora_reset", section)
+    hcsr04_trigger = _optional_pin(raw, "hcsr04_trigger", section)
+    hcsr04_echo = _optional_pin(raw, "hcsr04_echo", section)
 
     pin_fields = {
         "ds18b20_data": ds18b20_data,
@@ -165,7 +169,23 @@ def _parse_pins(raw: dict) -> PinsConfig:
         ds18b20_data=ds18b20_data,
         lora_cs=lora_cs,
         lora_reset=lora_reset,
+        hcsr04_trigger=hcsr04_trigger,
+        hcsr04_echo=hcsr04_echo,
     )
+
+
+def _optional_pin(raw: dict, key: str, section: str) -> int | None:
+    """Parse an optional legacy GPIO pin field."""
+    value = raw.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, int) or isinstance(value, bool):
+        raise ConfigError(
+            f"Field '{key}' in '{section}' must be an integer, "
+            f"got {type(value).__name__}"
+        )
+    validate_pin(key, value)
+    return value
 
 
 def _parse_sensors(
@@ -225,6 +245,21 @@ def _parse_sensors(
         raise ConfigError(
             "Either 'sensors' section or 'pins.hcsr04_trigger'/'pins.hcsr04_echo' required"
         )
+    _check_sensor_pin_reserved(
+        "hcsr04_trigger", pins.hcsr04_trigger, hardware_profile
+    )
+    _check_sensor_pin_reserved(
+        "hcsr04_echo", pins.hcsr04_echo, hardware_profile
+    )
+    _check_pin_collisions(
+        {
+            "ds18b20_data": pins.ds18b20_data,
+            "lora_cs": pins.lora_cs,
+            "lora_reset": pins.lora_reset,
+            "hcsr04_trigger": pins.hcsr04_trigger,
+            "hcsr04_echo": pins.hcsr04_echo,
+        }
+    )
     return SensorsConfig(
         ultrasonic=[
             UltrasonicSensorConfig(

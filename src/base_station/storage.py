@@ -15,10 +15,12 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from src.protocol.csv_helpers import (
-    StorageError,
+    StorageError as _StorageError,
     append_csv,
     row_dict,
 )
+
+StorageError = _StorageError
 
 
 PACKET_COLUMNS = (

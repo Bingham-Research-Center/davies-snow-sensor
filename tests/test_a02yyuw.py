@@ -6,8 +6,6 @@ import sys
 import types
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 # Fake `serial` module so tests run without pyserial installed.
 _serial = types.ModuleType("serial")
 _serial.Serial = MagicMock

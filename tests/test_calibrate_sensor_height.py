@@ -432,7 +432,7 @@ class TestHistoryCSV:
         row2 = {h: "2" for h in calibrate.HISTORY_HEADERS}
         calibrate.append_history_csv(path, row1)
         calibrate.append_history_csv(path, row2)
-        lines = [l for l in path.read_text(encoding="utf-8").splitlines() if l]
+        lines = [line for line in path.read_text(encoding="utf-8").splitlines() if line]
         # 1 header + 2 rows
         assert len(lines) == 3
         assert lines[0].startswith("timestamp_utc")

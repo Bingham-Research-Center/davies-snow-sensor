@@ -8,16 +8,12 @@ from pathlib import Path
 
 from src.sensor.config import (
     ConfigError,
-    SensorsConfig,
     StationConfig,
-    PinsConfig,
     LoraConfig,
     QCConfig,
-    StorageConfig,
     TimingConfig,
     A02yyuwSensorConfig,
     MaxbotixSensorConfig,
-    UltrasonicSensorConfig,
     config_id,
     load_config,
 )
@@ -53,6 +49,17 @@ def _with_sensor(trigger_pin: int | None = None, echo_pin: int | None = None) ->
         ],
     }
     return base
+
+
+def _legacy_config(trigger_pin: int = 5, echo_pin: int = 6) -> dict:
+    """Build a single-sensor legacy config using pins.hcsr04_* fields."""
+    data = {k: v for k, v in VALID_CONFIG.items() if k != "sensors"}
+    data["pins"] = {
+        **VALID_CONFIG["pins"],
+        "hcsr04_trigger": trigger_pin,
+        "hcsr04_echo": echo_pin,
+    }
+    return data
 
 
 def _write_yaml(tmp_path: Path, data: dict) -> Path:
@@ -100,6 +107,31 @@ class TestLoadConfigValid:
         assert cfg.lora.frequency == 915.0
         assert cfg.timing.cycle_interval_minutes == 15
         assert cfg.hardware_profile is None
+
+    def test_legacy_pins_synthesize_default_ultrasonic_sensor(self, tmp_path):
+        cfg = load_config(_write_yaml(tmp_path, _legacy_config()))
+        assert cfg.pins.hcsr04_trigger == 5
+        assert cfg.pins.hcsr04_echo == 6
+        assert len(cfg.sensors.ultrasonic) == 1
+        sensor = cfg.sensors.ultrasonic[0]
+        assert sensor.id == "default"
+        assert sensor.trigger_pin == 5
+        assert sensor.echo_pin == 6
+
+    def test_sensors_section_takes_precedence_over_legacy_pins(self, tmp_path):
+        data = {
+            **VALID_CONFIG,
+            "pins": {
+                **VALID_CONFIG["pins"],
+                "hcsr04_trigger": 5,
+                "hcsr04_echo": 6,
+            },
+        }
+        cfg = load_config(_write_yaml(tmp_path, data))
+        assert cfg.pins.hcsr04_trigger == 5
+        assert cfg.pins.hcsr04_echo == 6
+        assert cfg.sensors.ultrasonic[0].trigger_pin == 23
+        assert cfg.sensors.ultrasonic[0].echo_pin == 24
 
     def test_config_is_frozen(self, tmp_path):
         cfg = load_config(_write_yaml(tmp_path, VALID_CONFIG))
@@ -225,6 +257,11 @@ class TestLoadConfigValueValidation:
     def test_pin_collision(self, tmp_path):
         # echo_pin same as trigger_pin
         data = _with_sensor(trigger_pin=23, echo_pin=23)
+        with pytest.raises(ConfigError, match="collision"):
+            load_config(_write_yaml(tmp_path, data))
+
+    def test_legacy_pin_collision(self, tmp_path):
+        data = _legacy_config(trigger_pin=5, echo_pin=5)
         with pytest.raises(ConfigError, match="collision"):
             load_config(_write_yaml(tmp_path, data))
 
