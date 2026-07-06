@@ -509,10 +509,11 @@ class TestQCConfig:
             cfg.qc.num_samples = 99
 
 
-def test_shipped_template_loads():
-    """Ensure the shipped config template remains loadable."""
-    template_path = Path(__file__).resolve().parent.parent / "config" / "station.yaml"
-    cfg = load_config(template_path)
+@pytest.mark.parametrize("filename", ["station.yaml", "station.example.yaml"])
+def test_shipped_config_loads(filename):
+    """Ensure the live config and the shipped template remain loadable."""
+    path = Path(__file__).resolve().parent.parent / "config" / filename
+    cfg = load_config(path)
     assert isinstance(cfg, StationConfig)
 
 
