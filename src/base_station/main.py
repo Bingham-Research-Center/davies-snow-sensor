@@ -166,7 +166,7 @@ async def run(config: ReceiverConfig) -> int:
         return 2
 
     registry = StationRegistry(config.stations)
-    packet_storage = PacketStorage(config.storage.data_dir)
+    packet_storage = PacketStorage(config.storage.data_dir, fsync=config.storage.fsync)
     metrics_storage = MetricsStorage(config.storage.data_dir)
 
     # Size the listen window to the configured modulation. At high SF a DATA

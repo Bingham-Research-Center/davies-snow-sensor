@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -14,6 +15,8 @@ from src.protocol.csv_helpers import (
 )
 
 StorageError = _StorageError
+
+logger = logging.getLogger(__name__)
 
 
 COLUMNS = (
@@ -92,11 +95,7 @@ class Storage:
         append_csv(self._path, COLUMNS, row_dict(reading), fsync=self._fsync)
 
     def read_all(self) -> list[Reading]:
-        if not self._path.exists():
-            return []
-        with open(self._path, newline="") as f:
-            reader = csv.DictReader(f)
-            return [_row_to_reading(row) for row in reader]
+        return _read_rows(self._path, _row_to_reading)
 
 
 class SensorStorage:
@@ -113,11 +112,25 @@ class SensorStorage:
         append_csv(self._path, SENSOR_COLUMNS, row_dict(reading), fsync=self._fsync)
 
     def read_all(self) -> list[SensorReading]:
-        if not self._path.exists():
-            return []
-        with open(self._path, newline="") as f:
-            reader = csv.DictReader(f)
-            return [_row_to_sensor_reading(row) for row in reader]
+        return _read_rows(self._path, _row_to_sensor_reading)
+
+
+def _read_rows(path: Path, convert) -> list:
+    """Read all rows, skipping any that fail to parse (e.g. a line torn by
+    power loss mid-write). Skipped rows are logged, not raised."""
+    if not path.exists():
+        return []
+    rows = []
+    skipped = 0
+    with open(path, newline="") as f:
+        for row in csv.DictReader(f):
+            try:
+                rows.append(convert(row))
+            except (TypeError, ValueError, AttributeError):
+                skipped += 1
+    if skipped:
+        logger.warning("Skipped %d unparseable row(s) in %s", skipped, path)
+    return rows
 
 
 def _row_to_reading(row: dict) -> Reading:

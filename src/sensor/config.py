@@ -66,7 +66,7 @@ class LoraConfig:
 @dataclass(frozen=True)
 class StorageConfig:
     csv_path: str
-    fsync: bool = False
+    fsync: bool = True
 
 
 @dataclass(frozen=True)
@@ -422,7 +422,7 @@ def _parse_storage(raw: dict | None) -> StorageConfig:
         raise ConfigError(
             f"Field 'csv_path' in 'storage' must be a string, got {type(csv_path).__name__}"
         )
-    fsync = raw.get("fsync", False)
+    fsync = raw.get("fsync", True)
     if not isinstance(fsync, bool):
         raise ConfigError(
             f"Field 'fsync' in 'storage' must be a boolean, got {type(fsync).__name__}"

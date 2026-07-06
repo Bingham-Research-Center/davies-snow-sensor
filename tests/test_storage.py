@@ -157,25 +157,47 @@ class TestSerialization:
         assert result.error_flags == "SENSOR_FAIL|LOW_BATT"
 
 
-class TestDeserializationErrors:
-    def test_malformed_float_in_csv(self, csv_path):
-        header = ",".join(COLUMNS)
-        # timestamp,station_id,cycle_id,boot_id,software_version,config_id,snow_depth_cm,...
-        row = "2025-01-15T12:00:00Z,DAVIES-01,1,boot,v1,abc,not_a_number,157.5,-5.3,200.0,,0,True,-45,"
-        csv_path.parent.mkdir(parents=True, exist_ok=True)
-        csv_path.write_text(f"{header}\n{row}\n")
-        storage = Storage(csv_path)
-        with pytest.raises(ValueError):
-            storage.read_all()
+class TestUnparseableRows:
+    """Rows that fail to parse (manual edits, power-loss torn lines) are
+    skipped so one bad line cannot disable QC baseline reads forever."""
 
-    def test_malformed_int_in_csv(self, csv_path):
-        header = ",".join(COLUMNS)
-        row = "2025-01-15T12:00:00Z,DAVIES-01,1,boot,v1,abc,42.5,157.5,-5.3,200.0,,0,True,bad_rssi,"
+    GOOD = "2025-01-15T12:00:00Z,DAVIES-01,1,boot,v1,abc,42.5,157.5,-5.3,200.0,,0,True,-45,"
+
+    def _write(self, csv_path, *rows):
         csv_path.parent.mkdir(parents=True, exist_ok=True)
-        csv_path.write_text(f"{header}\n{row}\n")
-        storage = Storage(csv_path)
-        with pytest.raises(ValueError):
-            storage.read_all()
+        csv_path.write_text(",".join(COLUMNS) + "\n" + "\n".join(rows) + "\n")
+
+    def test_malformed_float_row_skipped(self, csv_path):
+        bad = self.GOOD.replace("42.5", "not_a_number")
+        self._write(csv_path, self.GOOD, bad)
+        rows = Storage(csv_path).read_all()
+        assert len(rows) == 1
+        assert rows[0].snow_depth_cm == 42.5
+
+    def test_malformed_int_row_skipped(self, csv_path):
+        bad = self.GOOD.replace("-45", "bad_rssi")
+        self._write(csv_path, self.GOOD, bad)
+        assert len(Storage(csv_path).read_all()) == 1
+
+    def test_torn_final_line_skipped(self, csv_path):
+        self._write(csv_path, self.GOOD, self.GOOD[:37])
+        rows = Storage(csv_path).read_all()
+        assert len(rows) == 1
+        assert rows[0].station_id == "DAVIES-01"
+
+    def test_torn_final_line_skipped_sensor_storage(self, tmp_path):
+        path = tmp_path / "sensors.csv"
+        good = "2025-01-15T12:00:00Z,1,north,150.0,31,31,0.5,"
+        path.write_text(",".join(SENSOR_COLUMNS) + "\n" + good + "\n" + good[:28] + "\n")
+        rows = SensorStorage(path).read_all()
+        assert len(rows) == 1
+        assert rows[0].sensor_id == "north"
+
+    def test_skip_logs_warning(self, csv_path, caplog):
+        self._write(csv_path, self.GOOD[:20])
+        with caplog.at_level("WARNING"):
+            assert Storage(csv_path).read_all() == []
+        assert "Skipped 1 unparseable row" in caplog.text
 
 
 class TestSensorStorage:

@@ -102,7 +102,7 @@ class TestLoadConfigValid:
         cfg = load_config(_write_yaml(tmp_path, minimal))
         assert cfg.lora == LoraConfig()
         assert cfg.storage.csv_path == "/tmp/test.csv"
-        assert cfg.storage.fsync is False
+        assert cfg.storage.fsync is True
         assert cfg.timing == TimingConfig()
         assert cfg.lora.frequency == 915.0
         assert cfg.timing.cycle_interval_minutes == 15
@@ -201,14 +201,14 @@ class TestLoadConfigInvalidTypes:
             load_config(_write_yaml(tmp_path, data))
 
     def test_fsync_parsed(self, tmp_path):
-        data = {**VALID_CONFIG, "storage": {"csv_path": "/tmp/t.csv", "fsync": True}}
-        cfg = load_config(_write_yaml(tmp_path, data))
-        assert cfg.storage.fsync is True
-
-    def test_fsync_default_false(self, tmp_path):
-        data = {**VALID_CONFIG}
+        data = {**VALID_CONFIG, "storage": {"csv_path": "/tmp/t.csv", "fsync": False}}
         cfg = load_config(_write_yaml(tmp_path, data))
         assert cfg.storage.fsync is False
+
+    def test_fsync_default_true(self, tmp_path):
+        data = {**VALID_CONFIG}
+        cfg = load_config(_write_yaml(tmp_path, data))
+        assert cfg.storage.fsync is True
 
     def test_fsync_non_bool_raises(self, tmp_path):
         data = {**VALID_CONFIG, "storage": {"csv_path": "/tmp/t.csv", "fsync": "yes"}}
