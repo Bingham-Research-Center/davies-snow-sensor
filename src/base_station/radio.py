@@ -103,6 +103,7 @@ class LoRaReceiver:
                 timeout=timeout_seconds, with_header=False,
             )
             if packet is None:
+                self._last_error = None
                 return None
             # RSSI/SNR are SPI register reads and can fail transiently too.
             rssi = int(self._rfm9x.last_rssi)
