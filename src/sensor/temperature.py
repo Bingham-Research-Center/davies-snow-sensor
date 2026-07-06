@@ -50,6 +50,9 @@ class TemperatureSensor:
         except NoSensorFoundError:
             self._last_error = "temp_no_device"
             return False
+        except Exception:
+            self._last_error = "temp_init_error"
+            return False
 
     def read_temperature_c(self) -> float | None:
         """Read temperature with retry logic within the configured timeout."""
