@@ -30,9 +30,9 @@ def _data_packet(station_id="DAVIES-01", ts="20260613T120000Z"):
     }).encode("utf-8")
 
 
-def _radio_yielding_one_packet(rssi=-119, snr=-3.5):
+def _radio_yielding_packets(*packets):
     radio = MagicMock()
-    results = [(_data_packet(), rssi, snr)]
+    results = list(packets)
 
     def recv(timeout):
         if results:
@@ -44,6 +44,10 @@ def _radio_yielding_one_packet(rssi=-119, snr=-3.5):
     radio.get_last_error_reason.return_value = None  # idle, not an error
     radio.send_ack.return_value = True
     return radio
+
+
+def _radio_yielding_one_packet(rssi=-119, snr=-3.5):
+    return _radio_yielding_packets((_data_packet(), rssi, snr))
 
 
 class TestReceiveLoopStatus:
@@ -92,6 +96,72 @@ class TestReceiveLoopStatus:
             )
 
         asyncio.run(scenario())  # no assertion needed — just must complete
+
+
+class TestReceiveLoopDedup:
+    def _run(self, radio):
+        async def scenario():
+            registry = MagicMock()
+            registry.is_known.return_value = True
+            storage = MagicMock()
+            stop = asyncio.Event()
+
+            async def stopper():
+                await asyncio.sleep(0.05)
+                stop.set()
+
+            await asyncio.gather(
+                receive_loop(radio, registry, storage, stop, 0.001),
+                stopper(),
+            )
+            return radio, storage
+
+        return asyncio.run(scenario())
+
+    def test_retransmitted_packet_reacked_not_restored(self):
+        pkt = (_data_packet(ts="20260706T120000Z"), -119, -3.5)
+        radio, storage = self._run(_radio_yielding_packets(pkt, pkt))
+        assert radio.send_ack.call_count == 2
+        assert storage.append.call_count == 1
+
+    def test_new_timestamp_from_same_station_is_stored(self):
+        radio, storage = self._run(_radio_yielding_packets(
+            (_data_packet(ts="20260706T120000Z"), -119, -3.5),
+            (_data_packet(ts="20260706T121500Z"), -119, -3.5),
+        ))
+        assert storage.append.call_count == 2
+
+    def test_dedup_is_per_station(self):
+        radio, storage = self._run(_radio_yielding_packets(
+            (_data_packet(station_id="DAVIES-01", ts="20260706T120000Z"), -119, -3.5),
+            (_data_packet(station_id="DAVIES-02", ts="20260706T120000Z"), -119, -3.5),
+        ))
+        assert storage.append.call_count == 2
+
+    def test_failed_store_is_retried_on_retransmit(self):
+        pkt = (_data_packet(ts="20260706T120000Z"), -119, -3.5)
+        radio = _radio_yielding_packets(pkt, pkt)
+
+        async def scenario():
+            registry = MagicMock()
+            registry.is_known.return_value = True
+            storage = MagicMock()
+            storage.append.side_effect = [OSError("disk"), None]
+            stop = asyncio.Event()
+
+            async def stopper():
+                await asyncio.sleep(0.05)
+                stop.set()
+
+            await asyncio.gather(
+                receive_loop(radio, registry, storage, stop, 0.001),
+                stopper(),
+            )
+            return storage
+
+        storage = asyncio.run(scenario())
+        # First append failed, so the retransmit must not be treated as a dup.
+        assert storage.append.call_count == 2
 
 
 class TestReceiveLoopRadioDeath:
