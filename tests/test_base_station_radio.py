@@ -106,10 +106,15 @@ class TestReceivePacket:
     def test_timeout_returns_none(self):
         rx = LoRaReceiver(cs_pin=7, reset_pin=25)
         radio = _init_with_mock(rx)
-        radio.receive.return_value = None
 
+        radio.receive.side_effect = RuntimeError("spi glitch")
         assert rx.receive_packet() is None
+        assert rx.get_last_error_reason() == "lora_recv_error"
 
+        radio.receive.side_effect = None
+        radio.receive.return_value = None
+        assert rx.receive_packet() is None
+        assert rx.get_last_error_reason() is None
     def test_receive_error_returns_none(self):
         rx = LoRaReceiver(cs_pin=7, reset_pin=25)
         radio = _init_with_mock(rx)
