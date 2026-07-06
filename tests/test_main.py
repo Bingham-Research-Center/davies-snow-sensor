@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch, call
 
 import pytest
@@ -18,6 +19,9 @@ from src.sensor.config import (
     UltrasonicSensorConfig,
 )
 from src.sensor.main import SensorStation, _select_best_sensor, main
+from src.sensor.qc import RATE_OF_CHANGE_HIGH
+from src.sensor.qc import compute_quality_flag as real_compute_quality_flag
+from src.sensor.storage import Reading
 from src.sensor.ultrasonic import SensorResult
 
 
@@ -80,6 +84,7 @@ def mock_deps():
 
         storage.initialize.return_value = None
         storage.append.return_value = None
+        storage.read_all.return_value = []
         sensor_storage.initialize.return_value = None
         sensor_storage.append.return_value = None
 
@@ -318,6 +323,51 @@ class TestRunCycleStorageFailure:
         with patch("src.sensor.main.compute_quality_flag", return_value=0) as qc:
             SensorStation(_make_config()).run_cycle()
             assert qc.call_args.kwargs["storage_failed"] is False
+
+
+# ── Rate-of-change baseline wiring ────────────────────────────────
+
+
+class TestRateOfChangeBaseline:
+    def test_baseline_passed_to_qc(self, mock_deps):
+        prev = Reading(
+            timestamp="2026-01-01T12:00:00Z", station_id="TEST01", snow_depth_cm=40.0
+        )
+        mock_deps["storage"].read_all.return_value = [prev]
+
+        with patch("src.sensor.main.compute_quality_flag", return_value=0) as qc:
+            SensorStation(_make_config()).run_cycle()
+            assert qc.call_args.kwargs["prev_snow_depth_cm"] == 40.0
+            assert qc.call_args.kwargs["prev_timestamp"] == "2026-01-01T12:00:00Z"
+
+    def test_no_history_passes_none(self, mock_deps):
+        with patch("src.sensor.main.compute_quality_flag", return_value=0) as qc:
+            SensorStation(_make_config()).run_cycle()
+            assert qc.call_args.kwargs["prev_snow_depth_cm"] is None
+            assert qc.call_args.kwargs["prev_timestamp"] is None
+
+    def test_read_all_failure_not_fatal(self, mock_deps):
+        mock_deps["storage"].read_all.side_effect = Exception("corrupt csv")
+
+        with patch("src.sensor.main.compute_quality_flag", return_value=0) as qc:
+            result = SensorStation(_make_config()).run_cycle()
+            assert result is True
+            assert qc.call_args.kwargs["prev_snow_depth_cm"] is None
+
+    def test_jump_sets_bit7_in_stored_reading(self, mock_deps):
+        # Prev reading 15 min ago at 40.0 cm; current cycle reads 150 cm
+        # distance → depth 50.0 cm. 10 cm in 15 min = 40 cm/hr > 25.
+        prev_ts = (datetime.now(timezone.utc) - timedelta(minutes=15)).strftime(
+            "%Y-%m-%dT%H:%M:%SZ"
+        )
+        prev = Reading(timestamp=prev_ts, station_id="TEST01", snow_depth_cm=40.0)
+        mock_deps["storage"].read_all.return_value = [prev]
+
+        with patch("src.sensor.main.compute_quality_flag", real_compute_quality_flag):
+            SensorStation(_make_config()).run_cycle()
+
+        stored = mock_deps["storage"].append.call_args.args[0]
+        assert stored.quality_flag & RATE_OF_CHANGE_HIGH
 
 
 # ── Error flags ───────────────────────────────────────────────────

@@ -15,7 +15,7 @@ from src.sensor.config import QCConfig, StationConfig, config_id, load_config
 from src.sensor.cycle import get_boot_id, read_and_increment_cycle_id
 from src.sensor.lora import LoRaTransmitter
 from src.sensor.maxbotix import MaxbotixSensor
-from src.sensor.qc import compute_quality_flag, min_valid_samples
+from src.sensor.qc import compute_quality_flag, find_baseline, min_valid_samples
 from src.sensor.storage import Reading, SensorReading, SensorStorage, Storage
 from src.sensor.temperature import TemperatureSensor
 from src.sensor.ultrasonic import SensorResult, UltrasonicSensor
@@ -259,6 +259,12 @@ class SensorStation:
 
         error_flags_csv = "|".join(errors)
 
+        baseline = None
+        try:
+            baseline = find_baseline(self._storage.read_all())
+        except Exception:
+            logger.warning("Failed to read previous readings for QC", exc_info=True)
+
         selected_result = best[1] if best else None
         quality_flag = compute_quality_flag(
             temperature_c=temperature_c,
@@ -267,6 +273,9 @@ class SensorStation:
             selected_result=selected_result,
             snow_depth_cm=snow_depth_cm,
             sensor_height_cm=self._config.sensor_height_cm,
+            timestamp=timestamp,
+            prev_snow_depth_cm=baseline.snow_depth_cm if baseline else None,
+            prev_timestamp=baseline.timestamp if baseline else None,
             lora_tx_success=lora_tx_success,
             storage_failed=storage_failed,
             qc=qc,

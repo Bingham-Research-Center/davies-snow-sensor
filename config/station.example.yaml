@@ -79,3 +79,4 @@ qc:
   inter_pulse_delay_ms: 60    # Delay between pulses to avoid echo overlap
   min_valid_fraction: 0.5     # Fraction of samples that must be valid to accept
   max_spread_cm: 5.0          # Max MAD-based spread before flagging as noisy
+  max_rate_of_change_cm_per_hr: 25.0  # Depth change vs last clean reading before flagging
