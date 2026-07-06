@@ -157,6 +157,51 @@ class TestSerialization:
         assert result.error_flags == "SENSOR_FAIL|LOW_BATT"
 
 
+class TestReadTail:
+    def _write_rows(self, csv_path, n):
+        csv_path.parent.mkdir(parents=True, exist_ok=True)
+        lines = [",".join(COLUMNS)]
+        for i in range(n):
+            lines.append(
+                f"2025-01-15T12:00:00Z,DAVIES-01,{i},boot,v1,abc,"
+                f"42.5,157.5,-5.3,200.0,,0,True,-45,"
+            )
+        csv_path.write_text("\n".join(lines) + "\n")
+
+    def test_small_file_returns_all_rows(self, csv_path):
+        self._write_rows(csv_path, 10)
+        rows = Storage(csv_path).read_tail()
+        assert [r.cycle_id for r in rows] == list(range(10))
+
+    def test_large_file_returns_only_last_max_rows(self, csv_path):
+        # 2000 rows exceeds the 500-row byte budget, forcing the seek path
+        # (partial first line dropped).
+        self._write_rows(csv_path, 2000)
+        rows = Storage(csv_path).read_tail(max_rows=500)
+        assert len(rows) == 500
+        assert rows[-1].cycle_id == 1999
+        assert rows[0].cycle_id == 1500
+
+    def test_missing_file_returns_empty(self, csv_path):
+        assert Storage(csv_path).read_tail() == []
+
+    def test_header_only_returns_empty(self, csv_path):
+        self._write_rows(csv_path, 0)
+        assert Storage(csv_path).read_tail() == []
+
+    def test_matches_read_all_ordering(self, csv_path):
+        self._write_rows(csv_path, 20)
+        storage = Storage(csv_path)
+        assert storage.read_tail() == storage.read_all()
+
+    def test_torn_final_line_skipped(self, csv_path):
+        self._write_rows(csv_path, 5)
+        with open(csv_path, "a") as f:
+            f.write("2025-01-15T12:15:00Z,DAVIES-01,99,boot")  # torn, no newline
+        rows = Storage(csv_path).read_tail()
+        assert [r.cycle_id for r in rows] == list(range(5))
+
+
 class TestUnparseableRows:
     """Rows that fail to parse (manual edits, power-loss torn lines) are
     skipped so one bad line cannot disable QC baseline reads forever."""

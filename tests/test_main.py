@@ -84,7 +84,7 @@ def mock_deps():
 
         storage.initialize.return_value = None
         storage.append.return_value = None
-        storage.read_all.return_value = []
+        storage.read_tail.return_value = []
         sensor_storage.initialize.return_value = None
         sensor_storage.append.return_value = None
 
@@ -333,7 +333,7 @@ class TestRateOfChangeBaseline:
         prev = Reading(
             timestamp="2026-01-01T12:00:00Z", station_id="TEST01", snow_depth_cm=40.0
         )
-        mock_deps["storage"].read_all.return_value = [prev]
+        mock_deps["storage"].read_tail.return_value = [prev]
 
         with patch("src.sensor.main.compute_quality_flag", return_value=0) as qc:
             SensorStation(_make_config()).run_cycle()
@@ -346,8 +346,8 @@ class TestRateOfChangeBaseline:
             assert qc.call_args.kwargs["prev_snow_depth_cm"] is None
             assert qc.call_args.kwargs["prev_timestamp"] is None
 
-    def test_read_all_failure_not_fatal(self, mock_deps):
-        mock_deps["storage"].read_all.side_effect = Exception("corrupt csv")
+    def test_read_tail_failure_not_fatal(self, mock_deps):
+        mock_deps["storage"].read_tail.side_effect = Exception("corrupt csv")
 
         with patch("src.sensor.main.compute_quality_flag", return_value=0) as qc:
             result = SensorStation(_make_config()).run_cycle()
@@ -361,7 +361,7 @@ class TestRateOfChangeBaseline:
             "%Y-%m-%dT%H:%M:%SZ"
         )
         prev = Reading(timestamp=prev_ts, station_id="TEST01", snow_depth_cm=40.0)
-        mock_deps["storage"].read_all.return_value = [prev]
+        mock_deps["storage"].read_tail.return_value = [prev]
 
         with patch("src.sensor.main.compute_quality_flag", real_compute_quality_flag):
             SensorStation(_make_config()).run_cycle()
