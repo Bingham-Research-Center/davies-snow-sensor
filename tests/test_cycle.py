@@ -42,6 +42,28 @@ class TestCycleId:
         csv = tmp_path / "a" / "b" / "snow.csv"
         assert read_and_increment_cycle_id(csv) == 1
 
+    def test_write_failure_does_not_raise(self, cycle_csv, monkeypatch):
+        cycle_file = cycle_csv.parent / "cycle_id.txt"
+        cycle_file.write_text("5")
+
+        path_cls = type(cycle_file)
+        orig_write_text = path_cls.write_text
+
+        def fail_tmp_write_text(self, *args, **kwargs):
+            if self.name.endswith(".txt.tmp"):
+                raise OSError("simulated disk write failure")
+            return orig_write_text(self, *args, **kwargs)
+
+        monkeypatch.setattr(path_cls, "write_text", fail_tmp_write_text)
+
+        assert read_and_increment_cycle_id(cycle_csv) == 6
+        assert cycle_file.read_text().strip() == "5"
+
+    def test_no_tmp_file_left_behind(self, cycle_csv):
+        read_and_increment_cycle_id(cycle_csv)
+        leftovers = [p.name for p in cycle_csv.parent.iterdir()]
+        assert leftovers == ["cycle_id.txt"]
+
 
 class TestBootId:
     def test_stable_within_process(self):
