@@ -81,6 +81,57 @@ class TestModulationConfig:
         assert radio.low_datarate_optimize is expected_ldro
 
 
+class _RaisingRssiRadio:
+    """Fake rfm9x whose RSSI register read fails after a good receive."""
+
+    def receive(self, **kwargs):
+        return bytearray(b"DATA,x")
+
+    @property
+    def last_rssi(self):
+        raise RuntimeError("spi glitch")
+
+
+class TestReceivePacket:
+    def test_returns_payload_rssi_snr(self):
+        rx = LoRaReceiver(cs_pin=7, reset_pin=25)
+        radio = _init_with_mock(rx)
+        radio.receive.return_value = bytearray(b"DATA,x")
+        radio.last_rssi = -80
+        radio.last_snr = 5.5
+
+        assert rx.receive_packet() == (b"DATA,x", -80, 5.5)
+        assert rx.get_last_error_reason() is None
+
+    def test_timeout_returns_none(self):
+        rx = LoRaReceiver(cs_pin=7, reset_pin=25)
+        radio = _init_with_mock(rx)
+
+        radio.receive.side_effect = RuntimeError("spi glitch")
+        assert rx.receive_packet() is None
+        assert rx.get_last_error_reason() == "lora_recv_error"
+
+        radio.receive.side_effect = None
+        radio.receive.return_value = None
+        assert rx.receive_packet() is None
+        assert rx.get_last_error_reason() is None
+    def test_receive_error_returns_none(self):
+        rx = LoRaReceiver(cs_pin=7, reset_pin=25)
+        radio = _init_with_mock(rx)
+        radio.receive.side_effect = RuntimeError("spi glitch")
+
+        assert rx.receive_packet() is None
+        assert rx.get_last_error_reason() == "lora_recv_error"
+
+    def test_rssi_read_error_returns_none(self):
+        rx = LoRaReceiver(cs_pin=7, reset_pin=25)
+        _init_with_mock(rx)
+        rx._rfm9x = _RaisingRssiRadio()
+
+        assert rx.receive_packet() is None
+        assert rx.get_last_error_reason() == "lora_recv_error"
+
+
 class TestSendAck:
     def test_sets_toa_aware_xmit_timeout(self):
         rx = LoRaReceiver(cs_pin=7, reset_pin=25, spreading_factor=12)

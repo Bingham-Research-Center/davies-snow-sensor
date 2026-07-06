@@ -102,15 +102,17 @@ class LoRaReceiver:
             packet = self._rfm9x.receive(
                 timeout=timeout_seconds, with_header=False,
             )
+            if packet is None:
+                self._last_error = None
+                return None
+            # RSSI/SNR are SPI register reads and can fail transiently too.
+            rssi = int(self._rfm9x.last_rssi)
+            snr = float(getattr(self._rfm9x, "last_snr", 0.0))
         except Exception:
             self._last_error = "lora_recv_error"
             return None
-        if packet is None:
-            return None
-        rssi = self._rfm9x.last_rssi
-        snr = float(getattr(self._rfm9x, "last_snr", 0.0))
         self._last_error = None
-        return bytes(packet), int(rssi), snr
+        return bytes(packet), rssi, snr
 
     def send_ack(self, station_id: str, timestamp: str) -> bool:
         """Format and transmit an ACK echoing station_id + timestamp."""
