@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import uuid
 from pathlib import Path
 
@@ -17,6 +18,8 @@ def read_and_increment_cycle_id(csv_path: str | Path) -> int:
     """Read cycle_id from file next to CSV, increment, write back, return new value.
 
     File is plain text with a single integer. Created with value 1 on first call.
+    Never raises: a failed write (full/read-only disk) still returns the
+    incremented id so the cycle can continue; boot_id disambiguates repeats.
     """
     p = Path(csv_path).parent / "cycle_id.txt"
     current = 0
@@ -25,6 +28,11 @@ def read_and_increment_cycle_id(csv_path: str | Path) -> int:
     except (ValueError, OSError):
         current = 0
     next_id = current + 1
-    p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(str(next_id))
+    try:
+        p.parent.mkdir(parents=True, exist_ok=True)
+        tmp = p.with_suffix(".txt.tmp")
+        tmp.write_text(str(next_id))
+        os.replace(tmp, p)
+    except OSError:
+        pass
     return next_id
