@@ -25,6 +25,9 @@ lora:
 
 storage:
   data_dir: "/home/admin/data"   # per-station folders are created here
+  fsync: true                    # fsync packets.csv after each append; one write
+                                 # per received packet. Metrics are flush-only
+                                 # regardless (30s cadence would wear the SD card).
 
 # Senders we will accept and ACK. Add a line per station; unknown senders
 # are logged but not ACKed (so they retry into the void).

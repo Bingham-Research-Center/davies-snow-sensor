@@ -69,7 +69,8 @@ lora:
 
 storage:
   csv_path: "/home/admin/data/snow_data.csv"
-  fsync: false              # true = fsync after each append (durability vs throughput)
+  fsync: true               # fsync after each append; a few writes per cycle, so
+                            # durability costs nearly nothing. false = flush only.
 
 timing:
   cycle_interval_minutes: 15  # Informational; systemd timer drives actual cadence

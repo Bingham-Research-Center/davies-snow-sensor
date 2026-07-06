@@ -48,6 +48,8 @@ class LoraConfig:
 @dataclass(frozen=True)
 class StorageConfig:
     data_dir: str = "/home/admin/data"
+    # Applies to packets.csv only; metrics stay flush-only (30s cadence).
+    fsync: bool = True
 
 
 @dataclass(frozen=True)
@@ -141,7 +143,12 @@ def _parse_storage(raw: dict | None) -> StorageConfig:
     data_dir = raw.get("data_dir", "/home/admin/data")
     if not isinstance(data_dir, str) or not data_dir:
         raise ConfigError("Field 'data_dir' in 'storage' must be a non-empty string")
-    return StorageConfig(data_dir=data_dir)
+    fsync = raw.get("fsync", True)
+    if not isinstance(fsync, bool):
+        raise ConfigError(
+            f"Field 'fsync' in 'storage' must be a boolean, got {type(fsync).__name__}"
+        )
+    return StorageConfig(data_dir=data_dir, fsync=fsync)
 
 
 def _parse_metrics(raw: dict | None) -> MetricsConfig:

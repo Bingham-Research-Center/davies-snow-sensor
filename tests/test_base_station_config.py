@@ -70,6 +70,7 @@ metrics:
         assert cfg.lora.frequency == 868.0
         assert cfg.lora.tx_power == 17
         assert cfg.storage.data_dir == "/var/lib/snow"
+        assert cfg.storage.fsync is True
         assert len(cfg.stations) == 2
         assert cfg.stations[1].label == "Second sender"
         assert cfg.metrics.sample_interval_seconds == 10
@@ -79,6 +80,20 @@ metrics:
         body = _VALID_MINIMAL.replace("station_id:", "id:")
         cfg = load_config(_write(tmp_path, body))
         assert cfg.station_id == "BASE-01"
+
+    def test_fsync_default_true(self, tmp_path):
+        cfg = load_config(_write(tmp_path, _VALID_MINIMAL))
+        assert cfg.storage.fsync is True
+
+    def test_fsync_disabled(self, tmp_path):
+        body = _VALID_MINIMAL + 'storage:\n  data_dir: "/var/lib/snow"\n  fsync: false\n'
+        cfg = load_config(_write(tmp_path, body))
+        assert cfg.storage.fsync is False
+
+    def test_fsync_non_bool_raises(self, tmp_path):
+        body = _VALID_MINIMAL + 'storage:\n  fsync: "yes"\n'
+        with pytest.raises(ConfigError, match="boolean"):
+            load_config(_write(tmp_path, body))
 
 
 class TestInvalid:
