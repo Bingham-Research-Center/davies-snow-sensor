@@ -28,11 +28,16 @@ def read_and_increment_cycle_id(csv_path: str | Path) -> int:
     except (ValueError, OSError):
         current = 0
     next_id = current + 1
+    tmp: Path | None = None
     try:
         p.parent.mkdir(parents=True, exist_ok=True)
         tmp = p.with_suffix(".txt.tmp")
-        tmp.write_text(str(next_id))
+        tmp.write_text(str(next_id), encoding="utf-8")
         os.replace(tmp, p)
     except OSError:
-        pass
+        if tmp is not None:
+            try:
+                tmp.unlink(missing_ok=True)
+            except OSError:
+                pass
     return next_id
