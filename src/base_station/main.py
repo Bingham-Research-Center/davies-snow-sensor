@@ -24,6 +24,16 @@ from src.protocol import airtime, wire
 
 log = logging.getLogger("base_station")
 
+# A dead radio (SPI fault, wiring, hardware) makes receive_packet return
+# error after error without ever blocking. After this many consecutive
+# errors the process exits non-zero so systemd restarts it (re-initializing
+# the radio), instead of staying alive but deaf forever.
+MAX_CONSECUTIVE_RADIO_ERRORS = 30
+
+
+class RadioDeadError(Exception):
+    """Receive path returned only errors; the radio needs a re-init."""
+
 
 async def metrics_loop(
     storage: MetricsStorage, interval_seconds: int, stop: asyncio.Event,
@@ -56,10 +66,21 @@ async def receive_loop(
     status: LinkStatus | None = None,
 ) -> None:
     """Block on radio.receive_packet, parse, ACK, store. Loop until stop."""
+    consecutive_errors = 0
     while not stop.is_set():
         result = await asyncio.to_thread(radio.receive_packet, recv_timeout)
         if result is None:
+            err = radio.get_last_error_reason()
+            if err is None:
+                consecutive_errors = 0  # normal idle timeout
+            else:
+                consecutive_errors += 1
+                if consecutive_errors >= MAX_CONSECUTIVE_RADIO_ERRORS:
+                    raise RadioDeadError(
+                        f"{consecutive_errors} consecutive radio errors, last: {err}"
+                    )
             continue
+        consecutive_errors = 0
         payload_bytes, rssi, snr = result
         try:
             text = payload_bytes.decode("utf-8", errors="replace").strip()
@@ -208,6 +229,11 @@ async def run(config: ReceiverConfig) -> int:
 
     try:
         await asyncio.gather(*tasks)
+    except RadioDeadError as e:
+        # Exit non-zero so systemd's Restart=on-failure re-inits the radio.
+        log.critical("radio dead: %s — exiting for restart", e)
+        stop.set()
+        return 3
     finally:
         radio.cleanup()
         if display_enabled:
