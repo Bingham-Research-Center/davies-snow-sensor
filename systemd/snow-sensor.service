@@ -5,6 +5,9 @@ After=pigpiod.service
 
 [Service]
 Type=oneshot
+# Oneshot start timeout is otherwise infinite; a wedged serial read or GPIO
+# wait must not block the next timer slot. Worst honest cycle is ~3 min.
+TimeoutStartSec=10min
 User=admin
 SupplementaryGroups=gpio spi i2c dialout
 RuntimeDirectory=snow-sensor

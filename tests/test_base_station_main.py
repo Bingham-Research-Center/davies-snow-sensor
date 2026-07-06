@@ -6,7 +6,14 @@ import asyncio
 import time
 from unittest.mock import MagicMock
 
-from src.base_station.main import display_loop, receive_loop
+import pytest
+
+from src.base_station.main import (
+    MAX_CONSECUTIVE_RADIO_ERRORS,
+    RadioDeadError,
+    display_loop,
+    receive_loop,
+)
 from src.base_station.oled_display import LinkStatus
 from src.protocol import wire
 
@@ -34,6 +41,7 @@ def _radio_yielding_one_packet(rssi=-119, snr=-3.5):
         return None
 
     radio.receive_packet.side_effect = recv
+    radio.get_last_error_reason.return_value = None  # idle, not an error
     radio.send_ack.return_value = True
     return radio
 
@@ -84,6 +92,39 @@ class TestReceiveLoopStatus:
             )
 
         asyncio.run(scenario())  # no assertion needed — just must complete
+
+
+class TestReceiveLoopRadioDeath:
+    def test_raises_after_consecutive_radio_errors(self):
+        radio = MagicMock()
+        radio.receive_packet.return_value = None
+        radio.get_last_error_reason.return_value = "lora_recv_error"
+        registry = MagicMock()
+        storage = MagicMock()
+        stop = asyncio.Event()
+
+        with pytest.raises(RadioDeadError, match="lora_recv_error"):
+            asyncio.run(receive_loop(radio, registry, storage, stop, 0.001))
+        assert radio.receive_packet.call_count == MAX_CONSECUTIVE_RADIO_ERRORS
+
+    def test_error_counter_resets_on_clean_idle(self):
+        # Runs of N-1 errors broken by one clean idle timeout must never raise.
+        run_of_errors = ["lora_recv_error"] * (MAX_CONSECUTIVE_RADIO_ERRORS - 1)
+        script = (run_of_errors + [None]) * 2
+        radio = MagicMock()
+        radio.receive_packet.return_value = None
+        registry = MagicMock()
+        storage = MagicMock()
+        stop = asyncio.Event()
+
+        def last_error():
+            if not script:
+                stop.set()
+                return None
+            return script.pop(0)
+
+        radio.get_last_error_reason.side_effect = last_error
+        asyncio.run(receive_loop(radio, registry, storage, stop, 0.001))
 
 
 class TestDisplayLoop:
