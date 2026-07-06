@@ -78,8 +78,8 @@ class LoRaReceiver:
             self._rfm9x.coding_rate = self._coding_rate
             self._rfm9x.spreading_factor = self._spreading_factor
             self._rfm9x.preamble_length = self._preamble_length
-            self._rfm9x.low_datarate_optimize = (
-                (1 << self._spreading_factor) / self._signal_bandwidth_hz >= 0.016
+            self._rfm9x.low_datarate_optimize = airtime.low_datarate_optimize(
+                self._spreading_factor, self._signal_bandwidth_hz
             )
             self._rfm9x.tx_power = self._tx_power
             self._rfm9x.enable_crc = True
