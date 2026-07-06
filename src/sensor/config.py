@@ -80,6 +80,7 @@ class QCConfig:
     inter_pulse_delay_ms: int = 60
     min_valid_fraction: float = 0.5
     max_spread_cm: float = 5.0
+    max_rate_of_change_cm_per_hr: float = 25.0
 
 
 @dataclass(frozen=True)
@@ -461,11 +462,15 @@ def _parse_qc(raw: dict | None) -> QCConfig:
             f"min_valid_fraction must be in (0, 1], got {min_valid_fraction}"
         )
     max_spread_cm = parse_positive_number(raw, "max_spread_cm", "qc", 5.0)
+    max_rate_of_change_cm_per_hr = parse_positive_number(
+        raw, "max_rate_of_change_cm_per_hr", "qc", 25.0
+    )
     return QCConfig(
         num_samples=num_samples,
         inter_pulse_delay_ms=inter_pulse_delay_ms,
         min_valid_fraction=min_valid_fraction,
         max_spread_cm=max_spread_cm,
+        max_rate_of_change_cm_per_hr=max_rate_of_change_cm_per_hr,
     )
 
 

@@ -455,6 +455,7 @@ class TestQCConfig:
         assert cfg.qc.inter_pulse_delay_ms == 60
         assert cfg.qc.min_valid_fraction == 0.5
         assert cfg.qc.max_spread_cm == 5.0
+        assert cfg.qc.max_rate_of_change_cm_per_hr == 25.0
 
     def test_custom_values(self, tmp_path):
         data = {
@@ -464,6 +465,7 @@ class TestQCConfig:
                 "inter_pulse_delay_ms": 100,
                 "min_valid_fraction": 0.7,
                 "max_spread_cm": 3.0,
+                "max_rate_of_change_cm_per_hr": 10.0,
             },
         }
         cfg = load_config(_write_yaml(tmp_path, data))
@@ -471,6 +473,7 @@ class TestQCConfig:
         assert cfg.qc.inter_pulse_delay_ms == 100
         assert cfg.qc.min_valid_fraction == 0.7
         assert cfg.qc.max_spread_cm == 3.0
+        assert cfg.qc.max_rate_of_change_cm_per_hr == 10.0
 
     def test_num_samples_zero_rejected(self, tmp_path):
         data = {**VALID_CONFIG, "qc": {"num_samples": 0}}
@@ -490,6 +493,16 @@ class TestQCConfig:
     def test_max_spread_zero_rejected(self, tmp_path):
         data = {**VALID_CONFIG, "qc": {"max_spread_cm": 0}}
         with pytest.raises(ConfigError, match="max_spread_cm"):
+            load_config(_write_yaml(tmp_path, data))
+
+    def test_max_rate_of_change_zero_rejected(self, tmp_path):
+        data = {**VALID_CONFIG, "qc": {"max_rate_of_change_cm_per_hr": 0}}
+        with pytest.raises(ConfigError, match="max_rate_of_change_cm_per_hr"):
+            load_config(_write_yaml(tmp_path, data))
+
+    def test_max_rate_of_change_negative_rejected(self, tmp_path):
+        data = {**VALID_CONFIG, "qc": {"max_rate_of_change_cm_per_hr": -5}}
+        with pytest.raises(ConfigError, match="max_rate_of_change_cm_per_hr"):
             load_config(_write_yaml(tmp_path, data))
 
     def test_inter_pulse_delay_negative_rejected(self, tmp_path):

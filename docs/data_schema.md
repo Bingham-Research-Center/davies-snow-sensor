@@ -54,7 +54,7 @@ Each bit indicates a condition detected during the cycle. Value 0 means no issue
 | 4 | 16 | SELECTED_TOO_NOISY | Selected sensor spread exceeds `max_spread_cm` |
 | 5 | 32 | SNOW_DEPTH_NEGATIVE | Computed snow depth < 0 |
 | 6 | 64 | SNOW_DEPTH_OOR | Computed snow depth > sensor height |
-| 7 | 128 | *(reserved)* | Reserved for rate-of-change check |
+| 7 | 128 | RATE_OF_CHANGE_HIGH | Depth change vs last clean reading exceeds `max_rate_of_change_cm_per_hr` (time-normalized) |
 | 8 | 256 | LORA_TX_FAILED | LoRa transmit or ACK failed |
 | 9 | 512 | STORAGE_WRITE_FAILED | CSV write failed |
 
