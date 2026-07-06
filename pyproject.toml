@@ -26,6 +26,7 @@ hardware = [
 ]
 dev = [
     "pytest>=8.0",
+    "ruff>=0.8",
 ]
 
 [project.scripts]
@@ -34,6 +35,11 @@ snow-sensor = "src.sensor.main:main"
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["src*"]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests and scripts stub hardware modules in sys.modules before importing.
+"tests/*" = ["E402"]
+"scripts/*" = ["E402"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
