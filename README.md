@@ -3,12 +3,12 @@
 A dense network of low-cost snow depth stations that outperforms expensive single-point research instruments through spatial coverage, redundancy, and volume of data.
 
 ![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)
-![Tests: 470 passing](https://img.shields.io/badge/tests-470%20passing-brightgreen)
+![Tests: 604 passing](https://img.shields.io/badge/tests-604%20passing-brightgreen)
 ![License: MIT](https://img.shields.io/badge/license-MIT-green)
 
 ## About
 
-Each station reads snow depth with one or more HC-SR04 ultrasonic sensors, compensates for air temperature using a DS18B20 probe, transmits the reading over LoRa radio, and logs to local CSV storage — all on a 15-minute cycle orchestrated by a Raspberry Pi 4.
+Each station reads snow depth with one or more ultrasonic sensors (GPIO-based HC-SR04/JSN-SR04T, or serial MaxBotix MB7374 / DFRobot A02YYUW), compensates for air temperature using a DS18B20 probe, transmits the reading over LoRa radio, and logs to local CSV storage — all on a 15-minute cycle orchestrated by a Raspberry Pi 4.
 
 ### Research Hypothesis
 
@@ -23,13 +23,13 @@ This network will be compared against the 4 main research sites at Bingham Resea
 
 ### Status
 
-DAVIES-01 — the first prototype station — is in continuous **bench test** as of 2026-03-11, running `snow-sensor.timer` every 15 minutes and logging each cycle to CSV. Ultrasonic and temperature readings are stable; LoRa transmit succeeds but ACK times out, pending the base station receiver (see [Roadmap](#roadmap)). The station is not yet field-deployed.
+DAVIES-01 — the first prototype station — has been running continuous 15-minute cycles since 2026-03-11, with four ultrasonic sensors (three HC-SR04-class plus a MaxBotix MB7374 on USB serial). The base station receiver (BASE-01) is built and logging received packets to `packets.csv`; the LoRa DATA/ACK link is verified at close range, and both ends are now set to SF12 for extended-range testing (~4700 ft path — see [docs/lora_range_tuning.md](docs/lora_range_tuning.md)). The station is not yet field-deployed.
 
 ## Built With
 
-**Software:** Python 3.11+, PyYAML, gpiozero, adafruit-circuitpython-rfm9x, w1thermsensor
+**Software:** Python 3.11+, PyYAML, gpiozero, adafruit-circuitpython-rfm9x, adafruit-circuitpython-ssd1306, w1thermsensor, pyserial
 
-**Hardware:** Raspberry Pi 4, HC-SR04 ultrasonic sensor, DS18B20 temperature probe, Adafruit RFM95W LoRa bonnet, 52Pi Easy Multiplexing Board
+**Hardware:** Raspberry Pi 4, ultrasonic sensors (HC-SR04, JSN-SR04T, MaxBotix MB7374, DFRobot A02YYUW), DS18B20 temperature probe, Adafruit RFM95W LoRa bonnet, 52Pi Easy Multiplexing Board, SSD1306 OLED (base station)
 
 ## Project Structure
 
@@ -43,12 +43,14 @@ davies-snow-sensor/
 │   │   ├── qc.py            # Quality-control filtering and selection
 │   │   ├── temperature.py   # DS18B20 temperature readings
 │   │   ├── ultrasonic.py    # HC-SR04 distance readings (temp-compensated)
+│   │   ├── maxbotix.py      # MaxBotix MB7374 serial distance readings
+│   │   ├── a02yyuw.py       # DFRobot A02YYUW serial distance readings
 │   │   ├── lora.py          # LoRa DATA/ACK radio protocol
 │   │   ├── storage.py       # Append-only CSV storage
 │   │   └── power_budget.py  # Battery-autonomy planning tool
 │   ├── base_station/        # LoRa receiver software (see docs/base_station.md)
 │   └── protocol/            # Shared DATA/ACK wire format
-├── tests/                   # 470 unit tests (pytest)
+├── tests/                   # 604 unit tests (pytest)
 ├── scripts/                 # Setup, deploy, calibration, diagnostics
 ├── config/
 │   ├── station.yaml         # Per-station configuration (gitignored)
@@ -146,7 +148,9 @@ Key fields:
 | `station.id` | Unique station identifier (convention: `DAVIES-XX`) | *(required)* |
 | `station.sensor_height_cm` | Distance from sensor face to bare ground (cm) | *(required)* |
 | `station.hardware_profile` | Opt into board-specific pin validation. Set to `"52pi-ep0123"` to reject ultrasonic pins reserved by the LoRa bonnet and 52Pi multiplexing board. | *(none)* |
-| `sensors.ultrasonic` | List of HC-SR04 sensors (`id`, `trigger_pin`, `echo_pin`). Use this instead of `pins.hcsr04_*` for multi-sensor stations. | *(optional)* |
+| `sensors.ultrasonic` | List of HC-SR04-compatible sensors (`id`, `trigger_pin`, `echo_pin`), incl. JSN-SR04T. Use this instead of `pins.hcsr04_*` for multi-sensor stations. | *(optional)* |
+| `sensors.maxbotix` | List of MaxBotix MB7374 serial sensors (`id`, `serial_port`, `baud_rate`) | *(optional)* |
+| `sensors.a02yyuw` | List of DFRobot A02YYUW serial sensors (`id`, `serial_port`, `baud_rate`) | *(optional)* |
 | `pins.hcsr04_trigger` | HC-SR04 trigger GPIO (legacy single-sensor path) | *(required unless `sensors.ultrasonic` is set)* |
 | `pins.hcsr04_echo` | HC-SR04 echo GPIO (legacy single-sensor path) | *(required unless `sensors.ultrasonic` is set)* |
 | `pins.ds18b20_data` | DS18B20 1-Wire data GPIO | *(required)* |
@@ -156,10 +160,11 @@ Key fields:
 | `lora.tx_power` | LoRa transmit power in dBm (5–23) | `23` |
 | `lora.spreading_factor` | LoRa spreading factor (6–12; higher = longer range) | `12` |
 | `lora.signal_bandwidth_hz` | LoRa bandwidth (e.g. `125000`, `250000`, `500000`) | `125000` |
-| `lora.coding_rate` | LoRa FEC coding rate (5..8, i.e. 4/5..4/8) | `8` |
-| `lora.preamble_length` | LoRa preamble length in symbols | `12` |
-| `lora.ack_timeout_seconds` | Seconds to wait for ACK after a DATA send | `20.0` |
+| `lora.coding_rate` | LoRa FEC coding rate (5..8, i.e. 4/5..4/8) | `5` |
+| `lora.preamble_length` | LoRa preamble length in symbols | `8` |
+| `lora.ack_timeout_seconds` | Seconds to wait for ACK after a DATA send | `6.0` |
 | `qc.num_samples` | Ultrasonic samples per reading (odd, median-friendly) | `31` |
+| `qc.inter_pulse_delay_ms` | Delay between ultrasonic pulses (ms) | `60` |
 | `qc.min_valid_fraction` | Fraction of samples that must be valid to accept | `0.5` |
 | `qc.max_spread_cm` | Maximum MAD-based spread before flagging as noisy | `5.0` |
 | `storage.csv_path` | Path to CSV data file | *(required)* |
@@ -213,7 +218,7 @@ The unit is a `Type=oneshot` service triggered by `OnCalendar=*:0/15` with `Pers
 
 ## Architecture
 
-Each measurement cycle follows a linear pipeline: initialize hardware → read DS18B20 temperature → read each configured HC-SR04 distance (using temperature-compensated speed of sound) → run QC selection across sensors → transmit DATA message via LoRa and wait for ACK → append reading to CSV → clean up GPIO and SPI resources. Signal handlers (SIGINT/SIGTERM) ensure graceful hardware cleanup on shutdown.
+Each measurement cycle follows a linear pipeline: initialize hardware → read DS18B20 temperature → read each configured ultrasonic distance (GPIO sensors use temperature-compensated speed of sound) → run QC selection across sensors → transmit DATA message via LoRa and wait for ACK → append reading to CSV → clean up GPIO and SPI resources. Signal handlers (SIGINT/SIGTERM) ensure graceful hardware cleanup on shutdown.
 
 | Module | Purpose |
 |--------|---------|
@@ -222,6 +227,8 @@ Each measurement cycle follows a linear pipeline: initialize hardware → read D
 | `qc.py` | Per-cycle quality bitmask and best-sensor selection |
 | `temperature.py` | DS18B20 readings with retry logic and range validation |
 | `ultrasonic.py` | HC-SR04 median-filtered distance with temperature compensation |
+| `maxbotix.py` | MaxBotix MB7374 distance over USB-TTL serial |
+| `a02yyuw.py` | DFRobot A02YYUW distance over UART serial |
 | `lora.py` | LoRa DATA/ACK protocol with retries and CRC |
 | `storage.py` | Append-only CSV with auto-initialization |
 | `power_budget.py` | Standalone battery-autonomy estimator (planning tool, not in the runtime loop) |
@@ -245,7 +252,7 @@ See [hardware/multiplexing_board_wiring.md](hardware/multiplexing_board_wiring.m
 ## Roadmap
 
 - [x] Sensor software stack (temperature, ultrasonic, LoRa, storage, config)
-- [x] 470 unit tests with full module coverage
+- [x] 604 unit tests with full module coverage
 - [x] LoRa DATA/ACK protocol with retries and CRC
 - [x] Interactive station setup script
 - [x] Raspberry Pi drop-in boot config
@@ -261,6 +268,9 @@ See [hardware/multiplexing_board_wiring.md](hardware/multiplexing_board_wiring.m
 ## Documentation
 
 - [docs/software_architecture.md](docs/software_architecture.md) — module reference, error codes, and library details
+- [docs/base_station.md](docs/base_station.md) — LoRa receiver setup and operation
+- [docs/data_schema.md](docs/data_schema.md) — CSV column definitions for station and base logs
+- [docs/lora_range_tuning.md](docs/lora_range_tuning.md) — extending and measuring the LoRa link
 - [docs/ds18b20_datasheet_reference.md](docs/ds18b20_datasheet_reference.md) — DS18B20 datasheet notes and resolution settings
 - [hardware/bill_of_materials.md](hardware/bill_of_materials.md) — full component list with specs and costs (~$75–100 per station)
 - [hardware/multiplexing_board_wiring.md](hardware/multiplexing_board_wiring.md) — GPIO breakout board row assignments and pin tables
