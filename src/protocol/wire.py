@@ -12,6 +12,8 @@ within their field on the wire.
 
 from __future__ import annotations
 
+import math
+
 PROTOCOL_VERSION = "v2"
 DATA_FIELD_COUNT = 8
 ACK_FIELD_COUNT = 3
@@ -96,6 +98,8 @@ def _parse_number(text: str) -> float | None:
     if text == "-":
         return None
     try:
-        return float(text)
+        value = float(text)
     except ValueError:
         return None
+    # A CRC-valid but corrupt packet must not put inf/nan into the CSV.
+    return value if math.isfinite(value) else None
