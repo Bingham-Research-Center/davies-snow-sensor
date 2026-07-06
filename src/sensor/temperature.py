@@ -48,7 +48,14 @@ class TemperatureSensor:
             self._last_error = None
             return True
         except NoSensorFoundError:
+            self._sensor = None
+            self._initialized = False
             self._last_error = "temp_no_device"
+            return False
+        except Exception:
+            self._sensor = None
+            self._initialized = False
+            self._last_error = "temp_init_error"
             return False
 
     def read_temperature_c(self) -> float | None:

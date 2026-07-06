@@ -62,6 +62,16 @@ class TestInitialize:
         assert sensor._initialized is False
         assert sensor.get_last_error_reason() == "temp_no_device"
 
+    def test_initialize_unexpected_error(self):
+        sensor = TemperatureSensor()
+        with patch("w1thermsensor.W1ThermSensor") as MockSensor:
+            MockSensor.side_effect = OSError("w1 bus unavailable")
+            result = sensor.initialize()
+
+        assert result is False
+        assert sensor._initialized is False
+        assert sensor.get_last_error_reason() == "temp_init_error"
+
 
 class TestReadTemperature:
     def _make_initialized_sensor(self, mock_hw):
