@@ -73,12 +73,17 @@ class TestAppendCsv:
         with pytest.raises(StorageError, match="schema mismatch"):
             append_csv(path, COLUMNS, {"a": 1, "b": "x"})
 
-    def test_unwritable_file_raises_storage_error(self, tmp_path):
+    def test_unwritable_file_raises_storage_error(self, tmp_path, monkeypatch):
         path = tmp_path / "out.csv"
         append_csv(path, COLUMNS, {"a": 1, "b": "x"})
-        path.chmod(0o400)
-        try:
-            with pytest.raises(StorageError, match="Failed to append row"):
-                append_csv(path, COLUMNS, {"a": 2, "b": "y"})
-        finally:
-            path.chmod(0o600)
+
+        real_open = open
+
+        def failing_open(p, mode="r", *args, **kwargs):
+            if p == path and "a" in mode:
+                raise PermissionError("no write permission")
+            return real_open(p, mode, *args, **kwargs)
+
+        monkeypatch.setattr("builtins.open", failing_open)
+        with pytest.raises(StorageError, match="Failed to append row"):
+            append_csv(path, COLUMNS, {"a": 2, "b": "y"})
