@@ -3,7 +3,7 @@
 A dense network of low-cost snow depth stations that outperforms expensive single-point research instruments through spatial coverage, redundancy, and volume of data.
 
 ![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)
-![Tests: 604 passing](https://img.shields.io/badge/tests-604%20passing-brightgreen)
+![Tests: 694 passing](https://img.shields.io/badge/tests-694%20passing-brightgreen)
 ![License: MIT](https://img.shields.io/badge/license-MIT-green)
 
 ## About
@@ -50,7 +50,7 @@ davies-snow-sensor/
 │   │   └── power_budget.py  # Battery-autonomy planning tool
 │   ├── base_station/        # LoRa receiver software (see docs/base_station.md)
 │   └── protocol/            # Shared DATA/ACK wire format
-├── tests/                   # 604 unit tests (pytest)
+├── tests/                   # 694 unit tests (pytest)
 ├── scripts/                 # Setup, deploy, calibration, diagnostics
 ├── config/
 │   ├── station.yaml         # Per-station configuration (gitignored)
@@ -252,7 +252,7 @@ See [hardware/multiplexing_board_wiring.md](hardware/multiplexing_board_wiring.m
 ## Roadmap
 
 - [x] Sensor software stack (temperature, ultrasonic, LoRa, storage, config)
-- [x] 604 unit tests with full module coverage
+- [x] 694 unit tests with full module coverage
 - [x] LoRa DATA/ACK protocol with retries and CRC
 - [x] Interactive station setup script
 - [x] Raspberry Pi drop-in boot config

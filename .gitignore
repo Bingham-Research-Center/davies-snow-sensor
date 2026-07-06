@@ -58,7 +58,9 @@ config/*.yaml.tmp
 
 # Local configuration (may contain sensitive info)
 config/station_*.yaml
-!config/station_template.yaml
+
+# Claude Code local settings (may reference hosts/keys)
+.claude/
 
 # Logs
 *.log
