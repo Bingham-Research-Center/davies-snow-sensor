@@ -72,6 +72,8 @@ sed -e "s|/home/admin/davies-snow-sensor|$REPO_DIR|g" \
     "$REPO_DIR/systemd/snow-sensor.service" > /etc/systemd/system/snow-sensor.service
 cp "$REPO_DIR/systemd/snow-sensor.timer" /etc/systemd/system/
 systemctl daemon-reload
+# Makes time-sync.target wait for a truly synced kernel clock (no RTC on the Pi).
+systemctl enable systemd-time-wait-sync.service
 systemctl enable snow-sensor.timer
 systemctl start snow-sensor.timer
 

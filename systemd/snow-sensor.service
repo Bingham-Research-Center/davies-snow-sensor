@@ -1,7 +1,11 @@
 [Unit]
 Description=Davies snow-sensor reading
 Requires=pigpiod.service
-After=pigpiod.service
+# No RTC: gate on a synced clock or pre-NTP boots write wrong timestamps.
+# Real gate needs systemd-time-wait-sync enabled (deploy.sh does this);
+# without it time-sync.target only means timesyncd started.
+Wants=time-sync.target
+After=pigpiod.service time-sync.target
 
 [Service]
 Type=oneshot
