@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import logging
+import os
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -17,6 +18,9 @@ from src.protocol.csv_helpers import (
 StorageError = _StorageError
 
 logger = logging.getLogger(__name__)
+
+# Generous upper bound on one serialized CSV row, used to size tail reads.
+_TAIL_BYTES_PER_ROW = 256
 
 
 COLUMNS = (
@@ -96,6 +100,37 @@ class Storage:
 
     def read_all(self) -> list[Reading]:
         return _read_rows(self._path, _row_to_reading)
+
+    def read_tail(self, max_rows: int = 500) -> list[Reading]:
+        """Read up to the last max_rows readings without scanning the file.
+
+        The QC baseline lookup runs every cycle; reading the whole append-only
+        CSV would grow without bound. 500 rows is ~5 days at a 15-min cadence.
+        """
+        if not self._path.exists():
+            return []
+        with open(self._path, "rb") as f:
+            f.seek(0, os.SEEK_END)
+            size = f.tell()
+            start = max(0, size - max_rows * _TAIL_BYTES_PER_ROW)
+            f.seek(start)
+            data = f.read()
+        lines = data.decode("utf-8", errors="replace").splitlines()
+        # Drop the first line: the header when reading from the start,
+        # otherwise a (possibly partial) row the seek landed inside.
+        lines = lines[1:][-max_rows:]
+        rows = []
+        skipped = 0
+        for fields in csv.reader(lines):
+            try:
+                if len(fields) != len(COLUMNS):
+                    raise ValueError("field count mismatch")
+                rows.append(_row_to_reading(dict(zip(COLUMNS, fields))))
+            except (TypeError, ValueError, AttributeError):
+                skipped += 1
+        if skipped:
+            logger.warning("Skipped %d unparseable row(s) in %s", skipped, self._path)
+        return rows
 
 
 class SensorStorage:

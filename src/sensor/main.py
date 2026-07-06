@@ -261,7 +261,7 @@ class SensorStation:
 
         baseline = None
         try:
-            baseline = find_baseline(self._storage.read_all())
+            baseline = find_baseline(self._storage.read_tail())
         except Exception:
             logger.warning("Failed to read previous readings for QC", exc_info=True)
 
