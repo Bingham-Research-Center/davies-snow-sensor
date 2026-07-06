@@ -67,6 +67,9 @@ async def receive_loop(
 ) -> None:
     """Block on radio.receive_packet, parse, ACK, store. Loop until stop."""
     consecutive_errors = 0
+    # Last stored (station_id -> timestamp). A sender whose ACK was lost
+    # retransmits the same DATA; re-ACK it but don't store a duplicate row.
+    last_stored: dict[str, str] = {}
     while not stop.is_set():
         result = await asyncio.to_thread(radio.receive_packet, recv_timeout)
         if result is None:
@@ -105,6 +108,11 @@ async def receive_loop(
                       station_id, packet["timestamp"], radio.get_last_error_reason())
             # Keep going — we still want to log the packet.
 
+        if last_stored.get(station_id) == packet["timestamp"]:
+            log.info("packet: duplicate from %s @ %s — re-ACKed, not re-stored",
+                     station_id, packet["timestamp"])
+            continue
+
         row = PacketRow(
             recv_timestamp=utc_now_iso(),
             station_id=station_id,
@@ -122,6 +130,7 @@ async def receive_loop(
         except Exception:
             log.exception("storage: append failed for %s", station_id)
             continue
+        last_stored[station_id] = packet["timestamp"]
 
         log.info(
             "packet: %s snow=%s temp=%s rssi=%d snr=%.1f flags=%r ack=%s",
