@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from src.protocol import wire
 
 
@@ -121,6 +123,15 @@ class TestParseData:
     def test_invalid_number_decodes_as_none(self):
         result = wire.parse_data(
             "DATA,SNOW01,20260304T120000Z,not-a-number,2.0,3.0,4.0,"
+        )
+        assert result is not None
+        assert result["snow_depth_cm"] is None
+        assert result["distance_raw_cm"] == 2.0
+
+    @pytest.mark.parametrize("bad", ["inf", "-inf", "nan", "1e999"])
+    def test_non_finite_number_decodes_as_none(self, bad):
+        result = wire.parse_data(
+            f"DATA,SNOW01,20260304T120000Z,{bad},2.0,3.0,4.0,"
         )
         assert result is not None
         assert result["snow_depth_cm"] is None
