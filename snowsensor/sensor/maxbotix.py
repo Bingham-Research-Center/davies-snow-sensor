@@ -5,15 +5,7 @@ from __future__ import annotations
 import statistics
 import time
 
-from snowsensor.sensor.ultrasonic import SensorResult
-
-
-def _median_absolute_deviation(values: list[float]) -> float:
-    """Return the median absolute deviation for the given values."""
-    if not values:
-        return 0.0
-    median = statistics.median(values)
-    return statistics.median(abs(value - median) for value in values)
+from snowsensor.sensor.ultrasonic import SensorResult, median_absolute_deviation
 
 
 def parse_frame(frame: bytes) -> float | None:
@@ -126,7 +118,7 @@ class MaxbotixSensor:
 
         median_cm = statistics.median(valid_readings)
         spread_cm = (
-            round(_median_absolute_deviation(valid_readings), 2)
+            round(median_absolute_deviation(valid_readings), 2)
             if num_valid > 1 else 0.0
         )
         distance = self._validate_distance_cm(median_cm)
