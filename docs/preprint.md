@@ -198,17 +198,19 @@ We implement a custom acknowledged messaging protocol over raw LoRa packets:
 
 **DATA message** (sensor node → base station):
 ```
-DATA,<station_id>,<timestamp>,<snow_depth>,<distance_raw>,<temperature>,<sensor_height>,<error_flags>
+DATA,<station_id>,<timestamp>,<snow_depth>,<distance_raw>,<temperature>,<sensor_height>,<error_flags>,<tag>
 ```
 
 Numeric fields are formatted to 2 decimal places; unavailable values are represented as `-`. Error flags are comma-delimited within the LoRa message. A typical message is approximately 80–120 bytes.
 
 **ACK message** (base station → sensor node):
 ```
-ACK,<station_id>,<timestamp>
+ACK,<station_id>,<timestamp>,<tag>
 ```
 
 The ACK includes the station ID and timestamp to prevent mismatched acknowledgments in a multi-node network.
+
+**Authentication:** `<tag>` is a truncated (8-byte) HMAC-SHA256 over the rest of the message, keyed by a 32-byte secret shared between the sensor node and base station. Messages failing verification are dropped without acknowledgment, and the base station rejects otherwise-valid DATA whose timestamp is more than 15 minutes from its own clock, preventing both spoofed data injection and replay of recorded packets on the unlicensed ISM band.
 
 **Retry logic:** Each transmission attempt waits up to 10 seconds for a matching ACK. If no ACK is received, the message is retransmitted up to 3 times. After 3 failed attempts, the reading is flagged as `lora_ack_timeout` but is still saved to local CSV storage — no data is lost due to radio failure.
 

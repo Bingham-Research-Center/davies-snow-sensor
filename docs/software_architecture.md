@@ -54,29 +54,31 @@ StationConfig
 │   ├── tx_power: int               (default 23 dBm; 5–23)
 │   ├── spreading_factor: int       (default 12; 6–12)
 │   ├── signal_bandwidth_hz: int    (default 125000)
-│   ├── coding_rate: int            (default 8; 5..8 = 4/5..4/8 FEC)
-│   ├── preamble_length: int        (default 12 symbols)
-│   └── ack_timeout_seconds: float  (default 20.0)
+│   ├── coding_rate: int            (default 5; 5..8 = 4/5..4/8 FEC)
+│   ├── preamble_length: int        (default 8 symbols)
+│   ├── ack_timeout_seconds: float  (default 6.0)
+│   └── key_file: str               (required; path to shared HMAC key, loaded into LoraConfig.key)
 ├── qc: QcConfig
 │   ├── num_samples: int            (default 31; odd for median)
 │   ├── inter_pulse_delay_ms: int   (default 60)
 │   ├── min_valid_fraction: float   (default 0.5)
-│   └── max_spread_cm: float        (default 5.0)
+│   ├── max_spread_cm: float        (default 5.0)
+│   └── max_rate_of_change_cm_per_hr: float (default 25.0)
 ├── storage: StorageConfig
 │   ├── csv_path: str        (required)
-│   └── fsync: bool          (default false)
+│   └── fsync: bool          (default true)
 └── timing: TimingConfig
     └── cycle_interval_minutes: int (default 15)
 ```
 
 Validation rules:
-- `station`, `pins`, and `storage` sections are required; missing keys raise `ConfigError`.
+- `station`, `pins`, `storage`, and `lora` (for its `key_file`) sections are required; missing keys raise `ConfigError`.
 - All pin values must be integers in the range 0–27.
 - When `station.hardware_profile == "52pi-ep0123"`, ultrasonic trigger/echo pins in `{2,3,7,8,9,10,11,17,22,23,24,25}` are rejected (LoRa bonnet and 52Pi EP-0123 reservations).
 - `frequency` must be numeric and in an ISM band; integer fields (`tx_power`, `spreading_factor`, `coding_rate`, `preamble_length`, `cycle_interval_minutes`) must be integers; pin collisions across all ultrasonic and non-ultrasonic pins are rejected.
 - Sensor IDs (`sensors.ultrasonic[].id` and `sensors.maxbotix[].id`) share one namespace and must be unique across the whole station.
 - `sensors.maxbotix[].serial_port` and `sensors.a02yyuw[].serial_port` must be strings starting with `/dev/`; the device is **not** stat'd at config-load time (so CI without hardware still validates).
-- `sensors`, `lora`, `qc`, and `timing` sections are optional (defaults apply).
+- `sensors`, `qc`, and `timing` sections are optional (defaults apply).
 
 **Legacy single-sensor compatibility:** if a config has `pins.hcsr04_trigger`/`pins.hcsr04_echo` but no `sensors.ultrasonic` block, the loader synthesises a one-element `sensors.ultrasonic` list with `id="default"`. Existing configs keep working unchanged.
 
@@ -198,7 +200,7 @@ directly for temperature compensation before each measurement cycle.
 
 ### Reading behaviour
 
-- **Median filtering**: Takes `num_samples` readings (default 11) with 60 ms
+- **Median filtering**: Takes `num_samples` readings (default 31) with 60 ms
   inter-pulse delay and returns the median. Requires a majority of valid samples
   (≥ `num_samples // 2 + 1`).
 - **Temperature compensation**: Uses the Laplace formula
@@ -386,11 +388,11 @@ Post-construction settings (all configurable from `lora.*` in the YAML):
 | `tx_power` | 23 dBm | 5–23 | PA_BOOST output |
 | `spreading_factor` | 12 | 6–12 | Higher = longer range, longer time-on-air |
 | `signal_bandwidth` | 125000 Hz | 7800..500000 | Standard LoRa bandwidths |
-| `coding_rate` | 8 | 5..8 | 4/5..4/8 FEC; higher = stronger correction |
-| `preamble_length` | 12 | symbols | Longer helps RX lock at low SNR |
+| `coding_rate` | 5 | 5..8 | 4/5..4/8 FEC; higher = stronger correction |
+| `preamble_length` | 8 | symbols | Longer helps RX lock at low SNR |
 | `enable_crc` | `True` | — | Packet error detection |
 
-> **Critical — silent loss on mismatch.** Every modulation parameter (frequency, spreading_factor, signal_bandwidth, coding_rate, preamble_length) MUST match the peer's `lora` block on the base station. The radios cannot decode a packet that uses different modulation settings, and they do not surface this as an error — you simply receive nothing. The defaults above are the "max range" preset (SF12/BW125/CR4-8); change them on both ends together.
+> **Critical — silent loss on mismatch.** Every modulation parameter (frequency, spreading_factor, signal_bandwidth, coding_rate, preamble_length) MUST match the peer's `lora` block on the base station. The radios cannot decode a packet that uses different modulation settings, and they do not surface this as an error — you simply receive nothing. The defaults above are the "max range" preset (SF12/BW125/CR4-5); change them on both ends together.
 
 ### Power management
 
@@ -427,7 +429,7 @@ own clock, so recorded packets cannot be replayed later. Stale or
 unauthenticated packets are never ACKed.
 
 - **Retries**: Up to 3 send attempts, each waiting up to `ack_timeout_seconds`
-  (default 10 s) for a matching ACK.
+  (default 6 s; the deployed station.yaml uses 10 s) for a matching ACK.
 - **Radio settings**: `high_power=True`, CRC enabled, configurable `tx_power`
   (default 23 dBm) and frequency (default 915.0 MHz).
 - **Sleep**: `sleep()` puts the radio in low-power mode after transmit.
@@ -450,7 +452,6 @@ unauthenticated packets are never ACKed.
 |------|-------------|
 | `--config PATH` | Path to YAML config file (required) |
 | `--verbose` | Enable debug logging |
-| `--test` | Enable debug logging (test/single-reading mode) |
 
 ### Signal handling
 
