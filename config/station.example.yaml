@@ -66,6 +66,10 @@ lora:
   coding_rate: 5                # 5..8 (== 4/5..4/8 FEC; higher = stronger error correction)
   preamble_length: 8            # symbols; longer helps RX lock at low SNR
   ack_timeout_seconds: 6.0      # ~3s DATA ToA + ~1.3s ACK at SF12/BW125; sender-only
+  # Shared HMAC key authenticating DATA/ACK. Same file contents on BOTH Pis;
+  # never commit it (gitignored). Relative paths resolve next to this file.
+  # Generate once: python3 -c 'import secrets; print(secrets.token_hex(32))' > config/lora.key
+  key_file: lora.key
 
 storage:
   csv_path: "/home/admin/data/snow_data.csv"

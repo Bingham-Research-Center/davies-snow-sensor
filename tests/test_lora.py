@@ -31,12 +31,19 @@ sys.modules.setdefault("busio", _busio)
 sys.modules.setdefault("digitalio", _digitalio)
 sys.modules.setdefault("adafruit_rfm9x", _adafruit_rfm9x)
 
+from src.protocol import auth
 from src.sensor.lora import LoRaTransmitter
+
+KEY = bytes(range(32))
+
+
+def _ack_bytes(station_id="SNOW01", timestamp="20260304T120000Z", key=KEY):
+    return auth.append_tag(f"ACK,{station_id},{timestamp}", key).encode("utf-8")
 
 
 class TestInitialize:
     def test_initialize_success(self):
-        tx = LoRaTransmitter(cs_pin=7, reset_pin=25)
+        tx = LoRaTransmitter(cs_pin=7, reset_pin=25, key=KEY)
         with patch("adafruit_rfm9x.RFM9x") as MockRFM:
             mock_radio = MagicMock()
             MockRFM.return_value = mock_radio
@@ -47,7 +54,7 @@ class TestInitialize:
         assert tx.get_last_error_reason() is None
 
     def test_initialize_import_error(self):
-        tx = LoRaTransmitter(cs_pin=7, reset_pin=25)
+        tx = LoRaTransmitter(cs_pin=7, reset_pin=25, key=KEY)
         with patch.dict(sys.modules, {"adafruit_rfm9x": None}):
             result = tx.initialize()
 
@@ -55,7 +62,7 @@ class TestInitialize:
         assert tx.get_last_error_reason() == "lora_no_device"
 
     def test_initialize_hardware_exception(self):
-        tx = LoRaTransmitter(cs_pin=7, reset_pin=25)
+        tx = LoRaTransmitter(cs_pin=7, reset_pin=25, key=KEY)
         with patch("adafruit_rfm9x.RFM9x") as MockRFM:
             MockRFM.side_effect = RuntimeError("SPI fail")
             result = tx.initialize()
@@ -68,7 +75,7 @@ class TestInitialize:
         assert tx._reset is None
 
     def test_configured_pins_used(self):
-        tx = LoRaTransmitter(cs_pin=7, reset_pin=25)
+        tx = LoRaTransmitter(cs_pin=7, reset_pin=25, key=KEY)
         with patch("adafruit_rfm9x.RFM9x") as MockRFM, \
              patch("digitalio.DigitalInOut") as MockDIO, \
              patch("busio.SPI"):
@@ -93,7 +100,7 @@ class TestModulationConfig:
 
     def test_default_long_range_preset_applied(self):
         """Default constructor yields SF12/BW125/CR4-5/preamble8 with LDRO on."""
-        tx = LoRaTransmitter(cs_pin=7, reset_pin=25)
+        tx = LoRaTransmitter(cs_pin=7, reset_pin=25, key=KEY)
         radio = self._initialize_with_mock(tx)
         assert radio.spreading_factor == 12
         assert radio.signal_bandwidth == 125000
@@ -103,7 +110,7 @@ class TestModulationConfig:
 
     def test_kwargs_override_defaults(self):
         tx = LoRaTransmitter(
-            cs_pin=7, reset_pin=25,
+            cs_pin=7, reset_pin=25, key=KEY,
             spreading_factor=9,
             signal_bandwidth_hz=250000,
             coding_rate=5,
@@ -127,25 +134,25 @@ class TestModulationConfig:
     ])
     def test_ldro_threshold(self, sf, bw, expected_ldro):
         tx = LoRaTransmitter(
-            cs_pin=7, reset_pin=25,
+            cs_pin=7, reset_pin=25, key=KEY,
             spreading_factor=sf, signal_bandwidth_hz=bw,
         )
         radio = self._initialize_with_mock(tx)
         assert radio.low_datarate_optimize is expected_ldro
 
     def test_default_ack_timeout(self):
-        tx = LoRaTransmitter(cs_pin=7, reset_pin=25)
+        tx = LoRaTransmitter(cs_pin=7, reset_pin=25, key=KEY)
         assert tx._ack_timeout_seconds == 6.0
 
     def test_ack_timeout_kwarg_threaded(self):
-        tx = LoRaTransmitter(cs_pin=7, reset_pin=25, ack_timeout_seconds=5.0)
+        tx = LoRaTransmitter(cs_pin=7, reset_pin=25, key=KEY, ack_timeout_seconds=5.0)
         assert tx._ack_timeout_seconds == 5.0
 
 
 class TestTransmitWithAck:
     def _make_initialized_tx(self, mock_rfm):
         """Return a LoRaTransmitter with a mocked radio."""
-        tx = LoRaTransmitter(cs_pin=7, reset_pin=25)
+        tx = LoRaTransmitter(cs_pin=7, reset_pin=25, key=KEY)
         tx._rfm9x = mock_rfm
         tx._initialized = True
         tx._spi = MagicMock()
@@ -167,7 +174,7 @@ class TestTransmitWithAck:
     def test_successful_send_and_ack(self):
         mock_rfm = MagicMock()
         mock_rfm.send.return_value = True
-        ack_bytes = b"ACK,SNOW01,20260304T120000Z"
+        ack_bytes = _ack_bytes()
         mock_rfm.receive.return_value = ack_bytes
         mock_rfm.last_rssi = -45
         tx = self._make_initialized_tx(mock_rfm)
@@ -181,7 +188,7 @@ class TestTransmitWithAck:
         mock_rfm.send.assert_called_once()
 
     def test_not_initialized(self):
-        tx = LoRaTransmitter(cs_pin=7, reset_pin=25)
+        tx = LoRaTransmitter(cs_pin=7, reset_pin=25, key=KEY)
 
         result = tx.transmit_with_ack(self._make_payload())
 
@@ -192,7 +199,7 @@ class TestTransmitWithAck:
         mock_rfm = MagicMock()
         # First send fails, second succeeds (send() returns True), then ACK received
         mock_rfm.send.side_effect = [OSError("TX fail"), True]
-        ack_bytes = b"ACK,SNOW01,20260304T120000Z"
+        ack_bytes = _ack_bytes()
         mock_rfm.receive.return_value = ack_bytes
         mock_rfm.last_rssi = -50
         tx = self._make_initialized_tx(mock_rfm)
@@ -226,7 +233,7 @@ class TestTransmitWithAck:
         mock_rfm = MagicMock()
         # First receive: wrong station, second: timeout (None)
         mock_rfm.receive.side_effect = [
-            b"ACK,WRONG_STATION,20260304T120000Z",
+            _ack_bytes(station_id="WRONG_STATION"),
             None,
         ]
         mock_rfm.last_rssi = -60
@@ -248,9 +255,31 @@ class TestTransmitWithAck:
 
         assert result is False
 
+    def test_ack_with_wrong_key_ignored(self):
+        mock_rfm = MagicMock()
+        mock_rfm.receive.side_effect = [
+            _ack_bytes(key=bytes(32)),  # right station/timestamp, wrong key
+            None,
+        ]
+        tx = self._make_initialized_tx(mock_rfm)
+
+        result = tx.transmit_with_ack(self._make_payload(), retries=1, timeout_seconds=0.1)
+
+        assert result is False
+
+    def test_transmitted_data_carries_valid_tag(self):
+        mock_rfm = MagicMock()
+        mock_rfm.receive.return_value = None
+        tx = self._make_initialized_tx(mock_rfm)
+
+        tx.transmit_with_ack(self._make_payload(), retries=1, timeout_seconds=0.1)
+
+        sent = mock_rfm.send.call_args.args[0].decode("utf-8")
+        assert auth.verify_and_strip(sent, KEY) is not None
+
     def test_duration_tracked(self):
         mock_rfm = MagicMock()
-        ack_bytes = b"ACK,SNOW01,20260304T120000Z"
+        ack_bytes = _ack_bytes()
         mock_rfm.receive.return_value = ack_bytes
         mock_rfm.last_rssi = -40
         tx = self._make_initialized_tx(mock_rfm)
@@ -290,7 +319,7 @@ class TestTransmit:
     """The one-way transmit() helper sizes xmit_timeout and returns send()'s bool."""
 
     def _make_initialized_tx(self, mock_rfm, **kwargs):
-        tx = LoRaTransmitter(cs_pin=7, reset_pin=25, **kwargs)
+        tx = LoRaTransmitter(cs_pin=7, reset_pin=25, key=KEY, **kwargs)
         tx._rfm9x = mock_rfm
         tx._initialized = True
         return tx
@@ -336,14 +365,14 @@ class TestTransmit:
         assert mock_rfm.xmit_timeout == pytest.approx(2.0)
 
     def test_not_initialized(self):
-        tx = LoRaTransmitter(cs_pin=7, reset_pin=25)
+        tx = LoRaTransmitter(cs_pin=7, reset_pin=25, key=KEY)
         assert tx.transmit(b"hello") is False
         assert tx.get_last_error_reason() == "lora_not_initialized"
 
 
 class TestSleep:
     def test_calls_rfm9x_sleep(self):
-        tx = LoRaTransmitter(cs_pin=7, reset_pin=25)
+        tx = LoRaTransmitter(cs_pin=7, reset_pin=25, key=KEY)
         mock_rfm = MagicMock()
         tx._rfm9x = mock_rfm
 
@@ -352,11 +381,11 @@ class TestSleep:
         mock_rfm.sleep.assert_called_once()
 
     def test_no_crash_without_rfm9x(self):
-        tx = LoRaTransmitter(cs_pin=7, reset_pin=25)
+        tx = LoRaTransmitter(cs_pin=7, reset_pin=25, key=KEY)
         tx.sleep()  # should not raise
 
     def test_swallows_exceptions(self):
-        tx = LoRaTransmitter(cs_pin=7, reset_pin=25)
+        tx = LoRaTransmitter(cs_pin=7, reset_pin=25, key=KEY)
         mock_rfm = MagicMock()
         mock_rfm.sleep.side_effect = RuntimeError("sleep fail")
         tx._rfm9x = mock_rfm
@@ -366,7 +395,7 @@ class TestSleep:
 
 class TestCleanup:
     def test_deinits_all_resources(self):
-        tx = LoRaTransmitter(cs_pin=7, reset_pin=25)
+        tx = LoRaTransmitter(cs_pin=7, reset_pin=25, key=KEY)
         mock_spi = MagicMock()
         mock_cs = MagicMock()
         mock_reset = MagicMock()
@@ -383,11 +412,11 @@ class TestCleanup:
         mock_reset.deinit.assert_called_once()
 
     def test_works_without_resources(self):
-        tx = LoRaTransmitter(cs_pin=7, reset_pin=25)
+        tx = LoRaTransmitter(cs_pin=7, reset_pin=25, key=KEY)
         tx.cleanup()  # should not raise
 
     def test_swallows_deinit_exceptions(self):
-        tx = LoRaTransmitter(cs_pin=7, reset_pin=25)
+        tx = LoRaTransmitter(cs_pin=7, reset_pin=25, key=KEY)
         mock_spi = MagicMock()
         mock_spi.deinit.side_effect = RuntimeError("deinit fail")
         mock_cs = MagicMock()
@@ -401,7 +430,7 @@ class TestCleanup:
         tx.cleanup()  # should not raise
 
     def test_resets_all_state(self):
-        tx = LoRaTransmitter(cs_pin=7, reset_pin=25)
+        tx = LoRaTransmitter(cs_pin=7, reset_pin=25, key=KEY)
         tx._spi = MagicMock()
         tx._cs = MagicMock()
         tx._reset = MagicMock()

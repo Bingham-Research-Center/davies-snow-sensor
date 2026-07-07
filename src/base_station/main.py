@@ -13,6 +13,8 @@ import logging
 import signal
 import sys
 import time
+from datetime import datetime, timezone
+from typing import Callable
 
 from src.base_station.config import ReceiverConfig, load_config
 from src.base_station.metrics import sample as sample_metrics, utc_now_iso
@@ -20,7 +22,7 @@ from src.base_station.oled_display import LinkStatus, OledDisplay, status_lines
 from src.base_station.radio import LoRaReceiver
 from src.base_station.registry import StationRegistry
 from src.base_station.storage import MetricsStorage, PacketRow, PacketStorage
-from src.protocol import airtime, wire
+from src.protocol import airtime, auth, wire
 
 log = logging.getLogger("base_station")
 
@@ -64,8 +66,13 @@ async def receive_loop(
     stop: asyncio.Event,
     recv_timeout: float = 1.0,
     status: LinkStatus | None = None,
+    *,
+    key: bytes,
+    now_fn: Callable[[], datetime] | None = None,
 ) -> None:
-    """Block on radio.receive_packet, parse, ACK, store. Loop until stop."""
+    """Block on radio.receive_packet, verify tag, parse, ACK, store. Loop until stop."""
+    if now_fn is None:
+        now_fn = lambda: datetime.now(timezone.utc)  # noqa: E731
     consecutive_errors = 0
     # Last stored (station_id -> timestamp). A sender whose ACK was lost
     # retransmits the same DATA; re-ACK it but don't store a duplicate row.
@@ -91,7 +98,12 @@ async def receive_loop(
             log.warning("packet: undecodable bytes len=%d rssi=%d", len(payload_bytes), rssi)
             continue
 
-        packet = wire.parse_data(text)
+        verified = auth.verify_and_strip(text, key)
+        if verified is None:
+            log.warning("packet: bad or missing auth tag (rssi=%d): %r — not ACKed", rssi, text)
+            continue
+
+        packet = wire.parse_data(verified)
         if packet is None:
             log.warning("packet: malformed (rssi=%d): %r", rssi, text)
             continue
@@ -99,6 +111,13 @@ async def receive_loop(
         station_id = packet["station_id"]
         if not registry.is_known(station_id):
             log.warning("packet: unknown sender %r (rssi=%d) — not ACKed", station_id, rssi)
+            continue
+
+        # Authentic but stale = a replay (or a badly skewed sensor clock).
+        # No ACK: the base must not vouch for data it won't store.
+        if not auth.timestamp_fresh(packet["timestamp"], now_fn()):
+            log.warning("packet: stale timestamp %s from %s — not ACKed",
+                        packet["timestamp"], station_id)
             continue
 
         # ACK first so the sender doesn't retry while we're writing CSV.
@@ -184,6 +203,7 @@ async def run(config: ReceiverConfig) -> int:
     radio = LoRaReceiver(
         cs_pin=config.pins.lora_cs,
         reset_pin=config.pins.lora_reset,
+        key=config.lora.key,
         frequency_mhz=config.lora.frequency,
         tx_power=config.lora.tx_power,
         spreading_factor=config.lora.spreading_factor,
@@ -230,7 +250,8 @@ async def run(config: ReceiverConfig) -> int:
         loop.add_signal_handler(sig, stop.set)
 
     tasks = [
-        receive_loop(radio, registry, packet_storage, stop, recv_timeout, status),
+        receive_loop(radio, registry, packet_storage, stop, recv_timeout, status,
+                     key=config.lora.key),
         metrics_loop(metrics_storage, config.metrics.sample_interval_seconds, stop),
     ]
     if display_enabled:

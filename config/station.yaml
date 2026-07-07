@@ -40,6 +40,7 @@ lora:
   coding_rate: 5
   preamble_length: 8
   ack_timeout_seconds: 10.0
+  key_file: lora.key            # shared HMAC key; same file on BASE-01, never committed
 
 storage:
   csv_path: "/home/admin/data/snow_data.csv"

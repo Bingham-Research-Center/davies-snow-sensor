@@ -179,7 +179,7 @@ class TestParseAck:
 
 class TestProtocolConstants:
     def test_version(self):
-        assert wire.PROTOCOL_VERSION == "v2"
+        assert wire.PROTOCOL_VERSION == "v3"
 
     def test_field_counts(self):
         assert wire.DATA_FIELD_COUNT == 8

@@ -62,7 +62,16 @@ def _legacy_config(trigger_pin: int = 5, echo_pin: int = 6) -> dict:
     return data
 
 
+TEST_KEY = bytes(range(32))
+
+
 def _write_yaml(tmp_path: Path, data: dict) -> Path:
+    # key_file is mandatory; give every test config a valid tmp key unless
+    # the test supplies its own.
+    lora = data.get("lora")
+    if isinstance(lora, dict) and "key_file" not in lora:
+        data = {**data, "lora": {**lora, "key_file": "lora.key"}}
+    (tmp_path / "lora.key").write_text(TEST_KEY.hex())
     p = tmp_path / "station.yaml"
     p.write_text(yaml.dump(data))
     return p
@@ -98,9 +107,10 @@ class TestLoadConfigValid:
                 ],
             },
             "storage": {"csv_path": "/tmp/test.csv"},
+            "lora": {},
         }
         cfg = load_config(_write_yaml(tmp_path, minimal))
-        assert cfg.lora == LoraConfig()
+        assert cfg.lora == LoraConfig(key=TEST_KEY)
         assert cfg.storage.csv_path == "/tmp/test.csv"
         assert cfg.storage.fsync is True
         assert cfg.timing == TimingConfig()
@@ -349,6 +359,7 @@ class TestLoraModulationConfig:
                 ],
             },
             "storage": {"csv_path": "/tmp/test.csv"},
+            "lora": {},
         }
         cfg = load_config(_write_yaml(tmp_path, minimal))
         assert cfg.lora.spreading_factor == 12
@@ -448,6 +459,7 @@ class TestQCConfig:
                 ],
             },
             "storage": {"csv_path": "/tmp/test.csv"},
+            "lora": {},
         }
         cfg = load_config(_write_yaml(tmp_path, minimal))
         assert cfg.qc == QCConfig()
@@ -522,12 +534,49 @@ class TestQCConfig:
             cfg.qc.num_samples = 99
 
 
+class TestLoraKey:
+    def test_missing_lora_section_rejected(self, tmp_path):
+        data = {k: v for k, v in VALID_CONFIG.items() if k != "lora"}
+        with pytest.raises(ConfigError, match="lora"):
+            load_config(_write_yaml(tmp_path, data))
+
+    def test_missing_key_file_field_rejected(self, tmp_path):
+        (tmp_path / "lora.key").write_text(TEST_KEY.hex())
+        p = tmp_path / "station.yaml"
+        p.write_text(yaml.dump(VALID_CONFIG))  # bypass helper injection
+        with pytest.raises(ConfigError, match="key_file"):
+            load_config(p)
+
+    def test_absent_key_file_rejected(self, tmp_path):
+        data = {**VALID_CONFIG, "lora": {"key_file": "nope.key"}}
+        with pytest.raises(ConfigError, match="not found"):
+            load_config(_write_yaml(tmp_path, data))
+
+    def test_key_loaded_and_hidden_from_repr(self, tmp_path):
+        cfg = load_config(_write_yaml(tmp_path, VALID_CONFIG))
+        assert cfg.lora.key == TEST_KEY
+        assert TEST_KEY.hex() not in repr(cfg.lora)
+        assert "key" not in repr(cfg.lora)
+
+    def test_absolute_key_path(self, tmp_path):
+        key_path = tmp_path / "elsewhere" / "lora.key"
+        key_path.parent.mkdir()
+        key_path.write_text(TEST_KEY.hex())
+        data = {**VALID_CONFIG, "lora": {"key_file": str(key_path)}}
+        cfg = load_config(_write_yaml(tmp_path, data))
+        assert cfg.lora.key == TEST_KEY
+
+
 @pytest.mark.parametrize("filename", ["station.yaml", "station.example.yaml"])
-def test_shipped_config_loads(filename):
+def test_shipped_config_loads(filename, monkeypatch):
     """Ensure the live config and the shipped template remain loadable."""
+    # The real key is gitignored and absent in CI; stub only the file read.
+    import src.sensor.config as config_module
+    monkeypatch.setattr(config_module.auth, "load_key", lambda path: TEST_KEY)
     path = Path(__file__).resolve().parent.parent / "config" / filename
     cfg = load_config(path)
     assert isinstance(cfg, StationConfig)
+    assert cfg.lora.key == TEST_KEY
 
 
 # ── Multi-sensor config ─────────────────────────────────────────
@@ -547,6 +596,7 @@ MULTI_SENSOR_CONFIG = {
         ],
     },
     "storage": {"csv_path": "/tmp/test.csv"},
+    "lora": {},
 }
 
 
@@ -828,9 +878,9 @@ class TestEncoding:
             locale, "getpreferredencoding", lambda *a, **k: "ascii",
         )
         p = tmp_path / "station.yaml"
-        body = "# Comment with em-dash — must round-trip cleanly\n" + yaml.dump(
-            VALID_CONFIG,
-        )
+        (tmp_path / "lora.key").write_text(TEST_KEY.hex())
+        data = {**VALID_CONFIG, "lora": {**VALID_CONFIG["lora"], "key_file": "lora.key"}}
+        body = "# Comment with em-dash — must round-trip cleanly\n" + yaml.dump(data)
         p.write_bytes(body.encode("utf-8"))
         cfg = load_config(p)
         assert cfg.station_id == "DAVIES-01"

@@ -242,6 +242,7 @@ def main() -> int:
     radio = build(
         cs_pin=cfg.pins.lora_cs,
         reset_pin=cfg.pins.lora_reset,
+        key=cfg.lora.key,
         frequency_mhz=cfg.lora.frequency,
         tx_power=cfg.lora.tx_power,
         spreading_factor=sf,

@@ -585,9 +585,13 @@ class TestMainIntegration:
             f"      echo_pin: {pin_echo}\n"
             f"\n"
             f"storage:\n"
-            f"  csv_path: \"/tmp/x.csv\"\n",
+            f"  csv_path: \"/tmp/x.csv\"\n"
+            f"\n"
+            f"lora:\n"
+            f"  key_file: lora.key\n",
             encoding="utf-8",
         )
+        (tmp_path / "lora.key").write_text(bytes(range(32)).hex())
         return cfg
 
     def test_dry_run_does_not_modify_config(self, tmp_path, monkeypatch):

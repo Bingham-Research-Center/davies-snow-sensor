@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import time
 
-from src.protocol import airtime, wire
+from src.protocol import airtime, auth, wire
 
 
 class LoRaTransmitter:
@@ -14,6 +14,7 @@ class LoRaTransmitter:
         self,
         cs_pin: int,
         reset_pin: int,
+        key: bytes,
         frequency_mhz: float = 915.0,
         tx_power: int = 23,
         spreading_factor: int = 12,
@@ -24,6 +25,7 @@ class LoRaTransmitter:
     ) -> None:
         self._cs_pin = cs_pin
         self._reset_pin = reset_pin
+        self._key = key
         self._frequency_mhz = frequency_mhz
         self._tx_power = tx_power
         self._spreading_factor = spreading_factor
@@ -129,7 +131,7 @@ class LoRaTransmitter:
             self._ack_timeout_seconds if timeout_seconds is None
             else timeout_seconds
         )
-        message = wire.format_data(payload)
+        message = auth.append_tag(wire.format_data(payload), self._key)
         encoded = message.encode("utf-8")
         expected_station_id = str(payload.get("station_id", ""))
         expected_timestamp = str(payload.get("timestamp", ""))
@@ -162,7 +164,10 @@ class LoRaTransmitter:
 
                 self._last_rssi = self._rfm9x.last_rssi
                 text = bytes(packet).decode("utf-8", errors="replace").strip()
-                ack = wire.parse_ack(text)
+                verified = auth.verify_and_strip(text, self._key)
+                if verified is None:
+                    continue  # unauthenticated or not for us
+                ack = wire.parse_ack(verified)
                 if ack is None:
                     continue
                 ack_station, ack_timestamp = ack

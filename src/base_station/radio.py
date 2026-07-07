@@ -22,6 +22,7 @@ class LoRaReceiver:
         self,
         cs_pin: int,
         reset_pin: int,
+        key: bytes,
         frequency_mhz: float = 915.0,
         tx_power: int = 23,
         spreading_factor: int = 12,
@@ -31,6 +32,7 @@ class LoRaReceiver:
     ) -> None:
         self._cs_pin = cs_pin
         self._reset_pin = reset_pin
+        self._key = key
         self._frequency_mhz = frequency_mhz
         self._tx_power = tx_power
         self._spreading_factor = spreading_factor
@@ -119,8 +121,10 @@ class LoRaReceiver:
         if not self._initialized or self._rfm9x is None:
             self._last_error = "lora_not_initialized"
             return False
-        from src.protocol import wire
-        msg = wire.format_ack(station_id, timestamp).encode("utf-8")
+        from src.protocol import auth, wire
+        msg = auth.append_tag(
+            wire.format_ack(station_id, timestamp), self._key
+        ).encode("utf-8")
         # Size the transmit window to the ACK's time-on-air so send() doesn't
         # truncate it at the library's fixed 2.0 s default (matters at high SF
         # / CR8, where even the short ACK can approach that ceiling).
