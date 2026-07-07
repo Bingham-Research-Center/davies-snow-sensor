@@ -137,11 +137,18 @@ class TestApplyQC:
         )
 
     def test_reject_low_valid_fraction(self):
-        cycles = [_make_cycle(0, num_samples=31, num_valid=10)]  # 32% < 50%
+        cycles = [_make_cycle(0, num_samples=31, num_valid=10)]  # 10 < ceil(31*0.5)=16
         kept, rejected = calibrate.apply_qc(cycles, 0.5, 5.0)
         assert kept == []
         assert len(rejected) == 1
-        assert "valid_fraction" in rejected[0].qc_reason
+        assert "num_valid" in rejected[0].qc_reason
+
+    def test_valid_count_at_ceil_threshold_passes(self):
+        # ceil(31 * 0.5) = 16: exactly 16 valid passes, matching production QC.
+        cycles = [_make_cycle(0, num_samples=31, num_valid=16)]
+        kept, rejected = calibrate.apply_qc(cycles, 0.5, 5.0)
+        assert len(kept) == 1
+        assert rejected == []
 
     def test_reject_high_spread(self):
         cycles = [_make_cycle(0, spread_cm=10.0)]

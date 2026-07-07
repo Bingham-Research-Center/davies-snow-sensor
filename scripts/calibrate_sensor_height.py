@@ -23,8 +23,8 @@ Examples:
 from __future__ import annotations
 
 import argparse
-import csv
 import json
+import math
 import os
 import re
 import statistics
@@ -46,9 +46,14 @@ from snowsensor.sensor.config import (
     config_id,
     load_config,
 )
+from snowsensor.protocol.csv_helpers import append_csv
 from snowsensor.protocol.timestamp import utc_now_iso
 from snowsensor.sensor.temperature import TemperatureSensor
-from snowsensor.sensor.ultrasonic import SensorResult, UltrasonicSensor
+from snowsensor.sensor.ultrasonic import (
+    SensorResult,
+    UltrasonicSensor,
+    median_absolute_deviation,
+)
 
 EXIT_OK = 0
 EXIT_HARDWARE = 2
@@ -222,40 +227,28 @@ def apply_qc(
     min_valid_fraction: float,
     max_spread_cm: float,
 ) -> tuple[list[Cycle], list[Cycle]]:
+    def reject_reason(c: Cycle) -> str | None:
+        if c.error is not None:
+            return f"error={c.error}"
+        if c.distance_cm is None:
+            return "no_distance"
+        if c.num_samples == 0:
+            return "no_samples"
+        # Same ceil-count rule as qc.min_valid_samples, on the actual sample count.
+        min_valid = math.ceil(c.num_samples * min_valid_fraction)
+        if c.num_valid < min_valid:
+            return f"num_valid={c.num_valid}<min_valid={min_valid}"
+        if c.spread_cm is not None and c.spread_cm > max_spread_cm:
+            return f"spread={c.spread_cm:.2f}>{max_spread_cm:.2f}"
+        return None
+
     kept: list[Cycle] = []
     rejected: list[Cycle] = []
     for c in cycles:
-        if c.error is not None:
-            c.qc_pass = False
-            c.qc_reason = f"error={c.error}"
-            rejected.append(c)
-            continue
-        if c.distance_cm is None:
-            c.qc_pass = False
-            c.qc_reason = "no_distance"
-            rejected.append(c)
-            continue
-        if c.num_samples == 0:
-            c.qc_pass = False
-            c.qc_reason = "no_samples"
-            rejected.append(c)
-            continue
-        valid_fraction = c.num_valid / c.num_samples
-        if valid_fraction < min_valid_fraction:
-            c.qc_pass = False
-            c.qc_reason = (
-                f"valid_fraction={valid_fraction:.2f}<{min_valid_fraction:.2f}"
-            )
-            rejected.append(c)
-            continue
-        if c.spread_cm is not None and c.spread_cm > max_spread_cm:
-            c.qc_pass = False
-            c.qc_reason = f"spread={c.spread_cm:.2f}>{max_spread_cm:.2f}"
-            rejected.append(c)
-            continue
-        c.qc_pass = True
-        c.qc_reason = None
-        kept.append(c)
+        reason = reject_reason(c)
+        c.qc_pass = reason is None
+        c.qc_reason = reason
+        (kept if reason is None else rejected).append(c)
     return kept, rejected
 
 
@@ -265,7 +258,7 @@ def mad_reject(cycles: list[Cycle], k: float) -> tuple[list[Cycle], list[Cycle]]
     if len(distances) < 3:
         return list(cycles), []
     median = statistics.median(distances)
-    mad = statistics.median(abs(d - median) for d in distances)
+    mad = median_absolute_deviation(distances)
     if mad == 0:
         return list(cycles), []
     threshold = k * mad
@@ -426,28 +419,8 @@ def write_json_log(path: Path, payload: dict) -> None:
 
 
 def append_history_csv(path: Path, row: dict) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    write_header = not path.exists()
-    with path.open("a", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=HISTORY_HEADERS)
-        if write_header:
-            writer.writeheader()
-        writer.writerow({k: row.get(k, "") for k in HISTORY_HEADERS})
-
-
-def _effective_samples_per_cycle(args: argparse.Namespace, cfg: StationConfig) -> int:
-    return (
-        cfg.qc.num_samples if args.samples_per_cycle is None else args.samples_per_cycle
-    )
-
-
-def _effective_inter_pulse_delay_ms(
-    args: argparse.Namespace, cfg: StationConfig
-) -> int:
-    return (
-        cfg.qc.inter_pulse_delay_ms
-        if args.inter_pulse_delay_ms is None
-        else args.inter_pulse_delay_ms
+    append_csv(
+        path, tuple(HISTORY_HEADERS), {k: row.get(k, "") for k in HISTORY_HEADERS}
     )
 
 
@@ -458,6 +431,8 @@ def write_logs(
     usc: UltrasonicSensorConfig,
     cycles: list[Cycle],
     stats: dict,
+    samples: int,
+    inter_pulse_delay_ms: int,
     applied: bool,
     recommended: float | None,
     verify_cycle: Cycle | None = None,
@@ -485,9 +460,9 @@ def write_logs(
         "applied": applied,
         "args": {
             "cycles": args.cycles,
-            "samples_per_cycle": _effective_samples_per_cycle(args, cfg),
+            "samples_per_cycle": samples,
             "cycle_delay_s": args.cycle_delay,
-            "inter_pulse_delay_ms": _effective_inter_pulse_delay_ms(args, cfg),
+            "inter_pulse_delay_ms": inter_pulse_delay_ms,
             "mad_k": args.mad_k,
             "no_temperature": args.no_temperature,
             "force": args.force,
@@ -605,12 +580,6 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=None,
         help="Override JSON log path (default under data/calibration/)",
     )
-    parser.add_argument(
-        "-v",
-        "--verbose",
-        action="store_true",
-        help="Verbose output (currently a no-op; per-cycle details always print)",
-    )
     return parser.parse_args(argv)
 
 
@@ -640,8 +609,14 @@ def main(argv: list[str] | None = None) -> int:
         print(f"ERROR: {e}", file=sys.stderr)
         return EXIT_HARDWARE
 
-    samples = _effective_samples_per_cycle(args, cfg)
-    inter_pulse_delay_ms = _effective_inter_pulse_delay_ms(args, cfg)
+    samples = (
+        cfg.qc.num_samples if args.samples_per_cycle is None else args.samples_per_cycle
+    )
+    inter_pulse_delay_ms = (
+        cfg.qc.inter_pulse_delay_ms
+        if args.inter_pulse_delay_ms is None
+        else args.inter_pulse_delay_ms
+    )
 
     print(
         f"Calibrating sensor '{usc.id}' (trig={usc.trigger_pin}, "
@@ -704,6 +679,24 @@ def main(argv: list[str] | None = None) -> int:
 
     stats = aggregate(final_kept)
 
+    def finish(
+        applied: bool, recommended: float | None, verify_cycle: Cycle | None = None
+    ) -> None:
+        log_path = write_logs(
+            args,
+            cfg,
+            config_path,
+            usc,
+            cycles,
+            stats,
+            samples,
+            inter_pulse_delay_ms,
+            applied=applied,
+            recommended=recommended,
+            verify_cycle=verify_cycle,
+        )
+        print(f"  log: {log_path}")
+
     print(f"\nAggregate over {stats['n_kept']} kept cycles:")
     if stats["n_kept"] == 0:
         print("  (no cycles survived QC)")
@@ -725,17 +718,7 @@ def main(argv: list[str] | None = None) -> int:
             f"(<50%); not safe to use as a calibration",
             file=sys.stderr,
         )
-        log_path = write_logs(
-            args,
-            cfg,
-            config_path,
-            usc,
-            cycles,
-            stats,
-            applied=False,
-            recommended=None,
-        )
-        print(f"  log: {log_path}")
+        finish(applied=False, recommended=None)
         return EXIT_QC_FAILED
 
     recommended = float(stats["median_cm"])
@@ -746,17 +729,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if not args.apply:
         print("\nDry run -- no config changes made. Pass --apply to write.")
-        log_path = write_logs(
-            args,
-            cfg,
-            config_path,
-            usc,
-            cycles,
-            stats,
-            applied=False,
-            recommended=recommended,
-        )
-        print(f"  log: {log_path}")
+        finish(applied=False, recommended=recommended)
         return EXIT_OK
 
     if not sanity.ok and not args.force:
@@ -766,17 +739,7 @@ def main(argv: list[str] | None = None) -> int:
             "placeholder.)",
             file=sys.stderr,
         )
-        log_path = write_logs(
-            args,
-            cfg,
-            config_path,
-            usc,
-            cycles,
-            stats,
-            applied=False,
-            recommended=recommended,
-        )
-        print(f"  log: {log_path}")
+        finish(applied=False, recommended=recommended)
         return EXIT_SANITY_REFUSED
 
     print(f"\nWriting sensor_height_cm = {recommended:.2f} cm to {config_path} ...")
@@ -785,17 +748,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"  backup: {backup}")
     except Exception as e:
         print(f"ERROR writing config: {e}", file=sys.stderr)
-        log_path = write_logs(
-            args,
-            cfg,
-            config_path,
-            usc,
-            cycles,
-            stats,
-            applied=False,
-            recommended=recommended,
-        )
-        print(f"  log: {log_path}")
+        finish(applied=False, recommended=recommended)
         return EXIT_WRITEBACK_FAILED
 
     try:
@@ -806,17 +759,7 @@ def main(argv: list[str] | None = None) -> int:
             file=sys.stderr,
         )
         config_path.write_text(backup.read_text(encoding="utf-8"), encoding="utf-8")
-        log_path = write_logs(
-            args,
-            cfg,
-            config_path,
-            usc,
-            cycles,
-            stats,
-            applied=False,
-            recommended=recommended,
-        )
-        print(f"  log: {log_path}")
+        finish(applied=False, recommended=recommended)
         return EXIT_WRITEBACK_FAILED
 
     print(f"  validated: load_config() reads {new_cfg.sensor_height_cm} cm")
@@ -848,18 +791,8 @@ def main(argv: list[str] | None = None) -> int:
             file=sys.stderr,
         )
 
-    log_path = write_logs(
-        args,
-        cfg,
-        config_path,
-        usc,
-        cycles,
-        stats,
-        applied=True,
-        recommended=recommended,
-        verify_cycle=verify_cycle,
-    )
-    print(f"\n  log: {log_path}")
+    print()
+    finish(applied=True, recommended=recommended, verify_cycle=verify_cycle)
     print("Done.")
     return EXIT_OK
 
