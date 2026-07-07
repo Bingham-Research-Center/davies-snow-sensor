@@ -63,3 +63,29 @@ def append_csv(
                 os.fsync(f.fileno())
     except OSError as e:
         raise StorageError(f"Failed to append row: {e}") from e
+
+
+def append_many(
+    path: Path,
+    columns: tuple[str, ...],
+    rows: list[dict],
+    fsync: bool = False,
+) -> None:
+    """Append rows in one open/flush/fsync, creating the header if missing.
+
+    One fsync per batch instead of per row — the difference is SD-card
+    wear on the station, which writes several sensor rows every cycle.
+    """
+    if not rows:
+        return
+    path = Path(path)
+    ensure_csv_header(path, columns)
+    try:
+        with open(path, "a", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=columns)
+            writer.writerows(rows)
+            f.flush()
+            if fsync:
+                os.fsync(f.fileno())
+    except OSError as e:
+        raise StorageError(f"Failed to append rows: {e}") from e

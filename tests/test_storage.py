@@ -409,3 +409,46 @@ class TestFsync:
         assert len(rows) == 5
         assert rows[0].cycle_id == 1
         assert rows[4].cycle_id == 5
+
+
+class TestAppendMany:
+    def _rows(self, n: int) -> list[SensorReading]:
+        return [
+            SensorReading(
+                timestamp="2025-01-15T12:00:00Z",
+                cycle_id=1,
+                sensor_id=f"s{i}",
+                distance_cm=150.0 + i,
+                num_samples=31,
+                num_valid=31,
+                spread_cm=0.5,
+            )
+            for i in range(n)
+        ]
+
+    def test_writes_all_rows_in_order(self, tmp_path):
+        path = tmp_path / "sensors.csv"
+        ss = SensorStorage(path)
+        rows = self._rows(3)
+        ss.append_many(rows)
+        assert ss.read_all() == rows
+
+    def test_empty_list_is_noop(self, tmp_path):
+        path = tmp_path / "sensors.csv"
+        SensorStorage(path).append_many([])
+        assert not path.exists()
+
+    def test_one_fsync_per_batch(self, tmp_path, monkeypatch):
+        import snowsensor.protocol.csv_helpers as csv_helpers
+
+        calls = []
+        monkeypatch.setattr(csv_helpers.os, "fsync", lambda fd: calls.append(fd))
+        ss = SensorStorage(tmp_path / "sensors.csv", fsync=True)
+        ss.append_many(self._rows(4))
+        assert len(calls) == 1
+
+    def test_schema_mismatch_raises(self, tmp_path):
+        path = tmp_path / "sensors.csv"
+        path.write_text("wrong,header\n")
+        with pytest.raises(StorageError):
+            SensorStorage(path).append_many(self._rows(1))
