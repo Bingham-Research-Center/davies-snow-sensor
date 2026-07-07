@@ -571,8 +571,8 @@ class TestLoraKey:
 def test_shipped_config_loads(filename, monkeypatch):
     """Ensure the live config and the shipped template remain loadable."""
     # The real key is gitignored and absent in CI; stub only the file read.
-    import src.sensor.config as config_module
-    monkeypatch.setattr(config_module.auth, "load_key", lambda path: TEST_KEY)
+    import src.protocol.lora_config as lora_config_module
+    monkeypatch.setattr(lora_config_module.auth, "load_key", lambda path: TEST_KEY)
     path = Path(__file__).resolve().parent.parent / "config" / filename
     cfg = load_config(path)
     assert isinstance(cfg, StationConfig)
