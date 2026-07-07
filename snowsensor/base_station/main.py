@@ -16,13 +16,13 @@ import time
 from datetime import datetime, timezone
 from typing import Callable
 
-from src.base_station.config import ReceiverConfig, load_config
-from src.base_station.metrics import sample as sample_metrics, utc_now_iso
-from src.base_station.oled_display import LinkStatus, OledDisplay, status_lines
-from src.base_station.radio import LoRaReceiver
-from src.base_station.registry import StationRegistry
-from src.base_station.storage import MetricsStorage, PacketRow, PacketStorage
-from src.protocol import airtime, auth, wire
+from snowsensor.base_station.config import ReceiverConfig, load_config
+from snowsensor.base_station.metrics import sample as sample_metrics, utc_now_iso
+from snowsensor.base_station.oled_display import LinkStatus, OledDisplay, status_lines
+from snowsensor.base_station.radio import LoRaReceiver
+from snowsensor.base_station.registry import StationRegistry
+from snowsensor.base_station.storage import MetricsStorage, PacketRow, PacketStorage
+from snowsensor.protocol import airtime, auth, wire
 
 log = logging.getLogger("base_station")
 

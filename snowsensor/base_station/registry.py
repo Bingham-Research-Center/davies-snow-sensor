@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
-from src.base_station.config import StationEntry
+from snowsensor.base_station.config import StationEntry
 
 
 class StationRegistry:

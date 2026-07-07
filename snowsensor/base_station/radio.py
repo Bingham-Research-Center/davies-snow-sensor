@@ -1,12 +1,12 @@
 """RFM95W LoRa radio interface for the base-station receiver.
 
-Mirrors src/sensor/lora.py's initialization pattern but exposes a
+Mirrors snowsensor/sensor/lora.py's initialization pattern but exposes a
 receive-with-ACK API instead of transmit-with-ACK.
 """
 
 from __future__ import annotations
 
-from src.protocol import airtime, radio_setup
+from snowsensor.protocol import airtime, radio_setup
 
 
 class LoRaReceiver:
@@ -95,7 +95,7 @@ class LoRaReceiver:
         if not self._initialized or self._rfm9x is None:
             self._last_error = "lora_not_initialized"
             return False
-        from src.protocol import auth, wire
+        from snowsensor.protocol import auth, wire
         msg = auth.append_tag(
             wire.format_ack(station_id, timestamp), self._key
         ).encode("utf-8")

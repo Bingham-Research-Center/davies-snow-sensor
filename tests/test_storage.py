@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from src.sensor.storage import (
+from snowsensor.sensor.storage import (
     COLUMNS,
     SENSOR_COLUMNS,
     Reading,

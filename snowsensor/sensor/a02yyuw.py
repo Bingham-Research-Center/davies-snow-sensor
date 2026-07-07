@@ -5,7 +5,7 @@ from __future__ import annotations
 import statistics
 import time
 
-from src.sensor.ultrasonic import SensorResult
+from snowsensor.sensor.ultrasonic import SensorResult
 
 
 def _median_absolute_deviation(values: list[float]) -> float:

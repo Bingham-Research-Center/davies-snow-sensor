@@ -1,4 +1,4 @@
-"""Tests for src.sensor.main — SensorStation orchestration."""
+"""Tests for snowsensor.sensor.main — SensorStation orchestration."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch, call
 
 import pytest
 
-from src.sensor.config import (
+from snowsensor.sensor.config import (
     LoraConfig,
     PinsConfig,
     QCConfig,
@@ -18,11 +18,11 @@ from src.sensor.config import (
     TimingConfig,
     UltrasonicSensorConfig,
 )
-from src.sensor.main import SensorStation, _select_best_sensor, main
-from src.sensor.qc import RATE_OF_CHANGE_HIGH
-from src.sensor.qc import compute_quality_flag as real_compute_quality_flag
-from src.sensor.storage import Reading
-from src.sensor.ultrasonic import SensorResult
+from snowsensor.sensor.main import SensorStation, _select_best_sensor, main
+from snowsensor.sensor.qc import RATE_OF_CHANGE_HIGH
+from snowsensor.sensor.qc import compute_quality_flag as real_compute_quality_flag
+from snowsensor.sensor.storage import Reading
+from snowsensor.sensor.ultrasonic import SensorResult
 
 
 def _make_config(**overrides) -> StationConfig:
@@ -49,15 +49,15 @@ def _make_config(**overrides) -> StationConfig:
 def mock_deps():
     """Patch all hardware dependencies at the main module namespace."""
     with (
-        patch("src.sensor.main.TemperatureSensor") as MockTemp,
-        patch("src.sensor.main.UltrasonicSensor") as MockUltra,
-        patch("src.sensor.main.LoRaTransmitter") as MockLora,
-        patch("src.sensor.main.Storage") as MockStorage,
-        patch("src.sensor.main.SensorStorage") as MockSensorStorage,
-        patch("src.sensor.main.read_and_increment_cycle_id", return_value=1),
-        patch("src.sensor.main.get_boot_id", return_value="test-boot-id"),
-        patch("src.sensor.main.config_id", return_value="abcd1234"),
-        patch("src.sensor.main.compute_quality_flag", return_value=0),
+        patch("snowsensor.sensor.main.TemperatureSensor") as MockTemp,
+        patch("snowsensor.sensor.main.UltrasonicSensor") as MockUltra,
+        patch("snowsensor.sensor.main.LoRaTransmitter") as MockLora,
+        patch("snowsensor.sensor.main.Storage") as MockStorage,
+        patch("snowsensor.sensor.main.SensorStorage") as MockSensorStorage,
+        patch("snowsensor.sensor.main.read_and_increment_cycle_id", return_value=1),
+        patch("snowsensor.sensor.main.get_boot_id", return_value="test-boot-id"),
+        patch("snowsensor.sensor.main.config_id", return_value="abcd1234"),
+        patch("snowsensor.sensor.main.compute_quality_flag", return_value=0),
     ):
         temp = MockTemp.return_value
         ultra = MockUltra.return_value
@@ -308,19 +308,19 @@ class TestRunCycleStorageFailure:
     def test_init_exception_sets_storage_failed_flag(self, mock_deps):
         mock_deps["storage"].initialize.side_effect = Exception("no dir")
 
-        with patch("src.sensor.main.compute_quality_flag", return_value=0) as qc:
+        with patch("snowsensor.sensor.main.compute_quality_flag", return_value=0) as qc:
             SensorStation(_make_config()).run_cycle()
             assert qc.call_args.kwargs["storage_failed"] is True
 
     def test_sensor_append_exception_sets_storage_failed_flag(self, mock_deps):
         mock_deps["sensor_storage"].append.side_effect = Exception("disk full")
 
-        with patch("src.sensor.main.compute_quality_flag", return_value=0) as qc:
+        with patch("snowsensor.sensor.main.compute_quality_flag", return_value=0) as qc:
             SensorStation(_make_config()).run_cycle()
             assert qc.call_args.kwargs["storage_failed"] is True
 
     def test_happy_path_storage_failed_is_false(self, mock_deps):
-        with patch("src.sensor.main.compute_quality_flag", return_value=0) as qc:
+        with patch("snowsensor.sensor.main.compute_quality_flag", return_value=0) as qc:
             SensorStation(_make_config()).run_cycle()
             assert qc.call_args.kwargs["storage_failed"] is False
 
@@ -335,13 +335,13 @@ class TestRateOfChangeBaseline:
         )
         mock_deps["storage"].read_tail.return_value = [prev]
 
-        with patch("src.sensor.main.compute_quality_flag", return_value=0) as qc:
+        with patch("snowsensor.sensor.main.compute_quality_flag", return_value=0) as qc:
             SensorStation(_make_config()).run_cycle()
             assert qc.call_args.kwargs["prev_snow_depth_cm"] == 40.0
             assert qc.call_args.kwargs["prev_timestamp"] == "2026-01-01T12:00:00Z"
 
     def test_no_history_passes_none(self, mock_deps):
-        with patch("src.sensor.main.compute_quality_flag", return_value=0) as qc:
+        with patch("snowsensor.sensor.main.compute_quality_flag", return_value=0) as qc:
             SensorStation(_make_config()).run_cycle()
             assert qc.call_args.kwargs["prev_snow_depth_cm"] is None
             assert qc.call_args.kwargs["prev_timestamp"] is None
@@ -349,7 +349,7 @@ class TestRateOfChangeBaseline:
     def test_read_tail_failure_not_fatal(self, mock_deps):
         mock_deps["storage"].read_tail.side_effect = Exception("corrupt csv")
 
-        with patch("src.sensor.main.compute_quality_flag", return_value=0) as qc:
+        with patch("snowsensor.sensor.main.compute_quality_flag", return_value=0) as qc:
             result = SensorStation(_make_config()).run_cycle()
             assert result is True
             assert qc.call_args.kwargs["prev_snow_depth_cm"] is None
@@ -363,7 +363,7 @@ class TestRateOfChangeBaseline:
         prev = Reading(timestamp=prev_ts, station_id="TEST01", snow_depth_cm=40.0)
         mock_deps["storage"].read_tail.return_value = [prev]
 
-        with patch("src.sensor.main.compute_quality_flag", real_compute_quality_flag):
+        with patch("snowsensor.sensor.main.compute_quality_flag", real_compute_quality_flag):
             SensorStation(_make_config()).run_cycle()
 
         stored = mock_deps["storage"].append.call_args.args[0]
@@ -471,7 +471,7 @@ lora:
             if signum == _signal.SIGTERM:
                 captured["handler"] = handler
 
-        with patch("src.sensor.main.signal.signal", side_effect=fake_signal):
+        with patch("snowsensor.sensor.main.signal.signal", side_effect=fake_signal):
             main(["--config", str(config_file)])
 
         assert "handler" in captured
@@ -530,7 +530,7 @@ lora:
 """
         )
         (tmp_path / "lora.key").write_text(bytes(range(32)).hex())
-        with patch("src.sensor.main.logging.basicConfig") as mock_basic:
+        with patch("snowsensor.sensor.main.logging.basicConfig") as mock_basic:
             main(["--config", str(config_file), "--verbose"])
             mock_basic.assert_called_once()
             assert mock_basic.call_args[1]["level"] == logging.DEBUG
@@ -576,15 +576,15 @@ def _make_multi_sensor_config():
 def mock_multi_deps():
     """Patch deps, returning separate mock for each UltrasonicSensor call."""
     with (
-        patch("src.sensor.main.TemperatureSensor") as MockTemp,
-        patch("src.sensor.main.UltrasonicSensor") as MockUltra,
-        patch("src.sensor.main.LoRaTransmitter") as MockLora,
-        patch("src.sensor.main.Storage") as MockStorage,
-        patch("src.sensor.main.SensorStorage") as MockSensorStorage,
-        patch("src.sensor.main.read_and_increment_cycle_id", return_value=1),
-        patch("src.sensor.main.get_boot_id", return_value="test-boot-id"),
-        patch("src.sensor.main.config_id", return_value="abcd1234"),
-        patch("src.sensor.main.compute_quality_flag", return_value=0),
+        patch("snowsensor.sensor.main.TemperatureSensor") as MockTemp,
+        patch("snowsensor.sensor.main.UltrasonicSensor") as MockUltra,
+        patch("snowsensor.sensor.main.LoRaTransmitter") as MockLora,
+        patch("snowsensor.sensor.main.Storage") as MockStorage,
+        patch("snowsensor.sensor.main.SensorStorage") as MockSensorStorage,
+        patch("snowsensor.sensor.main.read_and_increment_cycle_id", return_value=1),
+        patch("snowsensor.sensor.main.get_boot_id", return_value="test-boot-id"),
+        patch("snowsensor.sensor.main.config_id", return_value="abcd1234"),
+        patch("snowsensor.sensor.main.compute_quality_flag", return_value=0),
     ):
         temp = MockTemp.return_value
         temp.initialize.return_value = True

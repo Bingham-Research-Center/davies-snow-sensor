@@ -1,7 +1,7 @@
 """Tests for QC bitmask computation."""
 
-from src.sensor.config import QCConfig
-from src.sensor.qc import (
+from snowsensor.sensor.config import QCConfig
+from snowsensor.sensor.qc import (
     ALL_ULTRASONIC_FAILED,
     LORA_TX_FAILED,
     RATE_OF_CHANGE_HIGH,
@@ -14,8 +14,8 @@ from src.sensor.qc import (
     compute_quality_flag,
     find_baseline,
 )
-from src.sensor.storage import Reading
-from src.sensor.ultrasonic import SensorResult
+from snowsensor.sensor.storage import Reading
+from snowsensor.sensor.ultrasonic import SensorResult
 
 
 def _good_result(**overrides):

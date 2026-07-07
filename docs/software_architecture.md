@@ -1,4 +1,4 @@
-# Software Architecture — `src/sensor/`
+# Software Architecture — `snowsensor/sensor/`
 
 This document describes each module in the sensor station package, its
 external dependencies, configuration, and error codes.
@@ -19,7 +19,7 @@ external dependencies, configuration, and error codes.
 | `power_budget.py` | Standalone battery-autonomy estimator (planning tool) | `PyYAML` | — |
 | `main.py` | One-shot measurement orchestrator | — | All of the above |
 
-The receiver-side (`src/base_station/`) and the shared DATA/ACK wire format (`src/protocol/`) are documented separately — see [base_station.md](base_station.md) and the docstrings in `src/protocol/wire.py`.
+The receiver-side (`snowsensor/base_station/`) and the shared DATA/ACK wire format (`snowsensor/protocol/`) are documented separately — see [base_station.md](base_station.md) and the docstrings in `snowsensor/protocol/wire.py`.
 
 ## config.py
 
@@ -420,7 +420,7 @@ Error flags are comma-delimited in the LoRa message (pipe-delimited in CSV).
 ACK,<station_id>,<timestamp>,<tag>
 ```
 
-**Authentication** (`src/protocol/auth.py`): `<tag>` is an 8-byte truncated
+**Authentication** (`snowsensor/protocol/auth.py`): `<tag>` is an 8-byte truncated
 HMAC-SHA256 over the rest of the message, hex-encoded, keyed by a 32-byte
 shared secret (`lora.key_file` in both YAMLs, gitignored, identical on both
 Pis). Both ends drop messages whose tag does not verify. The base station

@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from src.sensor.power_budget import (
+from snowsensor.sensor.power_budget import (
     ComponentConfig,
     PowerBudgetError,
     average_current_per_unit_ma,

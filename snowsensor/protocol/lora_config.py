@@ -11,8 +11,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from src.protocol import auth
-from src.protocol.validation import (
+from snowsensor.protocol import auth
+from snowsensor.protocol.validation import (
     ConfigError,
     ISM_BANDS,
     MAX_PREAMBLE_LENGTH,

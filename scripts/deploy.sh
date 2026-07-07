@@ -45,7 +45,7 @@ sudo -u "$TARGET_USER" "$VENV_DIR/bin/pip" install --quiet -e "$REPO_DIR[hardwar
 # Use the venv's validated config loader — same code path as production.
 CSV_PATH=$("$VENV_DIR/bin/python" -c "
 import sys
-from src.sensor.config import load_config, ConfigError
+from snowsensor.sensor.config import load_config, ConfigError
 try:
     print(load_config(sys.argv[1]).storage.csv_path)
 except (FileNotFoundError, ConfigError) as e:

@@ -1,6 +1,6 @@
 # DS18B20 Datasheet Reference
 
-Maps DS18B20 datasheet specs to driver implementation in `src/sensor/temperature.py`.
+Maps DS18B20 datasheet specs to driver implementation in `snowsensor/sensor/temperature.py`.
 
 ## Key Specifications
 

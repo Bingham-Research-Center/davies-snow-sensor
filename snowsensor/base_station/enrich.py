@@ -25,7 +25,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from src.base_station.storage import PACKET_COLUMNS, StorageError
+from snowsensor.base_station.storage import PACKET_COLUMNS, StorageError
 
 DERIVED_COLUMNS = ("recv_local", "latency_s")
 OUTPUT_COLUMNS = DERIVED_COLUMNS + PACKET_COLUMNS

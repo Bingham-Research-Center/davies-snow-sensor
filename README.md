@@ -35,7 +35,7 @@ DAVIES-01 — the first prototype station — has been running continuous 15-min
 
 ```
 davies-snow-sensor/
-├── src/
+├── snowsensor/
 │   ├── sensor/              # Sensor station software (station-side)
 │   │   ├── main.py          # One-shot measurement cycle orchestrator
 │   │   ├── config.py        # YAML config loader and validation
@@ -50,7 +50,7 @@ davies-snow-sensor/
 │   │   └── power_budget.py  # Battery-autonomy planning tool
 │   ├── base_station/        # LoRa receiver software (see docs/base_station.md)
 │   └── protocol/            # Shared DATA/ACK wire format
-├── tests/                   # 694 unit tests (pytest)
+├── tests/                   # Unit tests (pytest)
 ├── scripts/                 # Setup, deploy, calibration, diagnostics
 ├── config/
 │   ├── station.yaml         # Per-station configuration (gitignored)
@@ -183,7 +183,7 @@ Pin assignments and LoRa settings have sensible defaults; see the config file co
 Run a single cycle and exit — useful for verifying the full sensor pipeline after installation. Add `--verbose` for debug-level logging when troubleshooting:
 
 ```bash
-sudo venv/bin/python -m src.sensor.main --config config/station.yaml --verbose
+sudo venv/bin/python -m snowsensor.sensor.main --config config/station.yaml --verbose
 ```
 
 Every invocation performs exactly one cycle and exits; the systemd timer (see below) is what drives the 15-minute cadence.
@@ -191,10 +191,10 @@ Every invocation performs exactly one cycle and exits; the systemd timer (see be
 Example output:
 
 ```
-2025-06-15 08:30:01 INFO src.sensor.main: Temperature: -4.20 °C
-2025-06-15 08:30:02 INFO src.sensor.main: Distance: 187.3 cm
-2025-06-15 08:30:03 INFO src.sensor.main: LoRa transmit OK (RSSI: -45)
-2025-06-15 08:30:03 INFO src.sensor.main: Cycle complete: snow=12.7 cm, temp=-4.2, lora=True, errors=(none)
+2025-06-15 08:30:01 INFO snowsensor.sensor.main: Temperature: -4.20 °C
+2025-06-15 08:30:02 INFO snowsensor.sensor.main: Distance: 187.3 cm
+2025-06-15 08:30:03 INFO snowsensor.sensor.main: LoRa transmit OK (RSSI: -45)
+2025-06-15 08:30:03 INFO snowsensor.sensor.main: Cycle complete: snow=12.7 cm, temp=-4.2, lora=True, errors=(none)
 ```
 
 > **Note:** `sudo` is required — the 1-Wire kernel module and GPIO access need root privileges.
@@ -234,7 +234,7 @@ Each measurement cycle follows a linear pipeline: initialize hardware → read D
 | `power_budget.py` | Standalone battery-autonomy estimator (planning tool, not in the runtime loop) |
 | `main.py` | One-shot cycle orchestrator and CLI entry point |
 
-The `src/base_station/` package implements the LoRa receiver — see [docs/base_station.md](docs/base_station.md). The `src/protocol/` package holds the DATA/ACK wire format shared between sensor and base station.
+The `snowsensor/base_station/` package implements the LoRa receiver — see [docs/base_station.md](docs/base_station.md). The `snowsensor/protocol/` package holds the DATA/ACK wire format shared between sensor and base station.
 
 See [docs/software_architecture.md](docs/software_architecture.md) for full module documentation, error codes, and library details.
 

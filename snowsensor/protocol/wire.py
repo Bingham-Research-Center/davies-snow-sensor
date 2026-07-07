@@ -10,7 +10,7 @@ Comma is reserved as the field separator; error flags are pipe-delimited
 within their field on the wire.
 
 The trailing <tag> is a truncated HMAC over the rest of the message; it is
-appended and verified by src/protocol/auth.py, so the formatters and parsers
+appended and verified by snowsensor/protocol/auth.py, so the formatters and parsers
 here work on the message *without* it.
 """
 
@@ -25,7 +25,7 @@ ACK_FIELD_COUNT = 3
 # Generous upper bound on a DATA message's length in bytes. A typical frame is
 # ~80 B incl. auth tag; this leaves headroom for pipe-delimited error_flags and stays well
 # under the radio FIFO limit (252 B incl. header). Used to size the receiver's
-# listen window to the worst-case time-on-air (see src/protocol/airtime.py).
+# listen window to the worst-case time-on-air (see snowsensor/protocol/airtime.py).
 MAX_DATA_PAYLOAD_BYTES = 128
 
 

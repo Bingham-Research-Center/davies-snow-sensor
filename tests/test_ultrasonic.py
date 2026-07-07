@@ -12,7 +12,7 @@ _gpiozero = types.ModuleType("gpiozero")
 _gpiozero.DistanceSensor = MagicMock
 sys.modules.setdefault("gpiozero", _gpiozero)
 
-from src.sensor.ultrasonic import (
+from snowsensor.sensor.ultrasonic import (
     UltrasonicSensor,
     SensorResult,
     speed_of_sound_m_s,
@@ -238,7 +238,7 @@ class TestReadDistance:
         mock_hw.speed_of_sound = 343.26
         sensor = self._make_initialized_sensor(mock_hw)
 
-        with patch("src.sensor.ultrasonic.time.sleep") as mock_sleep:
+        with patch("snowsensor.sensor.ultrasonic.time.sleep") as mock_sleep:
             sensor.read_distance_cm(num_samples=3, inter_pulse_delay_ms=100)
             # 2 sleeps for 3 samples (no sleep before first)
             assert mock_sleep.call_count == 2

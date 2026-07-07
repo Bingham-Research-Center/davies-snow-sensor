@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import time
 
-from src.protocol import airtime, auth, radio_setup, wire
+from snowsensor.protocol import airtime, auth, radio_setup, wire
 
 
 class LoRaTransmitter:

@@ -1,10 +1,10 @@
-"""Direct tests for src/protocol/validation.py primitives."""
+"""Direct tests for snowsensor/protocol/validation.py primitives."""
 
 from __future__ import annotations
 
 import pytest
 
-from src.protocol.validation import (
+from snowsensor.protocol.validation import (
     ConfigError,
     parse_int,
     parse_int_in,

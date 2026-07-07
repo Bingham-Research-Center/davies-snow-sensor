@@ -30,8 +30,8 @@ sys.modules.setdefault("busio", _busio)
 sys.modules.setdefault("digitalio", _digitalio)
 sys.modules.setdefault("adafruit_rfm9x", _adafruit_rfm9x)
 
-from src.base_station.radio import LoRaReceiver  # noqa: E402
-from src.protocol import auth  # noqa: E402
+from snowsensor.base_station.radio import LoRaReceiver  # noqa: E402
+from snowsensor.protocol import auth  # noqa: E402
 
 KEY = bytes(range(32))
 

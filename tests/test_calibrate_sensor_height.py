@@ -1,6 +1,6 @@
 """Tests for scripts/calibrate_sensor_height.py.
 
-The script lives outside the `src.` package, so we load it via importlib.
+The script lives outside the `snowsensor.` package, so we load it via importlib.
 Hardware libraries are faked at sys.modules level the same way
 test_ultrasonic.py does it.
 """
@@ -19,7 +19,7 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SCRIPT_PATH = REPO_ROOT / "scripts" / "calibrate_sensor_height.py"
 
-# Fake gpiozero before loading the script (via src.sensor.ultrasonic).
+# Fake gpiozero before loading the script (via snowsensor.sensor.ultrasonic).
 _gpiozero = types.ModuleType("gpiozero")
 _gpiozero.DistanceSensor = MagicMock
 sys.modules.setdefault("gpiozero", _gpiozero)
@@ -40,7 +40,7 @@ def _load_module():
 
 calibrate = _load_module()
 
-from src.sensor.config import (  # noqa: E402
+from snowsensor.sensor.config import (  # noqa: E402
     LoraConfig,
     PinsConfig,
     QCConfig,
@@ -444,7 +444,7 @@ class TestHistoryCSV:
 
 class TestRunCycle:
     def test_passes_temperature_to_distance_read(self):
-        from src.sensor.ultrasonic import SensorResult
+        from snowsensor.sensor.ultrasonic import SensorResult
 
         mock_sensor = MagicMock()
         mock_sensor.read_distance_cm.return_value = SensorResult(
@@ -466,7 +466,7 @@ class TestRunCycle:
         )
 
     def test_no_temp_sensor(self):
-        from src.sensor.ultrasonic import SensorResult
+        from snowsensor.sensor.ultrasonic import SensorResult
 
         mock_sensor = MagicMock()
         mock_sensor.read_distance_cm.return_value = SensorResult(
@@ -485,7 +485,7 @@ class TestRunCycle:
 
 class TestRunCycles:
     def test_sleeps_between_cycles_only(self):
-        from src.sensor.ultrasonic import SensorResult
+        from snowsensor.sensor.ultrasonic import SensorResult
 
         mock_sensor = MagicMock()
         mock_sensor.read_distance_cm.return_value = SensorResult(
@@ -547,7 +547,7 @@ class TestMainIntegration:
     def _patch_sensors(self, distance_cm=100.0, temp_c=20.0,
                        num_samples=5, num_valid=5, spread_cm=0.1, error=None):
         """Return context-manager-style patches for UltrasonicSensor + TemperatureSensor."""
-        from src.sensor.ultrasonic import SensorResult
+        from snowsensor.sensor.ultrasonic import SensorResult
 
         ultra_inst = MagicMock()
         ultra_inst.initialize.return_value = True
@@ -740,7 +740,7 @@ class TestMainIntegration:
         ultra_inst, temp_inst = self._patch_sensors(distance_cm=100.0)
 
         # Force load_config to fail on the second call (post-write validation)
-        from src.sensor.config import load_config as real_load
+        from snowsensor.sensor.config import load_config as real_load
         call_count = {"n": 0}
         def fake_load(path):
             call_count["n"] += 1

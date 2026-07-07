@@ -1,10 +1,10 @@
-"""Tests for src.protocol.wire — DATA/ACK wire-format codec."""
+"""Tests for snowsensor.protocol.wire — DATA/ACK wire-format codec."""
 
 from __future__ import annotations
 
 import pytest
 
-from src.protocol import wire
+from snowsensor.protocol import wire
 
 
 def _full_payload(**overrides):

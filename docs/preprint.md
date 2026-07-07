@@ -276,7 +276,7 @@ The low-cost network provides 10× the spatial sampling density at 20–75% of t
 
 ### 4.1 Measurement Cycle
 
-The sensor station software (`src/sensor/main.py`) executes a 7-step one-shot measurement cycle, triggered every 15 minutes (configurable) by an external scheduler (cron or systemd timer):
+The sensor station software (`snowsensor/sensor/main.py`) executes a 7-step one-shot measurement cycle, triggered every 15 minutes (configurable) by an external scheduler (cron or systemd timer):
 
 1. **Initialize storage:** Create CSV file and parent directories if they do not exist; write column headers.
 2. **Read temperature:** Initialize the DS18B20 sensor, discard the power-on reset reading, and read ambient temperature with retry logic (up to 3 attempts within 2000 ms).

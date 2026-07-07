@@ -1,7 +1,7 @@
 # Snow sensor station configuration — canonical example.
 #
 # Copy this file to config/station.yaml and edit for each station.
-# The YAML schema is validated by src/sensor/config.py at load time;
+# The YAML schema is validated by snowsensor/sensor/config.py at load time;
 # invalid files raise ConfigError with a specific field name.
 #
 # 52Pi Easy Multiplexing Board row plan:

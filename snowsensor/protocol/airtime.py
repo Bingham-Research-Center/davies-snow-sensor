@@ -28,8 +28,8 @@ import math
 RADIOHEAD_HEADER_BYTES = 4
 
 # SX1276 datasheet: enable LowDataRateOptimize once a symbol lasts >= 16 ms
-# (true at SF11/BW125, SF12/BW<=250). Both radio wrappers (src/sensor/lora.py,
-# src/base_station/radio.py) call low_datarate_optimize() so TX and RX agree.
+# (true at SF11/BW125, SF12/BW<=250). Both radio wrappers (snowsensor/sensor/lora.py,
+# snowsensor/base_station/radio.py) call low_datarate_optimize() so TX and RX agree.
 LDRO_SYMBOL_THRESHOLD_S = 0.016
 
 # adafruit_rfm9x's own default; never size a timeout below it.

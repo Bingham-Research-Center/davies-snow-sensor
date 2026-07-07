@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from src.sensor.config import (
+from snowsensor.sensor.config import (
     LoraConfig,
     PinsConfig,
     QCConfig,

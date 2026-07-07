@@ -1,10 +1,10 @@
-"""Tests for src.protocol.airtime — pure LoRa time-on-air math, no hardware."""
+"""Tests for snowsensor.protocol.airtime — pure LoRa time-on-air math, no hardware."""
 
 from __future__ import annotations
 
 import pytest
 
-from src.protocol import airtime
+from snowsensor.protocol import airtime
 
 
 class TestSymbolTime:
