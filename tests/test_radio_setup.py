@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sys
 import types
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, PropertyMock, patch
 
 import pytest
 
@@ -76,3 +76,66 @@ class TestRelease:
         bad.deinit.side_effect = RuntimeError("already gone")
         radio_setup.release(None, bad, ok)  # must not raise
         ok.deinit.assert_called_once()
+
+
+class TestReceiveIdle:
+    def _fake_clock(self):
+        """monotonic() advancing 0.01 per call, sleep() recorded not slept."""
+        state = {"now": 0.0, "sleeps": []}
+
+        def monotonic():
+            state["now"] += 0.01
+            return state["now"]
+
+        def sleep(s):
+            state["sleeps"].append(s)
+            state["now"] += s
+
+        return state, monotonic, sleep
+
+    def test_returns_packet_once_rx_done(self):
+        state, monotonic, sleep = self._fake_clock()
+        rfm9x = MagicMock()
+        type(rfm9x).rx_done = PropertyMock(side_effect=[False, False, False, True])
+        rfm9x.receive.return_value = b"payload"
+
+        with (
+            patch("snowsensor.protocol.radio_setup.time.monotonic", monotonic),
+            patch("snowsensor.protocol.radio_setup.time.sleep", sleep),
+        ):
+            result = radio_setup.receive_idle(rfm9x, timeout_s=5.0)
+
+        assert result == b"payload"
+        rfm9x.listen.assert_called_once()
+        rfm9x.receive.assert_called_once_with(timeout=0, with_header=False)
+        assert len(state["sleeps"]) == 3  # idled between polls, not spun
+
+    def test_timeout_returns_none_without_receive(self):
+        state, monotonic, sleep = self._fake_clock()
+        rfm9x = MagicMock()
+        type(rfm9x).rx_done = PropertyMock(return_value=False)
+
+        with (
+            patch("snowsensor.protocol.radio_setup.time.monotonic", monotonic),
+            patch("snowsensor.protocol.radio_setup.time.sleep", sleep),
+        ):
+            result = radio_setup.receive_idle(rfm9x, timeout_s=0.1)
+
+        assert result is None
+        rfm9x.receive.assert_not_called()
+        assert state["sleeps"]  # waited by sleeping, not spinning
+
+    def test_immediate_packet_skips_sleep(self):
+        state, monotonic, sleep = self._fake_clock()
+        rfm9x = MagicMock()
+        type(rfm9x).rx_done = PropertyMock(return_value=True)
+        rfm9x.receive.return_value = b"pkt"
+
+        with (
+            patch("snowsensor.protocol.radio_setup.time.monotonic", monotonic),
+            patch("snowsensor.protocol.radio_setup.time.sleep", sleep),
+        ):
+            result = radio_setup.receive_idle(rfm9x, timeout_s=1.0)
+
+        assert result == b"pkt"
+        assert state["sleeps"] == []

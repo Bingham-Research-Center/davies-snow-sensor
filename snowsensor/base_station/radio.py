@@ -76,10 +76,7 @@ class LoRaReceiver:
             self._last_error = "lora_not_initialized"
             return None
         try:
-            packet = self._rfm9x.receive(
-                timeout=timeout_seconds,
-                with_header=False,
-            )
+            packet = radio_setup.receive_idle(self._rfm9x, timeout_seconds)
             if packet is None:
                 self._last_error = None
                 return None
