@@ -11,6 +11,7 @@ from pathlib import Path
 from snowsensor.protocol.csv_helpers import (
     StorageError as _StorageError,
     append_csv,
+    append_many,
     ensure_csv_header,
     row_dict,
 )
@@ -145,6 +146,14 @@ class SensorStorage:
 
     def append(self, reading: SensorReading) -> None:
         append_csv(self._path, SENSOR_COLUMNS, row_dict(reading), fsync=self._fsync)
+
+    def append_many(self, readings: list[SensorReading]) -> None:
+        append_many(
+            self._path,
+            SENSOR_COLUMNS,
+            [row_dict(r) for r in readings],
+            fsync=self._fsync,
+        )
 
     def read_all(self) -> list[SensorReading]:
         return _read_rows(self._path, _row_to_sensor_reading)

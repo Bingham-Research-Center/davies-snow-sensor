@@ -191,8 +191,8 @@ class SensorStation:
         software_version = os.environ.get("SNOW_SENSOR_VERSION", "unknown")
         cfg_id = self._config_id
 
-        for sensor_id, result in sensor_results.items():
-            sr = SensorReading(
+        sensor_rows = [
+            SensorReading(
                 timestamp=timestamp,
                 cycle_id=cycle_id,
                 sensor_id=sensor_id,
@@ -202,13 +202,13 @@ class SensorStation:
                 spread_cm=result.spread_cm,
                 error=result.error,
             )
-            try:
-                self._sensor_storage.append(sr)
-            except Exception:
-                logger.warning(
-                    "Sensor CSV append failed for %s", sensor_id, exc_info=True
-                )
-                storage_failed = True
+            for sensor_id, result in sensor_results.items()
+        ]
+        try:
+            self._sensor_storage.append_many(sensor_rows)
+        except Exception:
+            logger.warning("Sensor CSV append failed", exc_info=True)
+            storage_failed = True
 
         best = _select_best_sensor(sensor_results, qc)
         selected_ultrasonic_id: str | None = best[0] if best else None

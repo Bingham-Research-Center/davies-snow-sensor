@@ -371,7 +371,7 @@ class TestRunCycleStorageFailure:
             assert qc.call_args.kwargs["storage_failed"] is True
 
     def test_sensor_append_exception_sets_storage_failed_flag(self, mock_deps):
-        mock_deps["sensor_storage"].append.side_effect = Exception("disk full")
+        mock_deps["sensor_storage"].append_many.side_effect = Exception("disk full")
 
         with patch("snowsensor.sensor.main.compute_quality_flag", return_value=0) as qc:
             SensorStation(_make_config()).run_cycle()
@@ -1052,8 +1052,10 @@ class TestPerSensorCSV:
         station = SensorStation(_make_multi_sensor_config())
         station.run_cycle()
 
-        # Should write one row per sensor
-        assert mock_multi_deps["sensor_storage"].append.call_count == 2
+        # One batched write containing one row per sensor
+        rows = mock_multi_deps["sensor_storage"].append_many.call_args.args[0]
+        assert mock_multi_deps["sensor_storage"].append_many.call_count == 1
+        assert len(rows) == 2
 
     def test_sensor_storage_initialized(self, mock_multi_deps):
         station = SensorStation(_make_multi_sensor_config())
@@ -1111,9 +1113,7 @@ class TestSerialSensorsInCycle:
 
         mock_mixed_deps["maxbotix"].read_distance_cm.assert_called_once()
         mock_mixed_deps["a02yyuw"].read_distance_cm.assert_called_once()
-        rows = [
-            c.args[0] for c in mock_mixed_deps["sensor_storage"].append.call_args_list
-        ]
+        rows = mock_mixed_deps["sensor_storage"].append_many.call_args.args[0]
         assert [r.sensor_id for r in rows] == ["north", "mb1", "a1"]
 
     def test_serial_init_failure_gets_fallback_code(self, mock_mixed_deps):
