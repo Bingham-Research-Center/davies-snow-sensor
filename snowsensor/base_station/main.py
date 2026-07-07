@@ -49,7 +49,7 @@ async def metrics_loop(
 ) -> None:
     """Periodically sample Pi system metrics and append to the metrics CSV."""
     # Prime the CPU sampler so the first row has a real value.
-    sample_metrics()
+    await asyncio.to_thread(sample_metrics)
     disk_low = False
     while not stop.is_set():
         try:
@@ -58,7 +58,8 @@ async def metrics_loop(
         except asyncio.TimeoutError:
             pass
         try:
-            row = sample_metrics()
+            # vcgencmd subprocesses must not stall the event loop (delays ACKs).
+            row = await asyncio.to_thread(sample_metrics)
             await asyncio.to_thread(storage.append, row)
             log.debug(
                 "metrics: cpu=%s mem=%s/%s load=%s temp=%s",
@@ -224,10 +225,13 @@ async def display_loop(
     interval_seconds: float = 2.0,
 ) -> None:
     """Refresh the OLED with last-packet link status; tick the age between packets."""
+    last_lines: list[str] | None = None
     while not stop.is_set():
         try:
             lines = status_lines(status, station_id, time.monotonic())
-            await asyncio.to_thread(display.show_lines, lines)
+            if lines != last_lines:
+                await asyncio.to_thread(display.show_lines, lines)
+                last_lines = lines
         except Exception:
             log.debug("oled refresh failed; continuing", exc_info=True)
         try:

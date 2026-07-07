@@ -392,3 +392,22 @@ class TestDisplayLoop:
         lines = display.show_lines.call_args.args[0]
         assert lines[0] == "BASE-01"
         assert "DAVIES-01" in lines[1]
+
+    def test_unchanged_frame_not_redrawn(self):
+        async def scenario():
+            display = MagicMock()
+            status = LinkStatus()  # no packets yet: lines are constant
+            stop = asyncio.Event()
+
+            async def stopper():
+                await asyncio.sleep(0.03)
+                stop.set()
+
+            await asyncio.gather(
+                display_loop(display, status, "BASE-01", stop, 0.005),
+                stopper(),
+            )
+            return display
+
+        display = asyncio.run(scenario())
+        assert display.show_lines.call_count == 1
