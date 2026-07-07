@@ -33,9 +33,74 @@ def median_absolute_deviation(values: list[float]) -> float:
     return statistics.median(abs(v - med) for v in values)
 
 
-class UltrasonicSensor:
+class DistanceSensorBase:
+    """Shared error naming and result stats for all distance drivers.
+
+    Subclasses set KIND (the error-code prefix, e.g. `maxbotix_no_device`)
+    and MIN/MAX_VALID_CM.
+    """
+
+    KIND: str
+    MIN_VALID_CM: float
+    MAX_VALID_CM: float
+
+    _last_error: str | None
+    _last_read_duration_ms: int
+
+    def _error(self, suffix: str) -> str:
+        self._last_error = f"{self.KIND}_{suffix}"
+        return self._last_error
+
+    def _result_from_readings(
+        self, valid_readings: list[float], num_samples: int
+    ) -> SensorResult:
+        """Median + MAD spread + range validation over the valid readings."""
+        num_valid = len(valid_readings)
+        if num_valid == 0:
+            return SensorResult(
+                distance_cm=None,
+                num_samples=num_samples,
+                num_valid=0,
+                spread_cm=None,
+                error=self._error("unavailable"),
+            )
+
+        median_cm = statistics.median(valid_readings)
+        spread_cm = (
+            round(median_absolute_deviation(valid_readings), 2)
+            if num_valid > 1
+            else 0.0
+        )
+        distance = self._validate_distance_cm(median_cm)
+        return SensorResult(
+            distance_cm=distance,
+            num_samples=num_samples,
+            num_valid=num_valid,
+            spread_cm=spread_cm,
+            error=self._last_error,
+        )
+
+    def _validate_distance_cm(self, value: float) -> float | None:
+        """Reject readings outside the valid range, round to 1 decimal."""
+        if value < self.MIN_VALID_CM or value > self.MAX_VALID_CM:
+            self._error("out_of_range")
+            return None
+        self._last_error = None
+        return round(value, 1)
+
+    def get_last_error_reason(self) -> str | None:
+        """Return the error code from the last operation, if any."""
+        return self._last_error
+
+    def get_last_read_duration_ms(self) -> int:
+        """Return the wall-clock duration of the last read attempt in ms."""
+        return self._last_read_duration_ms
+
+
+class UltrasonicSensor(DistanceSensorBase):
     """Thin wrapper around gpiozero.DistanceSensor for HC-SR04 readings."""
 
+    KIND = "ultrasonic"
     MIN_VALID_CM = 2.0
     MAX_VALID_CM = 400.0
     SPEED_OF_SOUND_20C = 343.26  # m/s, gpiozero's default
@@ -70,7 +135,7 @@ class UltrasonicSensor:
             self._last_error = None
             return True
         except Exception:
-            self._last_error = "ultrasonic_no_device"
+            self._error("no_device")
             return False
 
     def read_distance_cm(
@@ -90,14 +155,13 @@ class UltrasonicSensor:
             SensorResult with distance, sample counts, spread, and error.
         """
         if not self._initialized or self._sensor is None:
-            self._last_error = "ultrasonic_not_initialized"
             self._last_read_duration_ms = 0
             return SensorResult(
                 distance_cm=None,
                 num_samples=0,
                 num_valid=0,
                 spread_cm=None,
-                error="ultrasonic_not_initialized",
+                error=self._error("not_initialized"),
             )
 
         if temperature_c is not None:
@@ -118,60 +182,16 @@ class UltrasonicSensor:
                     valid_readings.append(raw * 100)  # convert to cm
         except Exception:
             self._last_read_duration_ms = int((time.monotonic() - start) * 1000)
-            self._last_error = "ultrasonic_read_error"
             return SensorResult(
                 distance_cm=None,
                 num_samples=num_samples,
                 num_valid=len(valid_readings),
                 spread_cm=None,
-                error="ultrasonic_read_error",
+                error=self._error("read_error"),
             )
 
         self._last_read_duration_ms = int((time.monotonic() - start) * 1000)
-        num_valid = len(valid_readings)
-
-        if num_valid == 0:
-            self._last_error = "ultrasonic_unavailable"
-            return SensorResult(
-                distance_cm=None,
-                num_samples=num_samples,
-                num_valid=0,
-                spread_cm=None,
-                error="ultrasonic_unavailable",
-            )
-
-        median_cm = statistics.median(valid_readings)
-        spread_cm = (
-            round(median_absolute_deviation(valid_readings), 2)
-            if num_valid > 1
-            else 0.0
-        )
-        distance = self._validate_distance_cm(median_cm)
-        error = self._last_error  # set by _validate_distance_cm if OOR
-
-        return SensorResult(
-            distance_cm=distance,
-            num_samples=num_samples,
-            num_valid=num_valid,
-            spread_cm=spread_cm,
-            error=error,
-        )
-
-    def _validate_distance_cm(self, value: float) -> float | None:
-        """Reject readings outside the valid range, round to 1 decimal."""
-        if value < self.MIN_VALID_CM or value > self.MAX_VALID_CM:
-            self._last_error = "ultrasonic_out_of_range"
-            return None
-        self._last_error = None
-        return round(value, 1)
-
-    def get_last_error_reason(self) -> str | None:
-        """Return the error code from the last operation, if any."""
-        return self._last_error
-
-    def get_last_read_duration_ms(self) -> int:
-        """Return the wall-clock duration of the last read attempt in ms."""
-        return self._last_read_duration_ms
+        return self._result_from_readings(valid_readings, num_samples)
 
     def cleanup(self) -> None:
         """Release sensor resources and reset state."""
