@@ -10,8 +10,10 @@ of its own clock, so a recorded packet cannot be replayed later.
 from __future__ import annotations
 
 import hmac
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
+
+from snowsensor.protocol.timestamp import parse_iso_utc
 
 TAG_BYTES = 8
 KEY_BYTES = 32
@@ -57,12 +59,9 @@ def timestamp_fresh(
     window_minutes: float = REPLAY_WINDOW_MINUTES,
 ) -> bool:
     """True if an ISO-8601 UTC timestamp is within the replay window of now."""
-    try:
-        ts = datetime.fromisoformat(timestamp)
-    except ValueError:
+    ts = parse_iso_utc(timestamp)
+    if ts is None:
         return False
-    if ts.tzinfo is None:
-        ts = ts.replace(tzinfo=timezone.utc)
     return abs((now - ts).total_seconds()) <= window_minutes * 60.0
 
 

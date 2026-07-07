@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import math
-from datetime import datetime
 
+from snowsensor.protocol.timestamp import parse_iso_utc
 from snowsensor.sensor.config import QCConfig
 from snowsensor.sensor.storage import Reading
 from snowsensor.sensor.ultrasonic import SensorResult
@@ -36,13 +36,6 @@ def find_baseline(readings: list[Reading]) -> Reading | None:
     return None
 
 
-def _parse_timestamp(value: str) -> datetime | None:
-    try:
-        return datetime.strptime(value, "%Y-%m-%dT%H:%M:%SZ")
-    except ValueError:
-        return None
-
-
 def _rate_of_change_high(
     snow_depth_cm: float,
     timestamp: str,
@@ -50,8 +43,8 @@ def _rate_of_change_high(
     prev_timestamp: str,
     max_rate_cm_per_hr: float,
 ) -> bool:
-    now = _parse_timestamp(timestamp)
-    prev = _parse_timestamp(prev_timestamp)
+    now = parse_iso_utc(timestamp)
+    prev = parse_iso_utc(prev_timestamp)
     if now is None or prev is None:
         return False
     elapsed_hours = (now - prev).total_seconds() / 3600
