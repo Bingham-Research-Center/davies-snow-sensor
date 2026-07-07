@@ -1,25 +1,29 @@
-"""LoRa DATA/ACK wire format (protocol v2).
+"""LoRa DATA/ACK wire format (protocol v3).
 
 DATA  (sensor -> base):
-    DATA,<station_id>,<timestamp>,<snow_depth>,<distance_raw>,<temperature>,<sensor_height>,<error_flags>
+    DATA,<station_id>,<timestamp>,<snow_depth>,<distance_raw>,<temperature>,<sensor_height>,<error_flags>,<tag>
 ACK   (base -> sensor):
-    ACK,<station_id>,<timestamp>
+    ACK,<station_id>,<timestamp>,<tag>
 
 Numeric fields render as 2-decimal-place floats, or "-" when unavailable.
 Comma is reserved as the field separator; error flags are pipe-delimited
 within their field on the wire.
+
+The trailing <tag> is a truncated HMAC over the rest of the message; it is
+appended and verified by src/protocol/auth.py, so the formatters and parsers
+here work on the message *without* it.
 """
 
 from __future__ import annotations
 
 import math
 
-PROTOCOL_VERSION = "v2"
+PROTOCOL_VERSION = "v3"
 DATA_FIELD_COUNT = 8
 ACK_FIELD_COUNT = 3
 
 # Generous upper bound on a DATA message's length in bytes. A typical frame is
-# ~60 B; this leaves headroom for long pipe-delimited error_flags and stays well
+# ~80 B incl. auth tag; this leaves headroom for pipe-delimited error_flags and stays well
 # under the radio FIFO limit (252 B incl. header). Used to size the receiver's
 # listen window to the worst-case time-on-air (see src/protocol/airtime.py).
 MAX_DATA_PAYLOAD_BYTES = 128

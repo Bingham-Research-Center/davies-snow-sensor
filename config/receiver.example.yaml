@@ -22,6 +22,10 @@ lora:
   coding_rate: 5                 # 5..8 (== 4/5..4/8); must match senders
   preamble_length: 8             # symbols; must match senders
   ack_timeout_seconds: 6.0       # sender-only field; ignored on receiver
+  # Shared HMAC key authenticating DATA/ACK. Same file contents on BOTH Pis;
+  # never commit it (gitignored). Relative paths resolve next to this file.
+  # Generate once: python3 -c 'import secrets; print(secrets.token_hex(32))' > config/lora.key
+  key_file: lora.key
 
 storage:
   data_dir: "/home/admin/data"   # per-station folders are created here

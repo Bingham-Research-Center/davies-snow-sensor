@@ -403,11 +403,11 @@ wrapper calls this after each send cycle.
 on each, swallowing exceptions, then resets internal state so the wrapper can
 be re-initialized if needed.
 
-### DATA/ACK Protocol (v2)
+### DATA/ACK Protocol (v3)
 
 **DATA message** (sensor → base station):
 ```
-DATA,<station_id>,<timestamp>,<snow_depth>,<distance_raw>,<temperature>,<sensor_height>,<error_flags>
+DATA,<station_id>,<timestamp>,<snow_depth>,<distance_raw>,<temperature>,<sensor_height>,<error_flags>,<tag>
 ```
 
 Numeric fields use 2 decimal places or `-` if unavailable.
@@ -415,8 +415,16 @@ Error flags are comma-delimited in the LoRa message (pipe-delimited in CSV).
 
 **ACK message** (base station → sensor):
 ```
-ACK,<station_id>,<timestamp>
+ACK,<station_id>,<timestamp>,<tag>
 ```
+
+**Authentication** (`src/protocol/auth.py`): `<tag>` is an 8-byte truncated
+HMAC-SHA256 over the rest of the message, hex-encoded, keyed by a 32-byte
+shared secret (`lora.key_file` in both YAMLs, gitignored, identical on both
+Pis). Both ends drop messages whose tag does not verify. The base station
+additionally rejects DATA whose timestamp is more than 15 minutes from its
+own clock, so recorded packets cannot be replayed later. Stale or
+unauthenticated packets are never ACKed.
 
 - **Retries**: Up to 3 send attempts, each waiting up to `ack_timeout_seconds`
   (default 10 s) for a matching ACK.

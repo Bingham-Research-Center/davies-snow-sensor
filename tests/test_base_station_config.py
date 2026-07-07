@@ -18,7 +18,12 @@ from src.base_station.config import (
 )
 
 
+TEST_KEY = bytes(range(32))
+
+
 def _write(tmp_path: Path, body: str) -> Path:
+    # key_file is mandatory; every test config gets a valid tmp key.
+    (tmp_path / "lora.key").write_text(TEST_KEY.hex())
     p = tmp_path / "receiver.yaml"
     p.write_text(body)
     return p
@@ -32,6 +37,8 @@ pins:
   lora_reset: 25
 stations:
   - id: "DAVIES-01"
+lora:
+  key_file: lora.key
 """
 
 
@@ -42,7 +49,7 @@ class TestValid:
         assert cfg.pins.lora_cs == 7
         assert cfg.pins.lora_reset == 25
         assert cfg.stations == (StationEntry(id="DAVIES-01", label=""),)
-        assert cfg.lora == LoraConfig()
+        assert cfg.lora == LoraConfig(key=TEST_KEY)
         assert cfg.storage == StorageConfig()
         assert cfg.metrics == MetricsConfig()
 
@@ -56,6 +63,7 @@ pins:
 lora:
   frequency: 868.0
   tx_power: 17
+  key_file: lora.key
 storage:
   data_dir: "/var/lib/snow"
 stations:
@@ -160,6 +168,7 @@ pins:
   lora_reset: 25
 lora:
   frequency: 700.0
+  key_file: lora.key
 stations:
   - id: "DAVIES-01"
 """
@@ -175,6 +184,8 @@ pins:
   lora_reset: 25
 stations:
   - id: "DAVIES-01"
+lora:
+  key_file: lora.key
 metrics:
   sample_interval_seconds: 0
 """
@@ -206,6 +217,7 @@ lora:
   coding_rate: 5
   preamble_length: 8
   ack_timeout_seconds: 5.0
+  key_file: lora.key
 stations:
   - id: "DAVIES-01"
 """
@@ -236,6 +248,7 @@ pins:
   lora_reset: 25
 lora:
   {field}: {bad}
+  key_file: lora.key
 stations:
   - id: "DAVIES-01"
 """
@@ -251,6 +264,7 @@ pins:
   lora_reset: 25
 lora:
   tx_power: 4
+  key_file: lora.key
 stations:
   - id: "DAVIES-01"
 """
@@ -276,12 +290,45 @@ class TestDisplayConfig:
 
 
 class TestExampleFile:
-    def test_example_loads(self):
-        # The shipped receiver.example.yaml should always be a valid config
+    def test_example_loads(self, monkeypatch):
+        # The shipped receiver.example.yaml should always be a valid config.
+        # The real key is gitignored and absent in CI; stub only the file read.
+        import src.base_station.config as config_module
+        monkeypatch.setattr(config_module.auth, "load_key", lambda path: TEST_KEY)
         repo = Path(__file__).resolve().parents[1]
         cfg = load_config(repo / "config" / "receiver.example.yaml")
         assert cfg.station_id == "BASE-01"
         assert any(s.id == "DAVIES-01" for s in cfg.stations)
+        assert cfg.lora.key == TEST_KEY
+
+
+class TestLoraKey:
+    def test_missing_lora_section_rejected(self, tmp_path):
+        body = """\
+station:
+  station_id: "BASE-01"
+pins:
+  lora_cs: 7
+  lora_reset: 25
+stations:
+  - id: "DAVIES-01"
+"""
+        with pytest.raises(ConfigError, match="lora"):
+            load_config(_write(tmp_path, body))
+
+    def test_missing_key_file_field_rejected(self, tmp_path):
+        body = _VALID_MINIMAL.replace("  key_file: lora.key\n", "  frequency: 915.0\n")
+        with pytest.raises(ConfigError, match="key_file"):
+            load_config(_write(tmp_path, body))
+
+    def test_absent_key_file_rejected(self, tmp_path):
+        body = _VALID_MINIMAL.replace("key_file: lora.key", "key_file: nope.key")
+        with pytest.raises(ConfigError, match="not found"):
+            load_config(_write(tmp_path, body))
+
+    def test_key_hidden_from_repr(self, tmp_path):
+        cfg = load_config(_write(tmp_path, _VALID_MINIMAL))
+        assert TEST_KEY.hex() not in repr(cfg.lora)
 
 
 class TestEncoding:
@@ -294,6 +341,7 @@ class TestEncoding:
         monkeypatch.setattr(
             locale, "getpreferredencoding", lambda *a, **k: "ascii",
         )
+        (tmp_path / "lora.key").write_text(TEST_KEY.hex())
         p = tmp_path / "receiver.yaml"
         body = "# Comment with em-dash — must round-trip cleanly\n" + _VALID_MINIMAL
         p.write_bytes(body.encode("utf-8"))

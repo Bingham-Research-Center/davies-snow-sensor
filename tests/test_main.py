@@ -460,8 +460,11 @@ sensors:
       echo_pin: 24
 storage:
   csv_path: "/tmp/test_snow.csv"
+lora:
+  key_file: lora.key
 """
         )
+        (tmp_path / "lora.key").write_text(bytes(range(32)).hex())
         captured: dict = {}
 
         def fake_signal(signum, handler):
@@ -496,8 +499,11 @@ sensors:
       echo_pin: 24
 storage:
   csv_path: "/tmp/test_snow.csv"
+lora:
+  key_file: lora.key
 """
         )
+        (tmp_path / "lora.key").write_text(bytes(range(32)).hex())
         result = main(["--config", str(config_file)])
         assert result == 0
 
@@ -519,8 +525,11 @@ sensors:
       echo_pin: 24
 storage:
   csv_path: "/tmp/test_snow.csv"
+lora:
+  key_file: lora.key
 """
         )
+        (tmp_path / "lora.key").write_text(bytes(range(32)).hex())
         with patch("src.sensor.main.logging.basicConfig") as mock_basic:
             main(["--config", str(config_file), "--verbose"])
             mock_basic.assert_called_once()

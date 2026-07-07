@@ -84,6 +84,7 @@ class SensorStation:
         self._lora = LoRaTransmitter(
             cs_pin=config.pins.lora_cs,
             reset_pin=config.pins.lora_reset,
+            key=config.lora.key,
             frequency_mhz=config.lora.frequency,
             tx_power=config.lora.tx_power,
             spreading_factor=config.lora.spreading_factor,

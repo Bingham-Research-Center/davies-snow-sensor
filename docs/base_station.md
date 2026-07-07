@@ -54,6 +54,11 @@ for the canonical schema. Required fields:
   (defaults match the Adafruit bonnet on a stock Pi: 7 and 25)
 - `stations`: a list of sender station IDs this base will accept and
   ACK. Unknown senders are logged but not ACKed.
+- `lora.key_file`: path to the 32-byte hex shared HMAC key (relative paths
+  resolve next to the YAML). Must be the same file contents as on the
+  senders; packets with a bad or missing tag, or a timestamp more than
+  15 minutes off this Pi's clock, are dropped without an ACK.
+  Generate once: `python3 -c 'import secrets; print(secrets.token_hex(32))' > config/lora.key`
 
 Optional sections:
 

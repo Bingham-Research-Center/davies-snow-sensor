@@ -7,6 +7,7 @@ import yaml
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from src.protocol import auth
 from src.protocol.validation import (
     ConfigError,
     ISM_BANDS,
@@ -61,6 +62,9 @@ class LoraConfig:
     coding_rate: int = 5
     preamble_length: int = 8
     ack_timeout_seconds: float = 6.0
+    # Shared HMAC key; always set by the loader (key_file is mandatory).
+    # repr=False keeps the key out of logs.
+    key: bytes = field(default=b"", repr=False)
 
 
 @dataclass(frozen=True)
@@ -370,12 +374,26 @@ def _parse_a02yyuw_sensors(
     return result
 
 
-def _parse_lora(raw: dict | None) -> LoraConfig:
+def _parse_lora(raw: dict | None, config_dir: Path) -> LoraConfig:
     if raw is None:
-        return LoraConfig()
+        raise ConfigError("Missing required section 'lora' (with 'key_file')")
     if not isinstance(raw, dict):
         raise ConfigError("'lora' must be a mapping")
     defaults = LoraConfig()
+
+    key_file = raw.get("key_file")
+    if not isinstance(key_file, str) or not key_file:
+        raise ConfigError(
+            "Field 'key_file' in 'lora' is required (path to the shared HMAC "
+            "key, relative paths resolve against the config file's directory)"
+        )
+    key_path = Path(key_file)
+    if not key_path.is_absolute():
+        key_path = config_dir / key_path
+    try:
+        key = auth.load_key(key_path)
+    except ValueError as e:
+        raise ConfigError(str(e)) from None
 
     freq = parse_number(raw, "frequency", "lora", defaults.frequency)
     if not any(lo <= freq <= hi for lo, hi in ISM_BANDS):
@@ -407,6 +425,7 @@ def _parse_lora(raw: dict | None) -> LoraConfig:
         coding_rate=cr,
         preamble_length=preamble,
         ack_timeout_seconds=ack,
+        key=key,
     )
 
 
@@ -536,7 +555,7 @@ def load_config(path: str | Path) -> StationConfig:
     pins = _parse_pins(require(raw, "pins", "root"))
     sensors = _parse_sensors(raw.get("sensors"), pins, hardware_profile=hardware_profile)
 
-    lora = _parse_lora(raw.get("lora"))
+    lora = _parse_lora(raw.get("lora"), path.parent)
     storage = _parse_storage(raw.get("storage"))
     timing = _parse_timing(raw.get("timing"))
     qc = _parse_qc(raw.get("qc"))

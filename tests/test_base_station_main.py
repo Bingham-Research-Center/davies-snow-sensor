@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+from datetime import datetime, timezone
 from unittest.mock import MagicMock
 
 import pytest
@@ -15,11 +16,15 @@ from src.base_station.main import (
     receive_loop,
 )
 from src.base_station.oled_display import LinkStatus
-from src.protocol import wire
+from src.protocol import auth, wire
+
+KEY = bytes(range(32))
+# Fixed clock for the replay-freshness check, near the fixture timestamps.
+NOW = datetime(2026, 7, 6, 12, 7, 30, tzinfo=timezone.utc)
 
 
-def _data_packet(station_id="DAVIES-01", ts="20260613T120000Z"):
-    return wire.format_data({
+def _data_packet(station_id="DAVIES-01", ts="20260706T120000Z", key=KEY):
+    return auth.append_tag(wire.format_data({
         "station_id": station_id,
         "timestamp": ts,
         "snow_depth_cm": 1.0,
@@ -27,7 +32,7 @@ def _data_packet(station_id="DAVIES-01", ts="20260613T120000Z"):
         "temperature_c": 3.0,
         "sensor_height_cm": 4.0,
         "error_flags": "",
-    }).encode("utf-8")
+    }), key).encode("utf-8")
 
 
 def _radio_yielding_packets(*packets):
@@ -65,7 +70,7 @@ class TestReceiveLoopStatus:
                 stop.set()
 
             await asyncio.gather(
-                receive_loop(radio, registry, storage, stop, 0.001, status),
+                receive_loop(radio, registry, storage, stop, 0.001, status, key=KEY, now_fn=lambda: NOW),
                 stopper(),
             )
             return status
@@ -91,7 +96,7 @@ class TestReceiveLoopStatus:
 
             # status defaults to None — must not raise.
             await asyncio.gather(
-                receive_loop(radio, registry, storage, stop, 0.001),
+                receive_loop(radio, registry, storage, stop, 0.001, key=KEY, now_fn=lambda: NOW),
                 stopper(),
             )
 
@@ -111,7 +116,7 @@ class TestReceiveLoopDedup:
                 stop.set()
 
             await asyncio.gather(
-                receive_loop(radio, registry, storage, stop, 0.001),
+                receive_loop(radio, registry, storage, stop, 0.001, key=KEY, now_fn=lambda: NOW),
                 stopper(),
             )
             return radio, storage
@@ -154,7 +159,7 @@ class TestReceiveLoopDedup:
                 stop.set()
 
             await asyncio.gather(
-                receive_loop(radio, registry, storage, stop, 0.001),
+                receive_loop(radio, registry, storage, stop, 0.001, key=KEY, now_fn=lambda: NOW),
                 stopper(),
             )
             return storage
@@ -162,6 +167,62 @@ class TestReceiveLoopDedup:
         storage = asyncio.run(scenario())
         # First append failed, so the retransmit must not be treated as a dup.
         assert storage.append.call_count == 2
+
+
+class TestReceiveLoopAuth:
+    def _run(self, radio):
+        async def scenario():
+            registry = MagicMock()
+            registry.is_known.return_value = True
+            storage = MagicMock()
+            stop = asyncio.Event()
+
+            async def stopper():
+                await asyncio.sleep(0.05)
+                stop.set()
+
+            await asyncio.gather(
+                receive_loop(radio, registry, storage, stop, 0.001, key=KEY, now_fn=lambda: NOW),
+                stopper(),
+            )
+            return radio, storage
+
+        return asyncio.run(scenario())
+
+    def test_wrong_key_not_acked_not_stored(self):
+        pkt = (_data_packet(key=bytes(32)), -119, -3.5)
+        radio, storage = self._run(_radio_yielding_packets(pkt))
+        assert radio.send_ack.call_count == 0
+        assert storage.append.call_count == 0
+
+    def test_missing_tag_not_acked_not_stored(self):
+        raw = wire.format_data({
+            "station_id": "DAVIES-01", "timestamp": "20260706T120000Z",
+            "snow_depth_cm": 1.0, "distance_raw_cm": 2.0, "temperature_c": 3.0,
+            "sensor_height_cm": 4.0, "error_flags": "",
+        }).encode("utf-8")
+        radio, storage = self._run(_radio_yielding_packets((raw, -119, -3.5)))
+        assert radio.send_ack.call_count == 0
+        assert storage.append.call_count == 0
+
+    def test_stale_timestamp_not_acked_not_stored(self):
+        # Authentic but > 15 min old vs NOW: replay (or badly skewed clock).
+        pkt = (_data_packet(ts="20260706T113000Z"), -119, -3.5)
+        radio, storage = self._run(_radio_yielding_packets(pkt))
+        assert radio.send_ack.call_count == 0
+        assert storage.append.call_count == 0
+
+    def test_future_timestamp_past_window_rejected(self):
+        pkt = (_data_packet(ts="20260706T124500Z"), -119, -3.5)
+        radio, storage = self._run(_radio_yielding_packets(pkt))
+        assert radio.send_ack.call_count == 0
+        assert storage.append.call_count == 0
+
+    def test_valid_packet_still_flows(self):
+        pkt = (_data_packet(), -119, -3.5)
+        radio, storage = self._run(_radio_yielding_packets(pkt))
+        assert radio.send_ack.call_count == 1
+        assert storage.append.call_count == 1
 
 
 class TestReceiveLoopRadioDeath:
@@ -174,7 +235,7 @@ class TestReceiveLoopRadioDeath:
         stop = asyncio.Event()
 
         with pytest.raises(RadioDeadError, match="lora_recv_error"):
-            asyncio.run(receive_loop(radio, registry, storage, stop, 0.001))
+            asyncio.run(receive_loop(radio, registry, storage, stop, 0.001, key=KEY, now_fn=lambda: NOW))
         assert radio.receive_packet.call_count == MAX_CONSECUTIVE_RADIO_ERRORS
 
     def test_error_counter_resets_on_clean_idle(self):
@@ -194,7 +255,7 @@ class TestReceiveLoopRadioDeath:
             return script.pop(0)
 
         radio.get_last_error_reason.side_effect = last_error
-        asyncio.run(receive_loop(radio, registry, storage, stop, 0.001))
+        asyncio.run(receive_loop(radio, registry, storage, stop, 0.001, key=KEY, now_fn=lambda: NOW))
 
 
 class TestDisplayLoop:
