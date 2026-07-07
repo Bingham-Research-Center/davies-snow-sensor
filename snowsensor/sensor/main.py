@@ -26,6 +26,14 @@ logger = logging.getLogger(__name__)
 # Warn once per cycle when the data filesystem drops below this floor.
 DISK_FREE_FLOOR_BYTES = 500 * 1024 * 1024
 
+DistanceDriver = UltrasonicSensor | MaxbotixSensor | A02yyuwSensor
+
+_SENSOR_LABELS = {
+    "ultrasonic": "Ultrasonic",
+    "maxbotix": "MaxBotix",
+    "a02yyuw": "A02YYUW",
+}
+
 
 def _warn_if_disk_low(csv_path: str) -> None:
     try:
@@ -77,30 +85,23 @@ class SensorStation:
         self._config_path = config_path
         self._config_id = config_id(config_path) if config_path else ""
         self._temp = TemperatureSensor()
-        sensor_list = config.sensors.ultrasonic if config.sensors is not None else []
-        self._ultrasonics: dict[str, UltrasonicSensor] = {
-            s.id: UltrasonicSensor(
-                trigger_pin=s.trigger_pin,
-                echo_pin=s.echo_pin,
-            )
-            for s in sensor_list
-        }
-        maxbotix_list = config.sensors.maxbotix if config.sensors is not None else []
-        self._maxbotixes: dict[str, MaxbotixSensor] = {
-            s.id: MaxbotixSensor(
-                serial_port=s.serial_port,
-                baud_rate=s.baud_rate,
-            )
-            for s in maxbotix_list
-        }
-        a02yyuw_list = config.sensors.a02yyuw if config.sensors is not None else []
-        self._a02yyuws: dict[str, A02yyuwSensor] = {
-            s.id: A02yyuwSensor(
-                serial_port=s.serial_port,
-                baud_rate=s.baud_rate,
-            )
-            for s in a02yyuw_list
-        }
+        self._sensors: dict[str, tuple[str, DistanceDriver]] = {}
+        if config.sensors is not None:
+            for u in config.sensors.ultrasonic:
+                self._sensors[u.id] = (
+                    "ultrasonic",
+                    UltrasonicSensor(trigger_pin=u.trigger_pin, echo_pin=u.echo_pin),
+                )
+            for m in config.sensors.maxbotix:
+                self._sensors[m.id] = (
+                    "maxbotix",
+                    MaxbotixSensor(serial_port=m.serial_port, baud_rate=m.baud_rate),
+                )
+            for a in config.sensors.a02yyuw:
+                self._sensors[a.id] = (
+                    "a02yyuw",
+                    A02yyuwSensor(serial_port=a.serial_port, baud_rate=a.baud_rate),
+                )
         self._lora = LoRaTransmitter(
             cs_pin=config.pins.lora_cs,
             reset_pin=config.pins.lora_reset,
@@ -151,11 +152,12 @@ class SensorStation:
 
         qc = self._config.qc
         sensor_results: dict[str, SensorResult] = {}
-        for sensor_id, sensor in self._ultrasonics.items():
+        for sensor_id, (kind, sensor) in self._sensors.items():
+            label = _SENSOR_LABELS[kind]
             if not sensor.initialize():
-                err = sensor.get_last_error_reason() or "ultrasonic_init_error"
+                err = sensor.get_last_error_reason() or f"{kind}_init_error"
                 errors.append(f"{sensor_id}:{err}")
-                logger.warning("Ultrasonic %s init failed: %s", sensor_id, err)
+                logger.warning("%s %s init failed: %s", label, sensor_id, err)
                 sensor_results[sensor_id] = SensorResult(
                     distance_cm=None,
                     num_samples=0,
@@ -163,80 +165,26 @@ class SensorStation:
                     spread_cm=None,
                     error=err,
                 )
-            else:
-                result = sensor.read_distance_cm(
-                    num_samples=qc.num_samples,
-                    temperature_c=temperature_c,
-                    inter_pulse_delay_ms=qc.inter_pulse_delay_ms,
-                )
-                if result.distance_cm is None:
-                    err = result.error or "ultrasonic_read_error"
-                    errors.append(f"{sensor_id}:{err}")
-                    logger.warning("Ultrasonic %s read failed: %s", sensor_id, err)
-                else:
-                    logger.info(
-                        "Ultrasonic %s distance: %.1f cm (spread: %s)",
-                        sensor_id,
-                        result.distance_cm,
-                        result.spread_cm,
-                    )
-                sensor_results[sensor_id] = result
-
-        # Read MaxBotix serial sensors sequentially
-        for sensor_id, sensor in self._maxbotixes.items():
-            if not sensor.initialize():
-                err = sensor.get_last_error_reason() or "maxbotix_init_error"
+                continue
+            # Serial drivers accept and ignore the temperature/delay kwargs.
+            result = sensor.read_distance_cm(
+                num_samples=qc.num_samples,
+                temperature_c=temperature_c,
+                inter_pulse_delay_ms=qc.inter_pulse_delay_ms,
+            )
+            if result.distance_cm is None:
+                err = result.error or f"{kind}_read_error"
                 errors.append(f"{sensor_id}:{err}")
-                logger.warning("MaxBotix %s init failed: %s", sensor_id, err)
-                sensor_results[sensor_id] = SensorResult(
-                    distance_cm=None,
-                    num_samples=0,
-                    num_valid=0,
-                    spread_cm=None,
-                    error=err,
-                )
+                logger.warning("%s %s read failed: %s", label, sensor_id, err)
             else:
-                result = sensor.read_distance_cm(num_samples=qc.num_samples)
-                if result.distance_cm is None:
-                    err = result.error or "maxbotix_read_error"
-                    errors.append(f"{sensor_id}:{err}")
-                    logger.warning("MaxBotix %s read failed: %s", sensor_id, err)
-                else:
-                    logger.info(
-                        "MaxBotix %s distance: %.1f cm (spread: %s)",
-                        sensor_id,
-                        result.distance_cm,
-                        result.spread_cm,
-                    )
-                sensor_results[sensor_id] = result
-
-        # Read A02YYUW serial sensors sequentially
-        for sensor_id, sensor in self._a02yyuws.items():
-            if not sensor.initialize():
-                err = sensor.get_last_error_reason() or "a02yyuw_init_error"
-                errors.append(f"{sensor_id}:{err}")
-                logger.warning("A02YYUW %s init failed: %s", sensor_id, err)
-                sensor_results[sensor_id] = SensorResult(
-                    distance_cm=None,
-                    num_samples=0,
-                    num_valid=0,
-                    spread_cm=None,
-                    error=err,
+                logger.info(
+                    "%s %s distance: %.1f cm (spread: %s)",
+                    label,
+                    sensor_id,
+                    result.distance_cm,
+                    result.spread_cm,
                 )
-            else:
-                result = sensor.read_distance_cm(num_samples=qc.num_samples)
-                if result.distance_cm is None:
-                    err = result.error or "a02yyuw_read_error"
-                    errors.append(f"{sensor_id}:{err}")
-                    logger.warning("A02YYUW %s read failed: %s", sensor_id, err)
-                else:
-                    logger.info(
-                        "A02YYUW %s distance: %.1f cm (spread: %s)",
-                        sensor_id,
-                        result.distance_cm,
-                        result.spread_cm,
-                    )
-                sensor_results[sensor_id] = result
+            sensor_results[sensor_id] = result
 
         cycle_id = read_and_increment_cycle_id(self._config.storage.csv_path)
         boot_id = get_boot_id()
@@ -353,12 +301,8 @@ class SensorStation:
     def cleanup(self) -> None:
         """Release all hardware resources."""
         resources: list[tuple[str, object]] = [("temperature", self._temp)]
-        for sid, sensor in self._ultrasonics.items():
-            resources.append((f"ultrasonic:{sid}", sensor))
-        for sid, sensor in self._maxbotixes.items():
-            resources.append((f"maxbotix:{sid}", sensor))
-        for sid, sensor in self._a02yyuws.items():
-            resources.append((f"a02yyuw:{sid}", sensor))
+        for sid, (kind, sensor) in self._sensors.items():
+            resources.append((f"{kind}:{sid}", sensor))
         resources.append(("lora", self._lora))
         for name, resource in resources:
             try:

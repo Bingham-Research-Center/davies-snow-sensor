@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from types import SimpleNamespace
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch, call
 
@@ -1059,3 +1060,75 @@ class TestPerSensorCSV:
         station.run_cycle()
 
         mock_multi_deps["sensor_storage"].initialize.assert_called_once()
+
+
+# ── Serial sensors in the cycle ──────────────────────────────────
+
+
+def _serial_entry(sid: str) -> SimpleNamespace:
+    # Duck-typed config entry: only id/serial_port/baud_rate are read.
+    return SimpleNamespace(id=sid, serial_port="/dev/ttyUSB0", baud_rate=9600)
+
+
+def _make_mixed_sensor_config():
+    return _make_config(
+        sensors=SensorsConfig(
+            ultrasonic=[UltrasonicSensorConfig(id="north", trigger_pin=5, echo_pin=6)],
+            maxbotix=[_serial_entry("mb1")],
+            a02yyuw=[_serial_entry("a1")],
+        ),
+    )
+
+
+@pytest.fixture()
+def mock_mixed_deps(mock_deps):
+    with (
+        patch("snowsensor.sensor.main.MaxbotixSensor") as MockMax,
+        patch("snowsensor.sensor.main.A02yyuwSensor") as MockA02,
+    ):
+        for mock_cls, dist in ((MockMax, 152.0), (MockA02, 149.0)):
+            drv = mock_cls.return_value
+            drv.initialize.return_value = True
+            drv.read_distance_cm.return_value = SensorResult(
+                distance_cm=dist,
+                num_samples=31,
+                num_valid=31,
+                spread_cm=0.4,
+                error=None,
+            )
+            drv.get_last_error_reason.return_value = None
+        yield {
+            **mock_deps,
+            "maxbotix": MockMax.return_value,
+            "a02yyuw": MockA02.return_value,
+        }
+
+
+class TestSerialSensorsInCycle:
+    def test_reads_all_kinds_and_stores_rows(self, mock_mixed_deps):
+        station = SensorStation(_make_mixed_sensor_config())
+        station.run_cycle()
+
+        mock_mixed_deps["maxbotix"].read_distance_cm.assert_called_once()
+        mock_mixed_deps["a02yyuw"].read_distance_cm.assert_called_once()
+        rows = [
+            c.args[0] for c in mock_mixed_deps["sensor_storage"].append.call_args_list
+        ]
+        assert [r.sensor_id for r in rows] == ["north", "mb1", "a1"]
+
+    def test_serial_init_failure_gets_fallback_code(self, mock_mixed_deps):
+        mock_mixed_deps["maxbotix"].initialize.return_value = False
+        mock_mixed_deps["maxbotix"].get_last_error_reason.return_value = None
+
+        station = SensorStation(_make_mixed_sensor_config())
+        station.run_cycle()
+
+        reading = mock_mixed_deps["storage"].append.call_args[0][0]
+        assert "mb1:maxbotix_init_error" in reading.error_flags
+
+    def test_serial_cleanup_called(self, mock_mixed_deps):
+        station = SensorStation(_make_mixed_sensor_config())
+        station.cleanup()
+
+        mock_mixed_deps["maxbotix"].cleanup.assert_called_once()
+        mock_mixed_deps["a02yyuw"].cleanup.assert_called_once()
