@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import logging
+import shutil
 import signal
 import sys
 import time
@@ -32,6 +33,9 @@ log = logging.getLogger("base_station")
 # the radio), instead of staying alive but deaf forever.
 MAX_CONSECUTIVE_RADIO_ERRORS = 30
 
+# Warn (once per crossing) when the data filesystem drops below this floor.
+DISK_FREE_FLOOR_BYTES = 500 * 1024 * 1024
+
 
 class RadioDeadError(Exception):
     """Receive path returned only errors; the radio needs a re-init."""
@@ -39,10 +43,12 @@ class RadioDeadError(Exception):
 
 async def metrics_loop(
     storage: MetricsStorage, interval_seconds: int, stop: asyncio.Event,
+    data_dir: str | None = None,
 ) -> None:
     """Periodically sample Pi system metrics and append to the metrics CSV."""
     # Prime the CPU sampler so the first row has a real value.
     sample_metrics()
+    disk_low = False
     while not stop.is_set():
         try:
             await asyncio.wait_for(stop.wait(), timeout=interval_seconds)
@@ -57,6 +63,19 @@ async def metrics_loop(
                       row.load_1m, row.soc_temp_c)
         except Exception:
             log.exception("metrics sample/append failed; continuing")
+        if data_dir is not None:
+            try:
+                free = shutil.disk_usage(data_dir).free
+            except OSError:
+                continue
+            if free < DISK_FREE_FLOOR_BYTES and not disk_low:
+                disk_low = True
+                log.warning("disk: %.0f MB free on %s, below %.0f MB floor",
+                            free / 1e6, data_dir, DISK_FREE_FLOOR_BYTES / 1e6)
+            elif free >= DISK_FREE_FLOOR_BYTES and disk_low:
+                disk_low = False
+                log.info("disk: recovered to %.0f MB free on %s",
+                         free / 1e6, data_dir)
 
 
 async def receive_loop(
@@ -252,7 +271,8 @@ async def run(config: ReceiverConfig) -> int:
     tasks = [
         receive_loop(radio, registry, packet_storage, stop, recv_timeout, status,
                      key=config.lora.key),
-        metrics_loop(metrics_storage, config.metrics.sample_interval_seconds, stop),
+        metrics_loop(metrics_storage, config.metrics.sample_interval_seconds, stop,
+                     data_dir=config.storage.data_dir),
     ]
     if display_enabled:
         tasks.append(display_loop(display, status, config.station_id, stop))

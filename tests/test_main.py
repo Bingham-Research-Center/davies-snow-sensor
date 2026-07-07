@@ -170,6 +170,37 @@ class TestRunCycleHappyPath:
         mock_deps["lora"].sleep.assert_called_once()
 
 
+# ── Disk-space floor ──────────────────────────────────────────────
+
+
+class TestDiskFloor:
+    def test_low_disk_warns_but_cycle_succeeds(self, mock_deps, caplog):
+        from collections import namedtuple
+        from snowsensor.sensor.main import DISK_FREE_FLOOR_BYTES
+
+        Usage = namedtuple("Usage", "total used free")
+        station = SensorStation(_make_config())
+        with patch("snowsensor.sensor.main.shutil.disk_usage",
+                   return_value=Usage(0, 0, 1)), \
+             caplog.at_level(logging.WARNING):
+            assert station.run_cycle() is True
+        assert any("below" in r.message and "floor" in r.message
+                   for r in caplog.records)
+        assert DISK_FREE_FLOOR_BYTES > 0
+
+    def test_healthy_disk_stays_quiet(self, mock_deps, caplog):
+        from collections import namedtuple
+        from snowsensor.sensor.main import DISK_FREE_FLOOR_BYTES
+
+        Usage = namedtuple("Usage", "total used free")
+        station = SensorStation(_make_config())
+        with patch("snowsensor.sensor.main.shutil.disk_usage",
+                   return_value=Usage(0, 0, DISK_FREE_FLOOR_BYTES * 2)), \
+             caplog.at_level(logging.WARNING):
+            station.run_cycle()
+        assert not [r for r in caplog.records if "disk" in r.message]
+
+
 # ── Temperature failure ───────────────────────────────────────────
 
 
