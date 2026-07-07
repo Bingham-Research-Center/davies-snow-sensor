@@ -13,7 +13,7 @@ One row per measurement cycle.
 | cycle_id | int | — | no | Monotonic counter, persisted in `cycle_id.txt` |
 | boot_id | string | — | no | UUID generated once per process invocation |
 | software_version | string | — | no | From `SNOW_SENSOR_VERSION` env var, default `"unknown"` |
-| config_id | string | — | no | First 8 hex chars of SHA-256 of config YAML |
+| config_id | string | — | no | First 16 hex chars of SHA-256 of config YAML |
 | snow_depth_cm | float | cm | yes | `sensor_height_cm - distance_raw_cm` |
 | distance_raw_cm | float | cm | yes | Median distance from selected ultrasonic sensor |
 | temperature_c | float | °C | yes | DS18B20 reading |
