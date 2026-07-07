@@ -4,4 +4,11 @@ After=local-fs.target
 
 [Service]
 Type=oneshot
-ExecStart=/home/admin/davies-snow-sensor/venv/bin/python /home/admin/davies-snow-sensor/scripts/sync-timer-from-config.py
+ExecStart=/home/admin/davies-snow-sensor/venv/bin/python /home/admin/davies-snow-sensor/scripts/sync-timer-from-config.py /home/admin/davies-snow-sensor/config/station.yaml
+# Root is required: writes /etc/systemd/system and runs systemctl. Everything
+# else is locked down. /run/systemd stays writable so systemctl can connect.
+NoNewPrivileges=yes
+ProtectSystem=strict
+ReadWritePaths=/etc/systemd/system /run/systemd
+ProtectHome=read-only
+PrivateTmp=yes

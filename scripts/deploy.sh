@@ -70,12 +70,20 @@ sed -e "s|/home/admin/davies-snow-sensor|$REPO_DIR|g" \
     -e "s|^User=admin$|User=$TARGET_USER|" \
     -e "s|^ReadWritePaths=/home/admin/data$|ReadWritePaths=$DATA_DIR|" \
     "$REPO_DIR/systemd/snow-sensor.service" > /etc/systemd/system/snow-sensor.service
+# Config watcher: re-renders the timer when station.yaml changes.
+for unit in snow-sensor-sync.service snow-sensor-config.path; do
+    sed -e "s|/home/admin/davies-snow-sensor|$REPO_DIR|g" \
+        "$REPO_DIR/systemd/$unit" > "/etc/systemd/system/$unit"
+done
 cp "$REPO_DIR/systemd/snow-sensor.timer" /etc/systemd/system/
 systemctl daemon-reload
 # Makes time-sync.target wait for a truly synced kernel clock (no RTC on the Pi).
 systemctl enable systemd-time-wait-sync.service
 systemctl enable snow-sensor.timer
 systemctl start snow-sensor.timer
+systemctl enable --now snow-sensor-config.path
+# Render the timer from config now instead of waiting for the first edit.
+systemctl start snow-sensor-sync.service
 
 # --- step 5: status + reminders ---
 echo ""
