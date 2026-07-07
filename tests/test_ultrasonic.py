@@ -16,7 +16,7 @@ from snowsensor.sensor.ultrasonic import (
     UltrasonicSensor,
     SensorResult,
     speed_of_sound_m_s,
-    _median_absolute_deviation,
+    median_absolute_deviation,
 )
 
 
@@ -37,15 +37,19 @@ class TestSpeedOfSound:
 
 class TestMAD:
     def test_identical_values(self):
-        assert _median_absolute_deviation([5.0, 5.0, 5.0]) == 0.0
+        assert median_absolute_deviation([5.0, 5.0, 5.0]) == 0.0
 
     def test_symmetric_spread(self):
         # values: [1, 2, 3, 4, 5], median=3, deviations=[2,1,0,1,2], MAD=1
-        assert _median_absolute_deviation([1.0, 2.0, 3.0, 4.0, 5.0]) == 1.0
+        assert median_absolute_deviation([1.0, 2.0, 3.0, 4.0, 5.0]) == 1.0
 
     def test_two_values(self):
         # [10, 20], median=15, deviations=[5, 5], MAD=5
-        assert _median_absolute_deviation([10.0, 20.0]) == 5.0
+        assert median_absolute_deviation([10.0, 20.0]) == 5.0
+
+    def test_empty_list_returns_zero(self):
+        # The pre-dedup ultrasonic copy raised StatisticsError on [].
+        assert median_absolute_deviation([]) == 0.0
 
 
 class TestInitialize:

@@ -22,8 +22,13 @@ def speed_of_sound_m_s(temperature_c: float) -> float:
     return 331.3 * math.sqrt(1 + temperature_c / 273.15)
 
 
-def _median_absolute_deviation(values: list[float]) -> float:
-    """Compute MAD: median of absolute deviations from the median."""
+def median_absolute_deviation(values: list[float]) -> float:
+    """Compute MAD: median of absolute deviations from the median.
+
+    Shared by all distance drivers; 0.0 for an empty list.
+    """
+    if not values:
+        return 0.0
     med = statistics.median(values)
     return statistics.median(abs(v - med) for v in values)
 
@@ -131,7 +136,7 @@ class UltrasonicSensor:
             )
 
         median_cm = statistics.median(valid_readings)
-        spread_cm = round(_median_absolute_deviation(valid_readings), 2) if num_valid > 1 else 0.0
+        spread_cm = round(median_absolute_deviation(valid_readings), 2) if num_valid > 1 else 0.0
         distance = self._validate_distance_cm(median_cm)
         error = self._last_error  # set by _validate_distance_cm if OOR
 
