@@ -6,7 +6,7 @@ receive-with-ACK API instead of transmit-with-ACK.
 
 from __future__ import annotations
 
-from src.protocol import airtime
+from src.protocol import airtime, radio_setup
 
 
 class LoRaReceiver:
@@ -48,50 +48,24 @@ class LoRaReceiver:
         self._last_error: str | None = None
 
     def initialize(self) -> bool:
+        # SF/BW/CR/preamble MUST match the sender exactly or no packet decodes.
         try:
-            import adafruit_rfm9x
-            import board
-            import busio
-            import digitalio
-        except ImportError:
-            self._last_error = "lora_no_device"
-            return False
-
-        try:
-            self._spi = busio.SPI(board.SCK, MOSI=board.MOSI, MISO=board.MISO)
-            self._cs = digitalio.DigitalInOut(
-                getattr(board, f"D{self._cs_pin}")
+            self._spi, self._cs, self._reset, self._rfm9x = radio_setup.create_radio(
+                cs_pin=self._cs_pin,
+                reset_pin=self._reset_pin,
+                frequency_mhz=self._frequency_mhz,
+                tx_power=self._tx_power,
+                spreading_factor=self._spreading_factor,
+                signal_bandwidth_hz=self._signal_bandwidth_hz,
+                coding_rate=self._coding_rate,
+                preamble_length=self._preamble_length,
             )
-            self._reset = digitalio.DigitalInOut(
-                getattr(board, f"D{self._reset_pin}")
-            )
-
-            self._rfm9x = adafruit_rfm9x.RFM9x(
-                self._spi,
-                self._cs,
-                self._reset,
-                self._frequency_mhz,
-                high_power=True,
-            )
-            # Order matches sender (src/sensor/lora.py): BW writes the same
-            # register byte as CR, so set BW first then CR. SF/BW/CR/preamble
-            # MUST match the sender exactly or no packet decodes.
-            self._rfm9x.signal_bandwidth = self._signal_bandwidth_hz
-            self._rfm9x.coding_rate = self._coding_rate
-            self._rfm9x.spreading_factor = self._spreading_factor
-            self._rfm9x.preamble_length = self._preamble_length
-            self._rfm9x.low_datarate_optimize = airtime.low_datarate_optimize(
-                self._spreading_factor, self._signal_bandwidth_hz
-            )
-            self._rfm9x.tx_power = self._tx_power
-            self._rfm9x.enable_crc = True
-            self._initialized = True
-            self._last_error = None
-            return True
         except Exception:
-            self.cleanup()
             self._last_error = "lora_no_device"
             return False
+        self._initialized = True
+        self._last_error = None
+        return True
 
     def receive_packet(
         self, timeout_seconds: float = 1.0,
@@ -147,12 +121,7 @@ class LoRaReceiver:
         return self._last_error
 
     def cleanup(self) -> None:
-        for resource in (self._spi, self._cs, self._reset):
-            if resource is not None:
-                try:
-                    resource.deinit()
-                except Exception:
-                    pass
+        radio_setup.release(self._spi, self._cs, self._reset)
         self._spi = None
         self._cs = None
         self._reset = None
