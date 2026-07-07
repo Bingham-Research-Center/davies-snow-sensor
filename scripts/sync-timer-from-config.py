@@ -1,5 +1,8 @@
-#!/home/admin/davies-snow-sensor/venv/bin/python
+#!/usr/bin/env python3
 """Regenerate /etc/systemd/system/snow-sensor.timer from station.yaml.
+
+Usage: sync-timer-from-config.py <station.yaml>
+(snow-sensor-sync.service passes the deploy-templated path.)
 
 Idempotent: only rewrites and reloads if the rendered content differs from
 what's already on disk. Triggered by snow-sensor-config.path on save.
@@ -14,7 +17,6 @@ from pathlib import Path
 
 import yaml
 
-CONFIG = Path("/home/admin/davies-snow-sensor/config/station.yaml")
 TIMER = Path("/etc/systemd/system/snow-sensor.timer")
 
 TEMPLATE = """[Unit]
@@ -39,11 +41,16 @@ def render_on_calendar(minutes: int) -> str:
     return f"*:0/{minutes}"
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
+    args = sys.argv[1:] if argv is None else argv
+    if len(args) != 1:
+        print("usage: sync-timer-from-config.py <station.yaml>", file=sys.stderr)
+        return 2
+    config = Path(args[0])
     try:
-        cfg = yaml.safe_load(CONFIG.read_text()) or {}
+        cfg = yaml.safe_load(config.read_text()) or {}
     except (OSError, yaml.YAMLError) as e:
-        print(f"sync-timer: cannot read {CONFIG}: {e}", file=sys.stderr)
+        print(f"sync-timer: cannot read {config}: {e}", file=sys.stderr)
         return 1
 
     minutes = (cfg.get("timing") or {}).get("cycle_interval_minutes", 15)
