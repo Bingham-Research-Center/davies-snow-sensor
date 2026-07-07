@@ -72,14 +72,7 @@ class UltrasonicSensorConfig:
 
 
 @dataclass(frozen=True)
-class MaxbotixSensorConfig:
-    id: str
-    serial_port: str
-    baud_rate: int = 9600
-
-
-@dataclass(frozen=True)
-class A02yyuwSensorConfig:
+class SerialSensorConfig:
     id: str
     serial_port: str
     baud_rate: int = 9600
@@ -88,8 +81,8 @@ class A02yyuwSensorConfig:
 @dataclass(frozen=True)
 class SensorsConfig:
     ultrasonic: list[UltrasonicSensorConfig]
-    maxbotix: list[MaxbotixSensorConfig] = field(default_factory=list)
-    a02yyuw: list[A02yyuwSensorConfig] = field(default_factory=list)
+    maxbotix: list[SerialSensorConfig] = field(default_factory=list)
+    a02yyuw: list[SerialSensorConfig] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -218,8 +211,8 @@ def _parse_sensors(
         }
         _check_pin_collisions({**base_pins, **all_pins})
 
-        maxbotix = _parse_maxbotix_sensors(raw.get("maxbotix"), seen_ids)
-        a02yyuw = _parse_a02yyuw_sensors(raw.get("a02yyuw"), seen_ids)
+        maxbotix = _parse_serial_sensors(raw.get("maxbotix"), seen_ids, "maxbotix")
+        a02yyuw = _parse_serial_sensors(raw.get("a02yyuw"), seen_ids, "a02yyuw")
         return SensorsConfig(ultrasonic=ultrasonic, maxbotix=maxbotix, a02yyuw=a02yyuw)
 
     # Legacy: auto-convert from pins config
@@ -249,19 +242,20 @@ def _parse_sensors(
     )
 
 
-def _parse_maxbotix_sensors(
+def _parse_serial_sensors(
     raw: object,
     seen_ids: set[str],
-) -> list[MaxbotixSensorConfig]:
-    """Parse the optional `sensors.maxbotix` list. Empty/missing means none configured."""
+    key: str,
+) -> list[SerialSensorConfig]:
+    """Parse an optional `sensors.<key>` serial list. Empty/missing means none configured."""
     if raw is None:
         return []
     if not isinstance(raw, list):
-        raise ConfigError("'sensors.maxbotix' must be a list")
+        raise ConfigError(f"'sensors.{key}' must be a list")
 
-    result: list[MaxbotixSensorConfig] = []
+    result: list[SerialSensorConfig] = []
     for i, entry in enumerate(raw):
-        section = f"sensors.maxbotix[{i}]"
+        section = f"sensors.{key}[{i}]"
         if not isinstance(entry, dict):
             raise ConfigError(f"'{section}' must be a mapping")
 
@@ -288,52 +282,7 @@ def _parse_maxbotix_sensors(
             raise ConfigError(f"Field 'baud_rate' in '{section}' must be positive")
 
         result.append(
-            MaxbotixSensorConfig(id=sid, serial_port=serial_port, baud_rate=baud_rate)
-        )
-
-    return result
-
-
-def _parse_a02yyuw_sensors(
-    raw: object,
-    seen_ids: set[str],
-) -> list[A02yyuwSensorConfig]:
-    """Parse the optional `sensors.a02yyuw` list. Empty/missing means none configured."""
-    if raw is None:
-        return []
-    if not isinstance(raw, list):
-        raise ConfigError("'sensors.a02yyuw' must be a list")
-
-    result: list[A02yyuwSensorConfig] = []
-    for i, entry in enumerate(raw):
-        section = f"sensors.a02yyuw[{i}]"
-        if not isinstance(entry, dict):
-            raise ConfigError(f"'{section}' must be a mapping")
-
-        sid = require(entry, "id", section)
-        if not isinstance(sid, str):
-            raise ConfigError(f"Field 'id' in '{section}' must be a string")
-        if sid in seen_ids:
-            raise ConfigError(f"Duplicate sensor id '{sid}'")
-        seen_ids.add(sid)
-
-        serial_port = require(entry, "serial_port", section)
-        if not isinstance(serial_port, str):
-            raise ConfigError(f"Field 'serial_port' in '{section}' must be a string")
-        if not serial_port.startswith("/dev/"):
-            raise ConfigError(
-                f"Field 'serial_port' in '{section}' must start with '/dev/' "
-                f"(got '{serial_port}')"
-            )
-
-        baud_rate = entry.get("baud_rate", 9600)
-        if not isinstance(baud_rate, int) or isinstance(baud_rate, bool):
-            raise ConfigError(f"Field 'baud_rate' in '{section}' must be an integer")
-        if baud_rate <= 0:
-            raise ConfigError(f"Field 'baud_rate' in '{section}' must be positive")
-
-        result.append(
-            A02yyuwSensorConfig(id=sid, serial_port=serial_port, baud_rate=baud_rate)
+            SerialSensorConfig(id=sid, serial_port=serial_port, baud_rate=baud_rate)
         )
 
     return result

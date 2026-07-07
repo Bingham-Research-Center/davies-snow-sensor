@@ -12,8 +12,7 @@ from snowsensor.sensor.config import (
     LoraConfig,
     QCConfig,
     TimingConfig,
-    A02yyuwSensorConfig,
-    MaxbotixSensorConfig,
+    SerialSensorConfig,
     config_id,
     load_config,
 )
@@ -918,7 +917,7 @@ class TestMaxbotixConfig:
         cfg = load_config(_write_yaml(tmp_path, MAXBOTIX_CONFIG))
         assert len(cfg.sensors.maxbotix) == 1
         mb = cfg.sensors.maxbotix[0]
-        assert isinstance(mb, MaxbotixSensorConfig)
+        assert isinstance(mb, SerialSensorConfig)
         assert mb.id == "mast_mb"
         assert mb.serial_port == "/dev/ttyUSB0"
         assert mb.baud_rate == 9600
@@ -1091,7 +1090,7 @@ class TestA02yyuwConfig:
         cfg = load_config(_write_yaml(tmp_path, A02YYUW_CONFIG))
         assert len(cfg.sensors.a02yyuw) == 1
         sensor = cfg.sensors.a02yyuw[0]
-        assert isinstance(sensor, A02yyuwSensorConfig)
+        assert isinstance(sensor, SerialSensorConfig)
         assert sensor.id == "mast_a02"
         assert sensor.serial_port == "/dev/ttyUSB1"
         assert sensor.baud_rate == 9600
