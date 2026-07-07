@@ -39,7 +39,11 @@ def create_radio(
         reset = digitalio.DigitalInOut(getattr(board, f"D{reset_pin}"))
 
         rfm9x = adafruit_rfm9x.RFM9x(
-            spi, cs, reset, frequency_mhz, high_power=True,
+            spi,
+            cs,
+            reset,
+            frequency_mhz,
+            high_power=True,
         )
         # Order matches the adafruit_rfm9x constructor: BW writes the same
         # register byte as CR, so set BW first then CR.

@@ -122,7 +122,10 @@ class OledDisplay:
         try:
             self._i2c = busio.I2C(board.SCL, board.SDA)
             self._oled = adafruit_ssd1306.SSD1306_I2C(
-                self._width, self._height, self._i2c, addr=self._address,
+                self._width,
+                self._height,
+                self._i2c,
+                addr=self._address,
             )
             self._oled.fill(0)
             self._oled.show()
@@ -142,7 +145,11 @@ class OledDisplay:
             self._oled.fill(0)
             for i, text in enumerate(lines[:MAX_LINES]):
                 self._oled.text(
-                    str(text)[:MAX_LINE_CHARS], 0, i * 8, 1, font_name=FONT_PATH,
+                    str(text)[:MAX_LINE_CHARS],
+                    0,
+                    i * 8,
+                    1,
+                    font_name=FONT_PATH,
                 )
             self._oled.show()
         except Exception:

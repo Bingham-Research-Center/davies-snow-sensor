@@ -180,7 +180,9 @@ def _row_to_reading(row: dict) -> Reading:
         distance_raw_cm=_parse_optional_float(row.get("distance_raw_cm", "")),
         temperature_c=_parse_optional_float(row.get("temperature_c", "")),
         sensor_height_cm=_parse_optional_float(row.get("sensor_height_cm", "")),
-        selected_ultrasonic_id=_parse_optional_str(row.get("selected_ultrasonic_id", "")),
+        selected_ultrasonic_id=_parse_optional_str(
+            row.get("selected_ultrasonic_id", "")
+        ),
         quality_flag=int(row.get("quality_flag") or 0),
         lora_tx_success=_parse_bool(row.get("lora_tx_success", "")),
         lora_rssi=_parse_optional_int(row.get("lora_rssi", "")),

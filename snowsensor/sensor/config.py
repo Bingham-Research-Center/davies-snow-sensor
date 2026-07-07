@@ -32,9 +32,7 @@ _VALID_HARDWARE_PROFILES = frozenset({"52pi-ep0123"})
 #   - 25         LoRa reset
 # The LoRa CS/reset and DS18B20 pins legitimately occupy some of these;
 # the check is scoped to ultrasonic trigger/echo pins only.
-_RESERVED_52PI_SENSOR_PINS = frozenset(
-    {2, 3, 7, 8, 9, 10, 11, 17, 22, 23, 24, 25}
-)
+_RESERVED_52PI_SENSOR_PINS = frozenset({2, 3, 7, 8, 9, 10, 11, 17, 22, 23, 24, 25})
 
 
 @dataclass(frozen=True)
@@ -107,7 +105,9 @@ class StationConfig:
     hardware_profile: str | None = None
 
 
-def _check_sensor_pin_reserved(name: str, val: int, hardware_profile: str | None) -> None:
+def _check_sensor_pin_reserved(
+    name: str, val: int, hardware_profile: str | None
+) -> None:
     if hardware_profile != "52pi-ep0123":
         return
     if val in _RESERVED_52PI_SENSOR_PINS:
@@ -183,9 +183,7 @@ def _parse_sensors(
             raise ConfigError("'sensors' must be a mapping")
         ultra_raw = raw.get("ultrasonic")
         if not isinstance(ultra_raw, list) or len(ultra_raw) == 0:
-            raise ConfigError(
-                "'sensors.ultrasonic' must be a non-empty list"
-            )
+            raise ConfigError("'sensors.ultrasonic' must be a non-empty list")
         ultrasonic = []
         seen_ids: set[str] = set()
         all_pins: dict[str, int] = {}
@@ -195,9 +193,7 @@ def _parse_sensors(
                 raise ConfigError(f"'{section}' must be a mapping")
             sid = require(entry, "id", section)
             if not isinstance(sid, str):
-                raise ConfigError(
-                    f"Field 'id' in '{section}' must be a string"
-                )
+                raise ConfigError(f"Field 'id' in '{section}' must be a string")
             if sid in seen_ids:
                 raise ConfigError(f"Duplicate sensor id '{sid}'")
             seen_ids.add(sid)
@@ -209,7 +205,9 @@ def _parse_sensors(
             _check_sensor_pin_reserved(f"{sid}.echo_pin", echo, hardware_profile)
             all_pins[f"{sid}.trigger_pin"] = trig
             all_pins[f"{sid}.echo_pin"] = echo
-            ultrasonic.append(UltrasonicSensorConfig(id=sid, trigger_pin=trig, echo_pin=echo))
+            ultrasonic.append(
+                UltrasonicSensorConfig(id=sid, trigger_pin=trig, echo_pin=echo)
+            )
         # Check collisions among all ultrasonic pins
         _check_pin_collisions(all_pins)
         # Check collisions against non-ultrasonic pins
@@ -229,12 +227,8 @@ def _parse_sensors(
         raise ConfigError(
             "Either 'sensors' section or 'pins.hcsr04_trigger'/'pins.hcsr04_echo' required"
         )
-    _check_sensor_pin_reserved(
-        "hcsr04_trigger", pins.hcsr04_trigger, hardware_profile
-    )
-    _check_sensor_pin_reserved(
-        "hcsr04_echo", pins.hcsr04_echo, hardware_profile
-    )
+    _check_sensor_pin_reserved("hcsr04_trigger", pins.hcsr04_trigger, hardware_profile)
+    _check_sensor_pin_reserved("hcsr04_echo", pins.hcsr04_echo, hardware_profile)
     _check_pin_collisions(
         {
             "ds18b20_data": pins.ds18b20_data,
@@ -280,9 +274,7 @@ def _parse_maxbotix_sensors(
 
         serial_port = require(entry, "serial_port", section)
         if not isinstance(serial_port, str):
-            raise ConfigError(
-                f"Field 'serial_port' in '{section}' must be a string"
-            )
+            raise ConfigError(f"Field 'serial_port' in '{section}' must be a string")
         if not serial_port.startswith("/dev/"):
             raise ConfigError(
                 f"Field 'serial_port' in '{section}' must start with '/dev/' "
@@ -291,15 +283,13 @@ def _parse_maxbotix_sensors(
 
         baud_rate = entry.get("baud_rate", 9600)
         if not isinstance(baud_rate, int) or isinstance(baud_rate, bool):
-            raise ConfigError(
-                f"Field 'baud_rate' in '{section}' must be an integer"
-            )
+            raise ConfigError(f"Field 'baud_rate' in '{section}' must be an integer")
         if baud_rate <= 0:
-            raise ConfigError(
-                f"Field 'baud_rate' in '{section}' must be positive"
-            )
+            raise ConfigError(f"Field 'baud_rate' in '{section}' must be positive")
 
-        result.append(MaxbotixSensorConfig(id=sid, serial_port=serial_port, baud_rate=baud_rate))
+        result.append(
+            MaxbotixSensorConfig(id=sid, serial_port=serial_port, baud_rate=baud_rate)
+        )
 
     return result
 
@@ -329,9 +319,7 @@ def _parse_a02yyuw_sensors(
 
         serial_port = require(entry, "serial_port", section)
         if not isinstance(serial_port, str):
-            raise ConfigError(
-                f"Field 'serial_port' in '{section}' must be a string"
-            )
+            raise ConfigError(f"Field 'serial_port' in '{section}' must be a string")
         if not serial_port.startswith("/dev/"):
             raise ConfigError(
                 f"Field 'serial_port' in '{section}' must start with '/dev/' "
@@ -340,24 +328,20 @@ def _parse_a02yyuw_sensors(
 
         baud_rate = entry.get("baud_rate", 9600)
         if not isinstance(baud_rate, int) or isinstance(baud_rate, bool):
-            raise ConfigError(
-                f"Field 'baud_rate' in '{section}' must be an integer"
-            )
+            raise ConfigError(f"Field 'baud_rate' in '{section}' must be an integer")
         if baud_rate <= 0:
-            raise ConfigError(
-                f"Field 'baud_rate' in '{section}' must be positive"
-            )
+            raise ConfigError(f"Field 'baud_rate' in '{section}' must be positive")
 
-        result.append(A02yyuwSensorConfig(id=sid, serial_port=serial_port, baud_rate=baud_rate))
+        result.append(
+            A02yyuwSensorConfig(id=sid, serial_port=serial_port, baud_rate=baud_rate)
+        )
 
     return result
 
 
 def _parse_storage(raw: dict | None) -> StorageConfig:
     if raw is None:
-        raise ConfigError(
-            "Missing required section 'storage' (with 'csv_path')"
-        )
+        raise ConfigError("Missing required section 'storage' (with 'csv_path')")
     if not isinstance(raw, dict):
         raise ConfigError("'storage' must be a mapping")
     csv_path = require(raw, "csv_path", "storage")
@@ -380,9 +364,7 @@ def _parse_timing(raw: dict | None) -> TimingConfig:
         raise ConfigError("'timing' must be a mapping")
     interval = parse_int(raw, "cycle_interval_minutes", "timing", 15)
     if interval < 1:
-        raise ConfigError(
-            f"cycle_interval_minutes must be >= 1, got {interval}"
-        )
+        raise ConfigError(f"cycle_interval_minutes must be >= 1, got {interval}")
     return TimingConfig(cycle_interval_minutes=interval)
 
 
@@ -450,16 +432,16 @@ def load_config(path: str | Path) -> StationConfig:
         )
 
     sensor_height_raw = require(station_raw, "sensor_height_cm", "station")
-    if not isinstance(sensor_height_raw, (int, float)) or isinstance(sensor_height_raw, bool):
+    if not isinstance(sensor_height_raw, (int, float)) or isinstance(
+        sensor_height_raw, bool
+    ):
         raise ConfigError(
             f"Field 'sensor_height_cm' in 'station' must be a number, "
             f"got {type(sensor_height_raw).__name__}"
         )
     sensor_height_cm = float(sensor_height_raw)
     if sensor_height_cm <= 0:
-        raise ConfigError(
-            f"sensor_height_cm must be > 0, got {sensor_height_cm}"
-        )
+        raise ConfigError(f"sensor_height_cm must be > 0, got {sensor_height_cm}")
 
     hardware_profile_raw = station_raw.get("hardware_profile")
     hardware_profile: str | None = None
@@ -477,7 +459,9 @@ def load_config(path: str | Path) -> StationConfig:
         hardware_profile = hardware_profile_raw
 
     pins = _parse_pins(require(raw, "pins", "root"))
-    sensors = _parse_sensors(raw.get("sensors"), pins, hardware_profile=hardware_profile)
+    sensors = _parse_sensors(
+        raw.get("sensors"), pins, hardware_profile=hardware_profile
+    )
 
     lora = parse_lora(raw.get("lora"), path.parent)
     storage = _parse_storage(raw.get("storage"))

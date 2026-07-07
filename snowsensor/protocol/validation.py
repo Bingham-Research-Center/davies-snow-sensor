@@ -48,9 +48,7 @@ def require_int(data: dict, key: str, section: str) -> int:
 
 def validate_pin(name: str, val: int) -> None:
     if val < 0 or val > 27:
-        raise ConfigError(
-            f"Pin '{name}' value {val} is out of range (must be 0-27)"
-        )
+        raise ConfigError(f"Pin '{name}' value {val} is out of range (must be 0-27)")
 
 
 def parse_int(raw: dict, key: str, section: str, default: int) -> int:
@@ -67,9 +65,7 @@ def parse_int_in(
 ) -> int:
     val = parse_int(raw, key, section, default)
     if val not in allowed:
-        raise ConfigError(
-            f"{key} {val} is invalid (must be one of {sorted(allowed)})"
-        )
+        raise ConfigError(f"{key} {val} is invalid (must be one of {sorted(allowed)})")
     return val
 
 
@@ -78,9 +74,7 @@ def parse_int_range(
 ) -> int:
     val = parse_int(raw, key, section, default)
     if val < lo or val > hi:
-        raise ConfigError(
-            f"{key} {val} is out of range (must be {lo}-{hi})"
-        )
+        raise ConfigError(f"{key} {val} is out of range (must be {lo}-{hi})")
     return val
 
 
@@ -93,9 +87,7 @@ def parse_number(raw: dict, key: str, section: str, default: float) -> float:
     return float(val)
 
 
-def parse_positive_number(
-    raw: dict, key: str, section: str, default: float
-) -> float:
+def parse_positive_number(raw: dict, key: str, section: str, default: float) -> float:
     val = parse_number(raw, key, section, default)
     if val <= 0:
         raise ConfigError(f"{key} must be > 0, got {val}")

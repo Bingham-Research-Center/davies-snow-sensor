@@ -19,4 +19,6 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - run: pip install -e ".[dev]"
       - run: ruff check
-      - run: python -m pytest
+      - run: ruff format --check
+      # Coverage is reported in the job log, not gating.
+      - run: python -m pytest --cov=snowsensor --cov-report=term

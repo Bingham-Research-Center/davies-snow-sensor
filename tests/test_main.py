@@ -37,9 +37,11 @@ def _make_config(**overrides) -> StationConfig:
         lora=LoraConfig(frequency=915.0, tx_power=23),
         storage=StorageConfig(csv_path="/tmp/test_snow.csv"),
         timing=TimingConfig(cycle_interval_minutes=15),
-        sensors=SensorsConfig(ultrasonic=[
-            UltrasonicSensorConfig(id="default", trigger_pin=23, echo_pin=24),
-        ]),
+        sensors=SensorsConfig(
+            ultrasonic=[
+                UltrasonicSensorConfig(id="default", trigger_pin=23, echo_pin=24),
+            ]
+        ),
     )
     defaults.update(overrides)
     return StationConfig(**defaults)
@@ -72,8 +74,11 @@ def mock_deps():
 
         ultra.initialize.return_value = True
         ultra.read_distance_cm.return_value = SensorResult(
-            distance_cm=150.0, num_samples=31, num_valid=31,
-            spread_cm=0.5, error=None,
+            distance_cm=150.0,
+            num_samples=31,
+            num_valid=31,
+            spread_cm=0.5,
+            error=None,
         )
         ultra.get_last_error_reason.return_value = None
 
@@ -130,14 +135,19 @@ class TestRunCycleHappyPath:
 
         call_kwargs = mock_deps["ultra"].read_distance_cm.call_args
         assert call_kwargs == call(
-            num_samples=31, temperature_c=5.0, inter_pulse_delay_ms=60,
+            num_samples=31,
+            temperature_c=5.0,
+            inter_pulse_delay_ms=60,
         )
 
     def test_snow_depth_computed(self, mock_deps):
         station = SensorStation(_make_config(sensor_height_cm=200.0))
         mock_deps["ultra"].read_distance_cm.return_value = SensorResult(
-            distance_cm=150.0, num_samples=31, num_valid=31,
-            spread_cm=0.5, error=None,
+            distance_cm=150.0,
+            num_samples=31,
+            num_valid=31,
+            spread_cm=0.5,
+            error=None,
         )
         station.run_cycle()
 
@@ -180,12 +190,16 @@ class TestDiskFloor:
 
         Usage = namedtuple("Usage", "total used free")
         station = SensorStation(_make_config())
-        with patch("snowsensor.sensor.main.shutil.disk_usage",
-                   return_value=Usage(0, 0, 1)), \
-             caplog.at_level(logging.WARNING):
+        with (
+            patch(
+                "snowsensor.sensor.main.shutil.disk_usage", return_value=Usage(0, 0, 1)
+            ),
+            caplog.at_level(logging.WARNING),
+        ):
             assert station.run_cycle() is True
-        assert any("below" in r.message and "floor" in r.message
-                   for r in caplog.records)
+        assert any(
+            "below" in r.message and "floor" in r.message for r in caplog.records
+        )
         assert DISK_FREE_FLOOR_BYTES > 0
 
     def test_healthy_disk_stays_quiet(self, mock_deps, caplog):
@@ -194,9 +208,13 @@ class TestDiskFloor:
 
         Usage = namedtuple("Usage", "total used free")
         station = SensorStation(_make_config())
-        with patch("snowsensor.sensor.main.shutil.disk_usage",
-                   return_value=Usage(0, 0, DISK_FREE_FLOOR_BYTES * 2)), \
-             caplog.at_level(logging.WARNING):
+        with (
+            patch(
+                "snowsensor.sensor.main.shutil.disk_usage",
+                return_value=Usage(0, 0, DISK_FREE_FLOOR_BYTES * 2),
+            ),
+            caplog.at_level(logging.WARNING),
+        ):
             station.run_cycle()
         assert not [r for r in caplog.records if "disk" in r.message]
 
@@ -235,7 +253,9 @@ class TestRunCycleTemperatureFailure:
         mock_deps["ultra"].read_distance_cm.assert_called_once()
         call_kwargs = mock_deps["ultra"].read_distance_cm.call_args
         assert call_kwargs == call(
-            num_samples=31, temperature_c=None, inter_pulse_delay_ms=60,
+            num_samples=31,
+            temperature_c=None,
+            inter_pulse_delay_ms=60,
         )
 
 
@@ -255,8 +275,11 @@ class TestRunCycleUltrasonicFailure:
 
     def test_read_none_adds_error(self, mock_deps):
         mock_deps["ultra"].read_distance_cm.return_value = SensorResult(
-            distance_cm=None, num_samples=31, num_valid=5,
-            spread_cm=None, error="ultrasonic_read_error",
+            distance_cm=None,
+            num_samples=31,
+            num_valid=5,
+            spread_cm=None,
+            error="ultrasonic_read_error",
         )
 
         station = SensorStation(_make_config())
@@ -267,8 +290,11 @@ class TestRunCycleUltrasonicFailure:
 
     def test_snow_depth_is_none(self, mock_deps):
         mock_deps["ultra"].read_distance_cm.return_value = SensorResult(
-            distance_cm=None, num_samples=31, num_valid=5,
-            spread_cm=None, error="ultrasonic_read_error",
+            distance_cm=None,
+            num_samples=31,
+            num_valid=5,
+            spread_cm=None,
+            error="ultrasonic_read_error",
         )
 
         station = SensorStation(_make_config())
@@ -394,7 +420,9 @@ class TestRateOfChangeBaseline:
         prev = Reading(timestamp=prev_ts, station_id="TEST01", snow_depth_cm=40.0)
         mock_deps["storage"].read_tail.return_value = [prev]
 
-        with patch("snowsensor.sensor.main.compute_quality_flag", real_compute_quality_flag):
+        with patch(
+            "snowsensor.sensor.main.compute_quality_flag", real_compute_quality_flag
+        ):
             SensorStation(_make_config()).run_cycle()
 
         stored = mock_deps["storage"].append.call_args.args[0]
@@ -409,8 +437,11 @@ class TestRunCycleErrorFlags:
         mock_deps["temp"].initialize.return_value = False
         mock_deps["temp"].get_last_error_reason.return_value = "temp_no_device"
         mock_deps["ultra"].read_distance_cm.return_value = SensorResult(
-            distance_cm=None, num_samples=31, num_valid=5,
-            spread_cm=None, error="ultrasonic_read_error",
+            distance_cm=None,
+            num_samples=31,
+            num_valid=5,
+            spread_cm=None,
+            error="ultrasonic_read_error",
         )
 
         station = SensorStation(_make_config())
@@ -570,8 +601,11 @@ lora:
 class TestRunCycleEdgeCases:
     def test_negative_snow_depth_when_distance_exceeds_height(self, mock_deps):
         mock_deps["ultra"].read_distance_cm.return_value = SensorResult(
-            distance_cm=250.0, num_samples=31, num_valid=31,
-            spread_cm=0.5, error=None,
+            distance_cm=250.0,
+            num_samples=31,
+            num_valid=31,
+            spread_cm=0.5,
+            error=None,
         )
         station = SensorStation(_make_config(sensor_height_cm=200.0))
         station.run_cycle()
@@ -581,8 +615,11 @@ class TestRunCycleEdgeCases:
 
     def test_zero_snow_depth(self, mock_deps):
         mock_deps["ultra"].read_distance_cm.return_value = SensorResult(
-            distance_cm=200.0, num_samples=31, num_valid=31,
-            spread_cm=0.5, error=None,
+            distance_cm=200.0,
+            num_samples=31,
+            num_valid=31,
+            spread_cm=0.5,
+            error=None,
         )
         station = SensorStation(_make_config(sensor_height_cm=200.0))
         station.run_cycle()
@@ -596,10 +633,12 @@ class TestRunCycleEdgeCases:
 
 def _make_multi_sensor_config():
     return _make_config(
-        sensors=SensorsConfig(ultrasonic=[
-            UltrasonicSensorConfig(id="north", trigger_pin=5, echo_pin=6),
-            UltrasonicSensorConfig(id="south", trigger_pin=13, echo_pin=19),
-        ]),
+        sensors=SensorsConfig(
+            ultrasonic=[
+                UltrasonicSensorConfig(id="north", trigger_pin=5, echo_pin=6),
+                UltrasonicSensorConfig(id="south", trigger_pin=13, echo_pin=19),
+            ]
+        ),
     )
 
 
@@ -626,16 +665,22 @@ def mock_multi_deps():
         ultra_north = MagicMock()
         ultra_north.initialize.return_value = True
         ultra_north.read_distance_cm.return_value = SensorResult(
-            distance_cm=150.0, num_samples=31, num_valid=31,
-            spread_cm=0.5, error=None,
+            distance_cm=150.0,
+            num_samples=31,
+            num_valid=31,
+            spread_cm=0.5,
+            error=None,
         )
         ultra_north.get_last_error_reason.return_value = None
 
         ultra_south = MagicMock()
         ultra_south.initialize.return_value = True
         ultra_south.read_distance_cm.return_value = SensorResult(
-            distance_cm=148.0, num_samples=31, num_valid=31,
-            spread_cm=0.3, error=None,
+            distance_cm=148.0,
+            num_samples=31,
+            num_valid=31,
+            spread_cm=0.3,
+            error=None,
         )
         ultra_south.get_last_error_reason.return_value = None
 
@@ -689,8 +734,11 @@ class TestMultiSensorOrchestration:
 
     def test_skips_failed_sensor_uses_next(self, mock_multi_deps):
         mock_multi_deps["ultra_north"].read_distance_cm.return_value = SensorResult(
-            distance_cm=None, num_samples=31, num_valid=5,
-            spread_cm=None, error="ultrasonic_read_error",
+            distance_cm=None,
+            num_samples=31,
+            num_valid=5,
+            spread_cm=None,
+            error="ultrasonic_read_error",
         )
 
         station = SensorStation(_make_multi_sensor_config())
@@ -702,12 +750,18 @@ class TestMultiSensorOrchestration:
 
     def test_all_sensors_fail(self, mock_multi_deps):
         mock_multi_deps["ultra_north"].read_distance_cm.return_value = SensorResult(
-            distance_cm=None, num_samples=31, num_valid=5,
-            spread_cm=None, error="ultrasonic_read_error",
+            distance_cm=None,
+            num_samples=31,
+            num_valid=5,
+            spread_cm=None,
+            error="ultrasonic_read_error",
         )
         mock_multi_deps["ultra_south"].read_distance_cm.return_value = SensorResult(
-            distance_cm=None, num_samples=31, num_valid=5,
-            spread_cm=None, error="ultrasonic_read_error",
+            distance_cm=None,
+            num_samples=31,
+            num_valid=5,
+            spread_cm=None,
+            error="ultrasonic_read_error",
         )
 
         station = SensorStation(_make_multi_sensor_config())
@@ -719,7 +773,9 @@ class TestMultiSensorOrchestration:
 
     def test_error_flags_include_sensor_id(self, mock_multi_deps):
         mock_multi_deps["ultra_north"].initialize.return_value = False
-        mock_multi_deps["ultra_north"].get_last_error_reason.return_value = "ultrasonic_no_device"
+        mock_multi_deps[
+            "ultra_north"
+        ].get_last_error_reason.return_value = "ultrasonic_no_device"
 
         station = SensorStation(_make_multi_sensor_config())
         station.run_cycle()
@@ -741,9 +797,11 @@ class TestMultiSensorOrchestration:
 class TestSensorsNoneFallback:
     def test_single_sensor_works(self, mock_deps):
         cfg = _make_config(
-            sensors=SensorsConfig(ultrasonic=[
-                UltrasonicSensorConfig(id="only", trigger_pin=23, echo_pin=24),
-            ]),
+            sensors=SensorsConfig(
+                ultrasonic=[
+                    UltrasonicSensorConfig(id="only", trigger_pin=23, echo_pin=24),
+                ]
+            ),
         )
         station = SensorStation(cfg)
         station.run_cycle()
@@ -770,24 +828,60 @@ class TestSensorsNoneFallback:
 class TestSelectBestSensor:
     def test_picks_lowest_spread(self):
         results = {
-            "a": SensorResult(distance_cm=150.0, num_samples=31, num_valid=31, spread_cm=2.0, error=None),
-            "b": SensorResult(distance_cm=148.0, num_samples=31, num_valid=31, spread_cm=0.5, error=None),
+            "a": SensorResult(
+                distance_cm=150.0,
+                num_samples=31,
+                num_valid=31,
+                spread_cm=2.0,
+                error=None,
+            ),
+            "b": SensorResult(
+                distance_cm=148.0,
+                num_samples=31,
+                num_valid=31,
+                spread_cm=0.5,
+                error=None,
+            ),
         }
         best = _select_best_sensor(results, QCConfig())
         assert best[0] == "b"
 
     def test_ties_broken_alphabetically(self):
         results = {
-            "beta": SensorResult(distance_cm=150.0, num_samples=31, num_valid=31, spread_cm=1.0, error=None),
-            "alpha": SensorResult(distance_cm=148.0, num_samples=31, num_valid=31, spread_cm=1.0, error=None),
+            "beta": SensorResult(
+                distance_cm=150.0,
+                num_samples=31,
+                num_valid=31,
+                spread_cm=1.0,
+                error=None,
+            ),
+            "alpha": SensorResult(
+                distance_cm=148.0,
+                num_samples=31,
+                num_valid=31,
+                spread_cm=1.0,
+                error=None,
+            ),
         }
         best = _select_best_sensor(results, QCConfig())
         assert best[0] == "alpha"
 
     def test_filters_none_distance(self):
         results = {
-            "a": SensorResult(distance_cm=None, num_samples=31, num_valid=5, spread_cm=None, error="fail"),
-            "b": SensorResult(distance_cm=150.0, num_samples=31, num_valid=31, spread_cm=1.0, error=None),
+            "a": SensorResult(
+                distance_cm=None,
+                num_samples=31,
+                num_valid=5,
+                spread_cm=None,
+                error="fail",
+            ),
+            "b": SensorResult(
+                distance_cm=150.0,
+                num_samples=31,
+                num_valid=31,
+                spread_cm=1.0,
+                error=None,
+            ),
         }
         best = _select_best_sensor(results, QCConfig())
         assert best[0] == "b"
@@ -795,8 +889,20 @@ class TestSelectBestSensor:
     def test_filters_too_few_valid(self):
         # min_valid_fraction=0.5, num_samples=31 → need ceil(15.5) = 16
         results = {
-            "a": SensorResult(distance_cm=150.0, num_samples=31, num_valid=10, spread_cm=0.5, error=None),
-            "b": SensorResult(distance_cm=148.0, num_samples=31, num_valid=31, spread_cm=1.0, error=None),
+            "a": SensorResult(
+                distance_cm=150.0,
+                num_samples=31,
+                num_valid=10,
+                spread_cm=0.5,
+                error=None,
+            ),
+            "b": SensorResult(
+                distance_cm=148.0,
+                num_samples=31,
+                num_valid=31,
+                spread_cm=1.0,
+                error=None,
+            ),
         }
         best = _select_best_sensor(results, QCConfig())
         assert best[0] == "b"
@@ -804,16 +910,40 @@ class TestSelectBestSensor:
     def test_filters_too_noisy(self):
         # max_spread_cm=5.0 by default
         results = {
-            "a": SensorResult(distance_cm=150.0, num_samples=31, num_valid=31, spread_cm=6.0, error=None),
-            "b": SensorResult(distance_cm=148.0, num_samples=31, num_valid=31, spread_cm=1.0, error=None),
+            "a": SensorResult(
+                distance_cm=150.0,
+                num_samples=31,
+                num_valid=31,
+                spread_cm=6.0,
+                error=None,
+            ),
+            "b": SensorResult(
+                distance_cm=148.0,
+                num_samples=31,
+                num_valid=31,
+                spread_cm=1.0,
+                error=None,
+            ),
         }
         best = _select_best_sensor(results, QCConfig())
         assert best[0] == "b"
 
     def test_all_fail_returns_none(self):
         results = {
-            "a": SensorResult(distance_cm=None, num_samples=31, num_valid=5, spread_cm=None, error="fail"),
-            "b": SensorResult(distance_cm=None, num_samples=31, num_valid=5, spread_cm=None, error="fail"),
+            "a": SensorResult(
+                distance_cm=None,
+                num_samples=31,
+                num_valid=5,
+                spread_cm=None,
+                error="fail",
+            ),
+            "b": SensorResult(
+                distance_cm=None,
+                num_samples=31,
+                num_valid=5,
+                spread_cm=None,
+                error="fail",
+            ),
         }
         assert _select_best_sensor(results, QCConfig()) is None
 
@@ -822,30 +952,72 @@ class TestSelectBestSensor:
 
     def test_single_passing_sensor(self):
         results = {
-            "only": SensorResult(distance_cm=150.0, num_samples=31, num_valid=31, spread_cm=1.0, error=None),
+            "only": SensorResult(
+                distance_cm=150.0,
+                num_samples=31,
+                num_valid=31,
+                spread_cm=1.0,
+                error=None,
+            ),
         }
         best = _select_best_sensor(results, QCConfig())
         assert best[0] == "only"
 
     def test_single_sensor_fails_qc_returns_none(self):
         results = {
-            "only": SensorResult(distance_cm=150.0, num_samples=31, num_valid=10, spread_cm=1.0, error=None),
+            "only": SensorResult(
+                distance_cm=150.0,
+                num_samples=31,
+                num_valid=10,
+                spread_cm=1.0,
+                error=None,
+            ),
         }
         assert _select_best_sensor(results, QCConfig()) is None
 
     def test_three_way_tie_alphabetical(self):
         results = {
-            "charlie": SensorResult(distance_cm=150.0, num_samples=31, num_valid=31, spread_cm=1.0, error=None),
-            "alpha": SensorResult(distance_cm=148.0, num_samples=31, num_valid=31, spread_cm=1.0, error=None),
-            "bravo": SensorResult(distance_cm=149.0, num_samples=31, num_valid=31, spread_cm=1.0, error=None),
+            "charlie": SensorResult(
+                distance_cm=150.0,
+                num_samples=31,
+                num_valid=31,
+                spread_cm=1.0,
+                error=None,
+            ),
+            "alpha": SensorResult(
+                distance_cm=148.0,
+                num_samples=31,
+                num_valid=31,
+                spread_cm=1.0,
+                error=None,
+            ),
+            "bravo": SensorResult(
+                distance_cm=149.0,
+                num_samples=31,
+                num_valid=31,
+                spread_cm=1.0,
+                error=None,
+            ),
         }
         best = _select_best_sensor(results, QCConfig())
         assert best[0] == "alpha"
 
     def test_spread_none_filtered_out(self):
         results = {
-            "a": SensorResult(distance_cm=150.0, num_samples=31, num_valid=31, spread_cm=None, error=None),
-            "b": SensorResult(distance_cm=148.0, num_samples=31, num_valid=31, spread_cm=1.0, error=None),
+            "a": SensorResult(
+                distance_cm=150.0,
+                num_samples=31,
+                num_valid=31,
+                spread_cm=None,
+                error=None,
+            ),
+            "b": SensorResult(
+                distance_cm=148.0,
+                num_samples=31,
+                num_valid=31,
+                spread_cm=1.0,
+                error=None,
+            ),
         }
         best = _select_best_sensor(results, QCConfig())
         assert best[0] == "b"
@@ -853,8 +1025,20 @@ class TestSelectBestSensor:
     def test_all_filtered_returns_none(self):
         """All have valid distance but fail QC thresholds."""
         results = {
-            "a": SensorResult(distance_cm=150.0, num_samples=31, num_valid=31, spread_cm=6.0, error=None),
-            "b": SensorResult(distance_cm=148.0, num_samples=31, num_valid=10, spread_cm=0.5, error=None),
+            "a": SensorResult(
+                distance_cm=150.0,
+                num_samples=31,
+                num_valid=31,
+                spread_cm=6.0,
+                error=None,
+            ),
+            "b": SensorResult(
+                distance_cm=148.0,
+                num_samples=31,
+                num_valid=10,
+                spread_cm=0.5,
+                error=None,
+            ),
         }
         assert _select_best_sensor(results, QCConfig()) is None
 

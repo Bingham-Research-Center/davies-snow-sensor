@@ -3,7 +3,7 @@
 A dense network of low-cost snow depth stations that outperforms expensive single-point research instruments through spatial coverage, redundancy, and volume of data.
 
 ![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)
-![Tests: 757 passing](https://img.shields.io/badge/tests-757%20passing-brightgreen)
+![CI](https://github.com/Bingham-Research-Center/davies-snow-sensor/actions/workflows/ci.yml/badge.svg)
 ![License: MIT](https://img.shields.io/badge/license-MIT-green)
 
 ## About

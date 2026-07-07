@@ -57,7 +57,10 @@ def main(argv: list[str] | None = None) -> int:
     try:
         on_cal = render_on_calendar(minutes)
     except ValueError as e:
-        print(f"sync-timer: bad cycle_interval_minutes ({minutes!r}): {e}", file=sys.stderr)
+        print(
+            f"sync-timer: bad cycle_interval_minutes ({minutes!r}): {e}",
+            file=sys.stderr,
+        )
         return 2
 
     desired = TEMPLATE.format(minutes=minutes, on_calendar=on_cal)
@@ -70,7 +73,9 @@ def main(argv: list[str] | None = None) -> int:
     tmp.write_text(desired)
     os.chmod(tmp, 0o644)
     tmp.replace(TIMER)
-    print(f"sync-timer: wrote {TIMER} (cycle_interval_minutes={minutes} -> OnCalendar={on_cal})")
+    print(
+        f"sync-timer: wrote {TIMER} (cycle_interval_minutes={minutes} -> OnCalendar={on_cal})"
+    )
 
     subprocess.run(["systemctl", "daemon-reload"], check=True)
     subprocess.run(["systemctl", "restart", "snow-sensor.timer"], check=True)

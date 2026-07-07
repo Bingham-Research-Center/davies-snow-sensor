@@ -118,7 +118,7 @@ class TestReadDistance:
 
     def test_partial_valid_frames(self):
         # Two valid frames, one bogus header byte (skips to next read).
-        sensor = self._sensor_with_frames([_frame(1000), b"\xAA", _frame(1020)])
+        sensor = self._sensor_with_frames([_frame(1000), b"\xaa", _frame(1020)])
         result = sensor.read_distance_cm(num_samples=3)
 
         # Two valid: 100.0, 102.0 -> median 101.0

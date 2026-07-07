@@ -25,15 +25,20 @@ NOW = datetime(2026, 7, 6, 12, 7, 30, tzinfo=timezone.utc)
 
 
 def _data_packet(station_id="DAVIES-01", ts="20260706T120000Z", key=KEY):
-    return auth.append_tag(wire.format_data({
-        "station_id": station_id,
-        "timestamp": ts,
-        "snow_depth_cm": 1.0,
-        "distance_raw_cm": 2.0,
-        "temperature_c": 3.0,
-        "sensor_height_cm": 4.0,
-        "error_flags": "",
-    }), key).encode("utf-8")
+    return auth.append_tag(
+        wire.format_data(
+            {
+                "station_id": station_id,
+                "timestamp": ts,
+                "snow_depth_cm": 1.0,
+                "distance_raw_cm": 2.0,
+                "temperature_c": 3.0,
+                "sensor_height_cm": 4.0,
+                "error_flags": "",
+            }
+        ),
+        key,
+    ).encode("utf-8")
 
 
 def _radio_yielding_packets(*packets):
@@ -71,7 +76,16 @@ class TestReceiveLoopStatus:
                 stop.set()
 
             await asyncio.gather(
-                receive_loop(radio, registry, storage, stop, 0.001, status, key=KEY, now_fn=lambda: NOW),
+                receive_loop(
+                    radio,
+                    registry,
+                    storage,
+                    stop,
+                    0.001,
+                    status,
+                    key=KEY,
+                    now_fn=lambda: NOW,
+                ),
                 stopper(),
             )
             return status
@@ -97,7 +111,9 @@ class TestReceiveLoopStatus:
 
             # status defaults to None — must not raise.
             await asyncio.gather(
-                receive_loop(radio, registry, storage, stop, 0.001, key=KEY, now_fn=lambda: NOW),
+                receive_loop(
+                    radio, registry, storage, stop, 0.001, key=KEY, now_fn=lambda: NOW
+                ),
                 stopper(),
             )
 
@@ -117,7 +133,9 @@ class TestReceiveLoopDedup:
                 stop.set()
 
             await asyncio.gather(
-                receive_loop(radio, registry, storage, stop, 0.001, key=KEY, now_fn=lambda: NOW),
+                receive_loop(
+                    radio, registry, storage, stop, 0.001, key=KEY, now_fn=lambda: NOW
+                ),
                 stopper(),
             )
             return radio, storage
@@ -131,17 +149,29 @@ class TestReceiveLoopDedup:
         assert storage.append.call_count == 1
 
     def test_new_timestamp_from_same_station_is_stored(self):
-        radio, storage = self._run(_radio_yielding_packets(
-            (_data_packet(ts="20260706T120000Z"), -119, -3.5),
-            (_data_packet(ts="20260706T121500Z"), -119, -3.5),
-        ))
+        radio, storage = self._run(
+            _radio_yielding_packets(
+                (_data_packet(ts="20260706T120000Z"), -119, -3.5),
+                (_data_packet(ts="20260706T121500Z"), -119, -3.5),
+            )
+        )
         assert storage.append.call_count == 2
 
     def test_dedup_is_per_station(self):
-        radio, storage = self._run(_radio_yielding_packets(
-            (_data_packet(station_id="DAVIES-01", ts="20260706T120000Z"), -119, -3.5),
-            (_data_packet(station_id="DAVIES-02", ts="20260706T120000Z"), -119, -3.5),
-        ))
+        radio, storage = self._run(
+            _radio_yielding_packets(
+                (
+                    _data_packet(station_id="DAVIES-01", ts="20260706T120000Z"),
+                    -119,
+                    -3.5,
+                ),
+                (
+                    _data_packet(station_id="DAVIES-02", ts="20260706T120000Z"),
+                    -119,
+                    -3.5,
+                ),
+            )
+        )
         assert storage.append.call_count == 2
 
     def test_failed_store_is_retried_on_retransmit(self):
@@ -160,7 +190,9 @@ class TestReceiveLoopDedup:
                 stop.set()
 
             await asyncio.gather(
-                receive_loop(radio, registry, storage, stop, 0.001, key=KEY, now_fn=lambda: NOW),
+                receive_loop(
+                    radio, registry, storage, stop, 0.001, key=KEY, now_fn=lambda: NOW
+                ),
                 stopper(),
             )
             return storage
@@ -183,7 +215,9 @@ class TestReceiveLoopAuth:
                 stop.set()
 
             await asyncio.gather(
-                receive_loop(radio, registry, storage, stop, 0.001, key=KEY, now_fn=lambda: NOW),
+                receive_loop(
+                    radio, registry, storage, stop, 0.001, key=KEY, now_fn=lambda: NOW
+                ),
                 stopper(),
             )
             return radio, storage
@@ -197,11 +231,17 @@ class TestReceiveLoopAuth:
         assert storage.append.call_count == 0
 
     def test_missing_tag_not_acked_not_stored(self):
-        raw = wire.format_data({
-            "station_id": "DAVIES-01", "timestamp": "20260706T120000Z",
-            "snow_depth_cm": 1.0, "distance_raw_cm": 2.0, "temperature_c": 3.0,
-            "sensor_height_cm": 4.0, "error_flags": "",
-        }).encode("utf-8")
+        raw = wire.format_data(
+            {
+                "station_id": "DAVIES-01",
+                "timestamp": "20260706T120000Z",
+                "snow_depth_cm": 1.0,
+                "distance_raw_cm": 2.0,
+                "temperature_c": 3.0,
+                "sensor_height_cm": 4.0,
+                "error_flags": "",
+            }
+        ).encode("utf-8")
         radio, storage = self._run(_radio_yielding_packets((raw, -119, -3.5)))
         assert radio.send_ack.call_count == 0
         assert storage.append.call_count == 0
@@ -236,7 +276,11 @@ class TestReceiveLoopRadioDeath:
         stop = asyncio.Event()
 
         with pytest.raises(RadioDeadError, match="lora_recv_error"):
-            asyncio.run(receive_loop(radio, registry, storage, stop, 0.001, key=KEY, now_fn=lambda: NOW))
+            asyncio.run(
+                receive_loop(
+                    radio, registry, storage, stop, 0.001, key=KEY, now_fn=lambda: NOW
+                )
+            )
         assert radio.receive_packet.call_count == MAX_CONSECUTIVE_RADIO_ERRORS
 
     def test_error_counter_resets_on_clean_idle(self):
@@ -256,7 +300,11 @@ class TestReceiveLoopRadioDeath:
             return script.pop(0)
 
         radio.get_last_error_reason.side_effect = last_error
-        asyncio.run(receive_loop(radio, registry, storage, stop, 0.001, key=KEY, now_fn=lambda: NOW))
+        asyncio.run(
+            receive_loop(
+                radio, registry, storage, stop, 0.001, key=KEY, now_fn=lambda: NOW
+            )
+        )
 
 
 class TestMetricsLoopDiskFloor:
@@ -278,14 +326,19 @@ class TestMetricsLoopDiskFloor:
                     stop.set()
 
             storage.append.side_effect = on_append
-            with patch("snowsensor.base_station.main.shutil.disk_usage",
-                       side_effect=lambda _: Usage(0, 0, frees[min(seen["n"] - 1, 2)])):
+            with patch(
+                "snowsensor.base_station.main.shutil.disk_usage",
+                side_effect=lambda _: Usage(0, 0, frees[min(seen["n"] - 1, 2)]),
+            ):
                 await metrics_loop(storage, 0.001, stop, data_dir="/data")
 
         with caplog.at_level(logging.INFO, logger="base_station"):
             asyncio.run(scenario())
-        warnings = [r for r in caplog.records
-                    if r.levelno == logging.WARNING and "below" in r.message]
+        warnings = [
+            r
+            for r in caplog.records
+            if r.levelno == logging.WARNING and "below" in r.message
+        ]
         recoveries = [r for r in caplog.records if "recovered" in r.message]
         assert len(warnings) == 1
         assert len(recoveries) == 1
@@ -300,8 +353,10 @@ class TestMetricsLoopDiskFloor:
             storage = MagicMock()
             stop = asyncio.Event()
             storage.append.side_effect = lambda row: stop.set()
-            with patch("snowsensor.base_station.main.shutil.disk_usage",
-                       return_value=Usage(0, 0, DISK_FREE_FLOOR_BYTES * 2)):
+            with patch(
+                "snowsensor.base_station.main.shutil.disk_usage",
+                return_value=Usage(0, 0, DISK_FREE_FLOOR_BYTES * 2),
+            ):
                 await metrics_loop(storage, 0.001, stop, data_dir="/data")
 
         with caplog.at_level(logging.INFO, logger="base_station"):
@@ -314,8 +369,11 @@ class TestDisplayLoop:
         async def scenario():
             display = MagicMock()
             status = LinkStatus(
-                station_id="DAVIES-01", rssi=-119, snr=-3.5,
-                last_recv_monotonic=time.monotonic(), packet_count=1,
+                station_id="DAVIES-01",
+                rssi=-119,
+                snr=-3.5,
+                last_recv_monotonic=time.monotonic(),
+                packet_count=1,
             )
             stop = asyncio.Event()
 

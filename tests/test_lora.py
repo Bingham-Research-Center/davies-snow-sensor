@@ -76,9 +76,11 @@ class TestInitialize:
 
     def test_configured_pins_used(self):
         tx = LoRaTransmitter(cs_pin=7, reset_pin=25, key=KEY)
-        with patch("adafruit_rfm9x.RFM9x") as MockRFM, \
-             patch("digitalio.DigitalInOut") as MockDIO, \
-             patch("busio.SPI"):
+        with (
+            patch("adafruit_rfm9x.RFM9x") as MockRFM,
+            patch("digitalio.DigitalInOut") as MockDIO,
+            patch("busio.SPI"),
+        ):
             MockRFM.return_value = MagicMock()
             tx.initialize()
 
@@ -110,7 +112,9 @@ class TestModulationConfig:
 
     def test_kwargs_override_defaults(self):
         tx = LoRaTransmitter(
-            cs_pin=7, reset_pin=25, key=KEY,
+            cs_pin=7,
+            reset_pin=25,
+            key=KEY,
             spreading_factor=9,
             signal_bandwidth_hz=250000,
             coding_rate=5,
@@ -124,18 +128,24 @@ class TestModulationConfig:
         # symbol_time = 512/250000 = 2.05 ms → LDRO off
         assert radio.low_datarate_optimize is False
 
-    @pytest.mark.parametrize("sf,bw,expected_ldro", [
-        (12, 125000, True),    # 32.77 ms — well past threshold
-        (11, 125000, True),    # 16.38 ms — right at threshold
-        (10, 125000, False),   # 8.19 ms
-        (12, 250000, True),    # 16.38 ms — right at threshold
-        (12, 500000, False),   # 8.19 ms
-        (7, 125000, False),    # 1.02 ms
-    ])
+    @pytest.mark.parametrize(
+        "sf,bw,expected_ldro",
+        [
+            (12, 125000, True),  # 32.77 ms — well past threshold
+            (11, 125000, True),  # 16.38 ms — right at threshold
+            (10, 125000, False),  # 8.19 ms
+            (12, 250000, True),  # 16.38 ms — right at threshold
+            (12, 500000, False),  # 8.19 ms
+            (7, 125000, False),  # 1.02 ms
+        ],
+    )
     def test_ldro_threshold(self, sf, bw, expected_ldro):
         tx = LoRaTransmitter(
-            cs_pin=7, reset_pin=25, key=KEY,
-            spreading_factor=sf, signal_bandwidth_hz=bw,
+            cs_pin=7,
+            reset_pin=25,
+            key=KEY,
+            spreading_factor=sf,
+            signal_bandwidth_hz=bw,
         )
         radio = self._initialize_with_mock(tx)
         assert radio.low_datarate_optimize is expected_ldro
@@ -204,7 +214,9 @@ class TestTransmitWithAck:
         mock_rfm.last_rssi = -50
         tx = self._make_initialized_tx(mock_rfm)
 
-        result = tx.transmit_with_ack(self._make_payload(), retries=2, timeout_seconds=5)
+        result = tx.transmit_with_ack(
+            self._make_payload(), retries=2, timeout_seconds=5
+        )
 
         assert result is True
         assert mock_rfm.send.call_count == 2
@@ -214,7 +226,9 @@ class TestTransmitWithAck:
         mock_rfm.send.side_effect = OSError("TX fail")
         tx = self._make_initialized_tx(mock_rfm)
 
-        result = tx.transmit_with_ack(self._make_payload(), retries=3, timeout_seconds=1)
+        result = tx.transmit_with_ack(
+            self._make_payload(), retries=3, timeout_seconds=1
+        )
 
         assert result is False
         assert tx.get_last_error_reason() == "lora_send_error"
@@ -224,7 +238,9 @@ class TestTransmitWithAck:
         mock_rfm.receive.return_value = None  # no ACK ever
         tx = self._make_initialized_tx(mock_rfm)
 
-        result = tx.transmit_with_ack(self._make_payload(), retries=1, timeout_seconds=0.1)
+        result = tx.transmit_with_ack(
+            self._make_payload(), retries=1, timeout_seconds=0.1
+        )
 
         assert result is False
         assert tx.get_last_error_reason() == "lora_ack_timeout"
@@ -239,7 +255,9 @@ class TestTransmitWithAck:
         mock_rfm.last_rssi = -60
         tx = self._make_initialized_tx(mock_rfm)
 
-        result = tx.transmit_with_ack(self._make_payload(), retries=1, timeout_seconds=0.1)
+        result = tx.transmit_with_ack(
+            self._make_payload(), retries=1, timeout_seconds=0.1
+        )
 
         assert result is False
 
@@ -251,7 +269,9 @@ class TestTransmitWithAck:
         ]
         tx = self._make_initialized_tx(mock_rfm)
 
-        result = tx.transmit_with_ack(self._make_payload(), retries=1, timeout_seconds=0.1)
+        result = tx.transmit_with_ack(
+            self._make_payload(), retries=1, timeout_seconds=0.1
+        )
 
         assert result is False
 
@@ -263,7 +283,9 @@ class TestTransmitWithAck:
         ]
         tx = self._make_initialized_tx(mock_rfm)
 
-        result = tx.transmit_with_ack(self._make_payload(), retries=1, timeout_seconds=0.1)
+        result = tx.transmit_with_ack(
+            self._make_payload(), retries=1, timeout_seconds=0.1
+        )
 
         assert result is False
 
@@ -293,7 +315,9 @@ class TestTransmitWithAck:
         mock_rfm.receive.side_effect = OSError("RX fail")
         tx = self._make_initialized_tx(mock_rfm)
 
-        result = tx.transmit_with_ack(self._make_payload(), retries=1, timeout_seconds=0.1)
+        result = tx.transmit_with_ack(
+            self._make_payload(), retries=1, timeout_seconds=0.1
+        )
 
         assert result is False
         assert tx.get_last_error_reason() == "lora_recv_error"

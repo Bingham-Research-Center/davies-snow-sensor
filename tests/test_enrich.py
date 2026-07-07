@@ -119,8 +119,16 @@ class TestEnrichFile:
     def test_round_trip(self, tmp_path: Path):
         input_path = tmp_path / "packets.csv"
         output_path = tmp_path / "packets_readable.csv"
-        _write_input(input_path, [_row(), _row(timestamp="2026-05-07T22:30:27Z",
-                                              recv_timestamp="2026-05-07T22:30:31.348Z")])
+        _write_input(
+            input_path,
+            [
+                _row(),
+                _row(
+                    timestamp="2026-05-07T22:30:27Z",
+                    recv_timestamp="2026-05-07T22:30:31.348Z",
+                ),
+            ],
+        )
 
         n = enrich_file(input_path, output_path, DENVER)
 

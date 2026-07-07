@@ -94,7 +94,9 @@ metrics:
         assert cfg.storage.fsync is True
 
     def test_fsync_disabled(self, tmp_path):
-        body = _VALID_MINIMAL + 'storage:\n  data_dir: "/var/lib/snow"\n  fsync: false\n'
+        body = (
+            _VALID_MINIMAL + 'storage:\n  data_dir: "/var/lib/snow"\n  fsync: false\n'
+        )
         cfg = load_config(_write(tmp_path, body))
         assert cfg.storage.fsync is False
 
@@ -228,17 +230,20 @@ stations:
         assert cfg.lora.preamble_length == 8
         assert cfg.lora.ack_timeout_seconds == 5.0
 
-    @pytest.mark.parametrize("field,bad,match", [
-        ("spreading_factor", 5, "spreading_factor"),
-        ("spreading_factor", 13, "spreading_factor"),
-        ("signal_bandwidth_hz", 100000, "signal_bandwidth_hz"),
-        ("coding_rate", 4, "coding_rate"),
-        ("coding_rate", 9, "coding_rate"),
-        ("preamble_length", 0, "preamble_length"),
-        ("preamble_length", 65536, "preamble_length"),
-        ("ack_timeout_seconds", 0, "ack_timeout_seconds"),
-        ("ack_timeout_seconds", -1, "ack_timeout_seconds"),
-    ])
+    @pytest.mark.parametrize(
+        "field,bad,match",
+        [
+            ("spreading_factor", 5, "spreading_factor"),
+            ("spreading_factor", 13, "spreading_factor"),
+            ("signal_bandwidth_hz", 100000, "signal_bandwidth_hz"),
+            ("coding_rate", 4, "coding_rate"),
+            ("coding_rate", 9, "coding_rate"),
+            ("preamble_length", 0, "preamble_length"),
+            ("preamble_length", 65536, "preamble_length"),
+            ("ack_timeout_seconds", 0, "ack_timeout_seconds"),
+            ("ack_timeout_seconds", -1, "ack_timeout_seconds"),
+        ],
+    )
     def test_modulation_validation_rejects_bad(self, tmp_path, field, bad, match):
         body = f"""\
 station:
@@ -294,6 +299,7 @@ class TestExampleFile:
         # The shipped receiver.example.yaml should always be a valid config.
         # The real key is gitignored and absent in CI; stub only the file read.
         import snowsensor.protocol.lora_config as lora_config_module
+
         monkeypatch.setattr(lora_config_module.auth, "load_key", lambda path: TEST_KEY)
         repo = Path(__file__).resolve().parents[1]
         cfg = load_config(repo / "config" / "receiver.example.yaml")
@@ -339,7 +345,9 @@ class TestEncoding:
         # PyYAML chokes on the non-ASCII bytes in the bundled example
         # (e.g. em-dashes in comments).
         monkeypatch.setattr(
-            locale, "getpreferredencoding", lambda *a, **k: "ascii",
+            locale,
+            "getpreferredencoding",
+            lambda *a, **k: "ascii",
         )
         (tmp_path / "lora.key").write_text(TEST_KEY.hex())
         p = tmp_path / "receiver.yaml"

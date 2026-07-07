@@ -76,18 +76,14 @@ class TemperatureSensor:
             attempts += 1
             try:
                 raw = self._sensor.get_temperature()
-                self._last_read_duration_ms = int(
-                    (time.monotonic() - start) * 1000
-                )
+                self._last_read_duration_ms = int((time.monotonic() - start) * 1000)
                 return self._validate_temperature_c(raw)
             except ResetValueError:
                 continue  # sensor still has reset value, retry
             except SensorNotReadyError:
                 continue
             except Exception:
-                self._last_read_duration_ms = int(
-                    (time.monotonic() - start) * 1000
-                )
+                self._last_read_duration_ms = int((time.monotonic() - start) * 1000)
                 self._last_error = "temp_read_error"
                 return None
 

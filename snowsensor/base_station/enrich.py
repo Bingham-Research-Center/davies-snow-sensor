@@ -103,7 +103,8 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--input", default=DEFAULT_INPUT, help="Path to packets.csv")
     parser.add_argument(
-        "--output", default=None,
+        "--output",
+        default=None,
         help="Output path (default: packets_readable.csv next to --input)",
     )
     parser.add_argument("--tz", default=DEFAULT_TZ, help="Local timezone name (IANA)")
@@ -111,7 +112,8 @@ def main(argv: list[str] | None = None) -> int:
 
     input_path = Path(args.input)
     output_path = (
-        Path(args.output) if args.output
+        Path(args.output)
+        if args.output
         else input_path.with_name("packets_readable.csv")
     )
 

@@ -41,7 +41,9 @@ def station_config(csv_path: Path) -> StationConfig:
         storage=StorageConfig(csv_path=str(csv_path)),
         timing=TimingConfig(cycle_interval_minutes=15),
         sensors=SensorsConfig(
-            ultrasonic=[UltrasonicSensorConfig(id="default", trigger_pin=23, echo_pin=24)]
+            ultrasonic=[
+                UltrasonicSensorConfig(id="default", trigger_pin=23, echo_pin=24)
+            ]
         ),
         qc=QCConfig(),
     )

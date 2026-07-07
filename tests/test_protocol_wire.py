@@ -28,7 +28,9 @@ class TestFormatData:
 
     def test_none_fields_become_dash(self):
         payload = _full_payload(
-            snow_depth_cm=None, distance_raw_cm=None, temperature_c=None,
+            snow_depth_cm=None,
+            distance_raw_cm=None,
+            temperature_c=None,
         )
         result = wire.format_data(payload)
         assert result == "DATA,SNOW01,20260304T120000Z,-,-,-,200.00,"
@@ -73,9 +75,7 @@ class TestParseData:
         }
 
     def test_dashes_decode_as_none(self):
-        result = wire.parse_data(
-            "DATA,SNOW01,20260304T120000Z,-,-,-,200.00,"
-        )
+        result = wire.parse_data("DATA,SNOW01,20260304T120000Z,-,-,-,200.00,")
         assert result is not None
         assert result["snow_depth_cm"] is None
         assert result["distance_raw_cm"] is None
@@ -96,22 +96,16 @@ class TestParseData:
 
     def test_wrong_prefix_returns_none(self):
         assert wire.parse_data("ACK,SNOW01,20260304T120000Z") is None
-        assert wire.parse_data(
-            "OTHER,SNOW01,20260304T120000Z,1,2,3,4,"
-        ) is None
+        assert wire.parse_data("OTHER,SNOW01,20260304T120000Z,1,2,3,4,") is None
 
     def test_wrong_field_count_returns_none(self):
         # Too few
         assert wire.parse_data("DATA,SNOW01,20260304T120000Z") is None
         # Too many
-        assert wire.parse_data(
-            "DATA,SNOW01,20260304T120000Z,1,2,3,4,,extra"
-        ) is None
+        assert wire.parse_data("DATA,SNOW01,20260304T120000Z,1,2,3,4,,extra") is None
 
     def test_empty_station_returns_none(self):
-        assert wire.parse_data(
-            "DATA,,20260304T120000Z,1,2,3,4,"
-        ) is None
+        assert wire.parse_data("DATA,,20260304T120000Z,1,2,3,4,") is None
 
     def test_empty_timestamp_returns_none(self):
         assert wire.parse_data("DATA,SNOW01,,1,2,3,4,") is None
@@ -130,9 +124,7 @@ class TestParseData:
 
     @pytest.mark.parametrize("bad", ["inf", "-inf", "nan", "1e999"])
     def test_non_finite_number_decodes_as_none(self, bad):
-        result = wire.parse_data(
-            f"DATA,SNOW01,20260304T120000Z,{bad},2.0,3.0,4.0,"
-        )
+        result = wire.parse_data(f"DATA,SNOW01,20260304T120000Z,{bad},2.0,3.0,4.0,")
         assert result is not None
         assert result["snow_depth_cm"] is None
         assert result["distance_raw_cm"] == 2.0
@@ -140,8 +132,10 @@ class TestParseData:
 
 class TestFormatAck:
     def test_basic(self):
-        assert wire.format_ack("SNOW01", "20260304T120000Z") == \
-            "ACK,SNOW01,20260304T120000Z"
+        assert (
+            wire.format_ack("SNOW01", "20260304T120000Z")
+            == "ACK,SNOW01,20260304T120000Z"
+        )
 
     def test_round_trip(self):
         msg = wire.format_ack("BASE-01", "20260506T200527Z")

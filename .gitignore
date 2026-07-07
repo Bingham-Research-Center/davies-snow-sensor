@@ -79,3 +79,6 @@ Thumbs.db
 *.pem
 *.key
 credentials.json
+
+# Coverage artifacts
+.coverage

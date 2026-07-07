@@ -30,9 +30,15 @@ def main() -> int:
         default=str(REPO_ROOT / "config" / "station.yaml"),
         help="Path to station YAML (used only if --trig/--echo not set)",
     )
-    parser.add_argument("--trig", type=int, help="HC-SR04 trigger BCM pin (overrides config)")
-    parser.add_argument("--echo", type=int, help="HC-SR04 echo BCM pin (overrides config)")
-    parser.add_argument("--interval", type=float, default=1.0, help="Seconds between reads")
+    parser.add_argument(
+        "--trig", type=int, help="HC-SR04 trigger BCM pin (overrides config)"
+    )
+    parser.add_argument(
+        "--echo", type=int, help="HC-SR04 echo BCM pin (overrides config)"
+    )
+    parser.add_argument(
+        "--interval", type=float, default=1.0, help="Seconds between reads"
+    )
     parser.add_argument("--samples", type=int, default=5, help="Samples per read")
     args = parser.parse_args()
 
@@ -49,7 +55,10 @@ def main() -> int:
 
     sensor = UltrasonicSensor(trigger_pin=trig, echo_pin=echo)
     if not sensor.initialize():
-        print(f"ERROR: failed to initialize sensor: {sensor.get_last_error_reason()}", file=sys.stderr)
+        print(
+            f"ERROR: failed to initialize sensor: {sensor.get_last_error_reason()}",
+            file=sys.stderr,
+        )
         return 1
 
     try:
@@ -61,7 +70,9 @@ def main() -> int:
                     f"(valid {result.num_valid}/{result.num_samples}, spread {result.spread_cm} cm)"
                 )
             else:
-                print(f"No reading: {result.error} (valid {result.num_valid}/{result.num_samples})")
+                print(
+                    f"No reading: {result.error} (valid {result.num_valid}/{result.num_samples})"
+                )
             time.sleep(args.interval)
     except KeyboardInterrupt:
         print("\nStopped.")

@@ -17,7 +17,9 @@ import time
 try:
     import lgpio
 except ImportError:
-    print("ERROR: lgpio not installed. Install with `pip install lgpio`.", file=sys.stderr)
+    print(
+        "ERROR: lgpio not installed. Install with `pip install lgpio`.", file=sys.stderr
+    )
     sys.exit(1)
 
 
@@ -30,6 +32,7 @@ def close_chip(h):
 
 
 # ── Step 1: GPIO sanity check ───────────────────────────────────────────
+
 
 def test_pin_output(h, pin):
     """Claim pin as output, toggle it, and read back."""
@@ -74,14 +77,19 @@ def step1_gpio_sanity(h):
         if pullup == 1 and pulldown == 0:
             print(f"    -> Pin {pin} responds to internal pulls — pin is OK")
         elif pullup == 0:
-            print(f"    -> Pin {pin} reads LOW even with pull-up — something is pulling it LOW hard")
+            print(
+                f"    -> Pin {pin} reads LOW even with pull-up — something is pulling it LOW hard"
+            )
         elif pulldown == 1:
-            print(f"    -> Pin {pin} reads HIGH even with pull-down — something is driving it HIGH")
+            print(
+                f"    -> Pin {pin} reads HIGH even with pull-down — something is driving it HIGH"
+            )
 
     print()
 
 
 # ── Step 2: Fire trigger and high-frequency sample echo ─────────────────
+
 
 def fire_and_sample(h, trig_pin, echo_pin, label=""):
     """Send trigger pulse and sample echo pin for 100ms at max rate."""
@@ -133,7 +141,9 @@ def fire_and_sample(h, trig_pin, echo_pin, label=""):
                 print(f"  {prefix}Pulse width: {pulse_ms:.3f} ms -> ~{dist_cm:.1f} cm")
     else:
         final_val = samples[-1][1] if samples else "?"
-        print(f"  {prefix}NO transitions — echo stayed {'HIGH' if final_val else 'LOW'} for 100ms")
+        print(
+            f"  {prefix}NO transitions — echo stayed {'HIGH' if final_val else 'LOW'} for 100ms"
+        )
 
     print()
     return transitions
@@ -154,6 +164,7 @@ def step3_swapped(h):
 
 
 # ── Main ────────────────────────────────────────────────────────────────
+
 
 def main():
     parser = argparse.ArgumentParser(description="HC-SR04 low-level diagnostic")
@@ -190,12 +201,16 @@ def main():
             print("    1. Voltage divider pulling echo too low (check resistor values)")
             print("    2. Sensor not powered (verify 5V on VCC)")
             print("    3. Faulty sensor")
-            print(f"    4. Pin {TRIG} or {ECHO} clamped by multiplexing board (see README)")
+            print(
+                f"    4. Pin {TRIG} or {ECHO} clamped by multiplexing board (see README)"
+            )
             print()
             print("  Next steps:")
             print("    - Verify resistor values: ~1kΩ (echo->GPIO), ~2kΩ (GPIO->GND)")
             print("    - Check 5V is reaching sensor VCC pin")
-            print("    - Try removing voltage divider briefly for a direct-connect test")
+            print(
+                "    - Try removing voltage divider briefly for a direct-connect test"
+            )
             print("    - Try a different pin pair via --trig N --echo N")
 
     finally:

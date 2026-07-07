@@ -44,8 +44,7 @@ def symbol_time_s(spreading_factor: int, signal_bandwidth_hz: int) -> float:
 def low_datarate_optimize(spreading_factor: int, signal_bandwidth_hz: int) -> bool:
     """Whether LowDataRateOptimize is required for this SF/BW."""
     return (
-        symbol_time_s(spreading_factor, signal_bandwidth_hz)
-        >= LDRO_SYMBOL_THRESHOLD_S
+        symbol_time_s(spreading_factor, signal_bandwidth_hz) >= LDRO_SYMBOL_THRESHOLD_S
     )
 
 
