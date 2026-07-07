@@ -113,13 +113,12 @@ class SanityResult:
 
 # ---- Helpers ----
 
+
 def utc_iso() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def select_sensor(
-    cfg: StationConfig, sensor_id: str | None
-) -> UltrasonicSensorConfig:
+def select_sensor(cfg: StationConfig, sensor_id: str | None) -> UltrasonicSensorConfig:
     if cfg.sensors is None or not cfg.sensors.ultrasonic:
         raise CalibrationError(
             "No ultrasonic sensors configured. Add a 'sensors.ultrasonic' "
@@ -144,6 +143,7 @@ def select_sensor(
 
 
 # ---- Cycle execution ----
+
 
 def run_cycle(
     sensor: UltrasonicSensor,
@@ -206,13 +206,9 @@ def _print_cycle_line(cycle: Cycle) -> None:
             f"(valid {cycle.num_valid}/{cycle.num_samples})"
         )
         return
-    spread = (
-        f"{cycle.spread_cm:5.2f}" if cycle.spread_cm is not None else "  -  "
-    )
+    spread = f"{cycle.spread_cm:5.2f}" if cycle.spread_cm is not None else "  -  "
     temp_str = (
-        f"{cycle.temperature_c:5.1f}C"
-        if cycle.temperature_c is not None
-        else "  n/a "
+        f"{cycle.temperature_c:5.1f}C" if cycle.temperature_c is not None else "  n/a "
     )
     print(
         f"  cycle {cycle.index:>3d}: dist={cycle.distance_cm:6.1f}cm "
@@ -222,6 +218,7 @@ def _print_cycle_line(cycle: Cycle) -> None:
 
 
 # ---- QC and aggregation ----
+
 
 def apply_qc(
     cycles: list[Cycle],
@@ -265,9 +262,7 @@ def apply_qc(
     return kept, rejected
 
 
-def mad_reject(
-    cycles: list[Cycle], k: float
-) -> tuple[list[Cycle], list[Cycle]]:
+def mad_reject(cycles: list[Cycle], k: float) -> tuple[list[Cycle], list[Cycle]]:
     """Drop cycles whose distance is more than k MADs from the median."""
     distances = [c.distance_cm for c in cycles if c.distance_cm is not None]
     if len(distances) < 3:
@@ -327,9 +322,7 @@ def aggregate(cycles: list[Cycle]) -> dict:
         "n_kept": n,
         "median_cm": round(statistics.median(distances), 2),
         "mean_cm": round(statistics.mean(distances), 2),
-        "trimmed_mean_cm": (
-            round(statistics.mean(trimmed), 2) if trimmed else None
-        ),
+        "trimmed_mean_cm": (round(statistics.mean(trimmed), 2) if trimmed else None),
         "stdev_cm": round(statistics.stdev(distances), 3) if n >= 2 else 0.0,
         "iqr_cm": iqr,
         "min_cm": round(min(distances), 2),
@@ -339,6 +332,7 @@ def aggregate(cycles: list[Cycle]) -> dict:
 
 
 # ---- Sanity guard ----
+
 
 def sanity_check(recommended: float, current: float) -> SanityResult:
     delta = recommended - current
@@ -381,9 +375,7 @@ def write_yaml_height(config_path: Path, new_value: float) -> Path:
     original_mode = config_path.stat().st_mode & 0o777
     matches = list(_HEIGHT_LINE_RE.finditer(text))
     if len(matches) == 0:
-        raise RuntimeError(
-            f"Could not find 'sensor_height_cm:' line in {config_path}"
-        )
+        raise RuntimeError(f"Could not find 'sensor_height_cm:' line in {config_path}")
     if len(matches) > 1:
         raise RuntimeError(
             f"Found {len(matches)} 'sensor_height_cm:' lines in {config_path}; "
@@ -393,8 +385,7 @@ def write_yaml_height(config_path: Path, new_value: float) -> Path:
     formatted_value = format(new_value, ".2f")
     new_text = _HEIGHT_LINE_RE.sub(
         lambda m: (
-            f"{m.group('indent')}sensor_height_cm: "
-            f"{formatted_value}{m.group('trail')}"
+            f"{m.group('indent')}sensor_height_cm: {formatted_value}{m.group('trail')}"
         ),
         text,
         count=1,
@@ -413,6 +404,7 @@ def write_yaml_height(config_path: Path, new_value: float) -> Path:
 
 
 # ---- Logging ----
+
 
 def get_git_sha() -> str | None:
     try:
@@ -433,9 +425,7 @@ def get_git_sha() -> str | None:
 
 def write_json_log(path: Path, payload: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8"
-    )
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
 
 
 def append_history_csv(path: Path, row: dict) -> None:
@@ -448,13 +438,9 @@ def append_history_csv(path: Path, row: dict) -> None:
         writer.writerow({k: row.get(k, "") for k in HISTORY_HEADERS})
 
 
-def _effective_samples_per_cycle(
-    args: argparse.Namespace, cfg: StationConfig
-) -> int:
+def _effective_samples_per_cycle(args: argparse.Namespace, cfg: StationConfig) -> int:
     return (
-        cfg.qc.num_samples
-        if args.samples_per_cycle is None
-        else args.samples_per_cycle
+        cfg.qc.num_samples if args.samples_per_cycle is None else args.samples_per_cycle
     )
 
 
@@ -530,15 +516,19 @@ def write_logs(
         "station_id": cfg.station_id,
         "sensor_id": usc.id,
         "current_height_cm": cfg.sensor_height_cm,
-        "recommended_height_cm": (
-            recommended if recommended is not None else ""
-        ),
+        "recommended_height_cm": (recommended if recommended is not None else ""),
         "n_cycles": len(cycles),
         "n_kept": stats["n_kept"],
         "applied": applied,
         "git_sha": git_sha or "",
     }
-    for k in ("median_cm", "trimmed_mean_cm", "stdev_cm", "iqr_cm", "mean_temperature_c"):
+    for k in (
+        "median_cm",
+        "trimmed_mean_cm",
+        "stdev_cm",
+        "iqr_cm",
+        "mean_temperature_c",
+    ):
         v = stats.get(k)
         history_row[k] = "" if v is None else v
     append_history_csv(history_path, history_row)
@@ -546,6 +536,7 @@ def write_logs(
 
 
 # ---- CLI ----
+
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
@@ -628,6 +619,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 # ---- main ----
 
+
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     if args.cycles < 1:
@@ -701,9 +693,7 @@ def main(argv: list[str] | None = None) -> int:
     qc_kept, qc_rejected = apply_qc(
         cycles, cfg.qc.min_valid_fraction, cfg.qc.max_spread_cm
     )
-    print(
-        f"\nQC: kept {len(qc_kept)} / {len(cycles)} cycles after per-cycle gates"
-    )
+    print(f"\nQC: kept {len(qc_kept)} / {len(cycles)} cycles after per-cycle gates")
     if qc_rejected:
         print(f"  rejected ({len(qc_rejected)}):")
         for c in qc_rejected:
@@ -722,8 +712,7 @@ def main(argv: list[str] | None = None) -> int:
         print("  (no cycles survived QC)")
     else:
         print(
-            f"  median       = {stats['median_cm']} cm   "
-            f"(recommended sensor_height_cm)"
+            f"  median       = {stats['median_cm']} cm   (recommended sensor_height_cm)"
         )
         print(f"  trimmed mean = {stats['trimmed_mean_cm']} cm")
         print(f"  mean         = {stats['mean_cm']} cm")
@@ -740,25 +729,35 @@ def main(argv: list[str] | None = None) -> int:
             file=sys.stderr,
         )
         log_path = write_logs(
-            args, cfg, config_path, usc, cycles, stats,
-            applied=False, recommended=None,
+            args,
+            cfg,
+            config_path,
+            usc,
+            cycles,
+            stats,
+            applied=False,
+            recommended=None,
         )
         print(f"  log: {log_path}")
         return EXIT_QC_FAILED
 
     recommended = float(stats["median_cm"])
     sanity = sanity_check(recommended, cfg.sensor_height_cm)
-    print(
-        f"\nSanity check: delta = {sanity.delta:+.2f} cm ({sanity.pct:.1%})"
-    )
+    print(f"\nSanity check: delta = {sanity.delta:+.2f} cm ({sanity.pct:.1%})")
     if not sanity.ok:
         print(f"  ! {sanity.reason}")
 
     if not args.apply:
         print("\nDry run -- no config changes made. Pass --apply to write.")
         log_path = write_logs(
-            args, cfg, config_path, usc, cycles, stats,
-            applied=False, recommended=recommended,
+            args,
+            cfg,
+            config_path,
+            usc,
+            cycles,
+            stats,
+            applied=False,
+            recommended=recommended,
         )
         print(f"  log: {log_path}")
         return EXIT_OK
@@ -771,23 +770,33 @@ def main(argv: list[str] | None = None) -> int:
             file=sys.stderr,
         )
         log_path = write_logs(
-            args, cfg, config_path, usc, cycles, stats,
-            applied=False, recommended=recommended,
+            args,
+            cfg,
+            config_path,
+            usc,
+            cycles,
+            stats,
+            applied=False,
+            recommended=recommended,
         )
         print(f"  log: {log_path}")
         return EXIT_SANITY_REFUSED
 
-    print(
-        f"\nWriting sensor_height_cm = {recommended:.2f} cm to {config_path} ..."
-    )
+    print(f"\nWriting sensor_height_cm = {recommended:.2f} cm to {config_path} ...")
     try:
         backup = write_yaml_height(config_path, recommended)
         print(f"  backup: {backup}")
     except Exception as e:
         print(f"ERROR writing config: {e}", file=sys.stderr)
         log_path = write_logs(
-            args, cfg, config_path, usc, cycles, stats,
-            applied=False, recommended=recommended,
+            args,
+            cfg,
+            config_path,
+            usc,
+            cycles,
+            stats,
+            applied=False,
+            recommended=recommended,
         )
         print(f"  log: {log_path}")
         return EXIT_WRITEBACK_FAILED
@@ -799,23 +808,27 @@ def main(argv: list[str] | None = None) -> int:
             f"ERROR: rewritten config does not parse, restoring backup: {e}",
             file=sys.stderr,
         )
-        config_path.write_text(
-            backup.read_text(encoding="utf-8"), encoding="utf-8"
-        )
+        config_path.write_text(backup.read_text(encoding="utf-8"), encoding="utf-8")
         log_path = write_logs(
-            args, cfg, config_path, usc, cycles, stats,
-            applied=False, recommended=recommended,
+            args,
+            cfg,
+            config_path,
+            usc,
+            cycles,
+            stats,
+            applied=False,
+            recommended=recommended,
         )
         print(f"  log: {log_path}")
         return EXIT_WRITEBACK_FAILED
 
-    print(
-        f"  validated: load_config() reads {new_cfg.sensor_height_cm} cm"
-    )
+    print(f"  validated: load_config() reads {new_cfg.sensor_height_cm} cm")
 
     print("\nVerification cycle ...")
     verify_cycle = _run_verify_cycle(
-        usc, samples, inter_pulse_delay_ms,
+        usc,
+        samples,
+        inter_pulse_delay_ms,
         skip_temperature=args.no_temperature,
     )
     if verify_cycle is not None and verify_cycle.distance_cm is not None:
@@ -839,8 +852,15 @@ def main(argv: list[str] | None = None) -> int:
         )
 
     log_path = write_logs(
-        args, cfg, config_path, usc, cycles, stats,
-        applied=True, recommended=recommended, verify_cycle=verify_cycle,
+        args,
+        cfg,
+        config_path,
+        usc,
+        cycles,
+        stats,
+        applied=True,
+        recommended=recommended,
+        verify_cycle=verify_cycle,
     )
     print(f"\n  log: {log_path}")
     print("Done.")
@@ -853,9 +873,7 @@ def _run_verify_cycle(
     inter_pulse_delay_ms: int,
     skip_temperature: bool,
 ) -> Cycle | None:
-    sensor = UltrasonicSensor(
-        trigger_pin=usc.trigger_pin, echo_pin=usc.echo_pin
-    )
+    sensor = UltrasonicSensor(trigger_pin=usc.trigger_pin, echo_pin=usc.echo_pin)
     if not sensor.initialize():
         return None
     temp_sensor: TemperatureSensor | None = None
@@ -866,8 +884,12 @@ def _run_verify_cycle(
             temp_sensor = None
     try:
         return run_cycle(
-            sensor, temp_sensor, usc.id, cycle_idx=-1,
-            samples=samples, inter_pulse_delay_ms=inter_pulse_delay_ms,
+            sensor,
+            temp_sensor,
+            usc.id,
+            cycle_idx=-1,
+            samples=samples,
+            inter_pulse_delay_ms=inter_pulse_delay_ms,
         )
     finally:
         sensor.cleanup()

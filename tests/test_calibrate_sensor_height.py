@@ -80,18 +80,24 @@ def _make_station_config(
     sensor_height_cm: float = 200.0,
     n_sensors: int = 1,
 ) -> StationConfig:
-    sensors = [
-        UltrasonicSensorConfig(
-            id=f"s{i}", trigger_pin=5 + 2 * i, echo_pin=6 + 2 * i
-        )
-        for i in range(n_sensors)
-    ] if n_sensors > 0 else []
+    sensors = (
+        [
+            UltrasonicSensorConfig(
+                id=f"s{i}", trigger_pin=5 + 2 * i, echo_pin=6 + 2 * i
+            )
+            for i in range(n_sensors)
+        ]
+        if n_sensors > 0
+        else []
+    )
     sensors_cfg = SensorsConfig(ultrasonic=sensors) if sensors else None
     return StationConfig(
         station_id="TEST01",
         sensor_height_cm=sensor_height_cm,
         pins=PinsConfig(
-            ds18b20_data=4, lora_cs=8, lora_reset=25,
+            ds18b20_data=4,
+            lora_cs=8,
+            lora_reset=25,
         ),
         lora=LoraConfig(),
         storage=StorageConfig(csv_path="/tmp/x.csv"),
@@ -103,6 +109,7 @@ def _make_station_config(
 
 # ---------- apply_qc ----------
 
+
 class TestApplyQC:
     def test_all_pass(self):
         cycles = [_make_cycle(i, distance_cm=100.0 + i) for i in range(5)]
@@ -113,14 +120,21 @@ class TestApplyQC:
 
     def test_reject_error(self):
         cycles = [
-            _make_cycle(0, distance_cm=None, num_valid=0,
-                        spread_cm=None, error="ultrasonic_unavailable"),
+            _make_cycle(
+                0,
+                distance_cm=None,
+                num_valid=0,
+                spread_cm=None,
+                error="ultrasonic_unavailable",
+            ),
             _make_cycle(1),
         ]
         kept, rejected = calibrate.apply_qc(cycles, 0.5, 5.0)
         assert len(kept) == 1
         assert len(rejected) == 1
-        assert rejected[0].qc_reason and "ultrasonic_unavailable" in rejected[0].qc_reason
+        assert (
+            rejected[0].qc_reason and "ultrasonic_unavailable" in rejected[0].qc_reason
+        )
 
     def test_reject_low_valid_fraction(self):
         cycles = [_make_cycle(0, num_samples=31, num_valid=10)]  # 32% < 50%
@@ -151,6 +165,7 @@ class TestApplyQC:
 
 # ---------- mad_reject ----------
 
+
 class TestMadReject:
     def test_fewer_than_three_kept_as_is(self):
         cycles = [_make_cycle(0, distance_cm=100.0), _make_cycle(1, distance_cm=200.0)]
@@ -166,10 +181,9 @@ class TestMadReject:
 
     def test_outlier_rejected(self):
         # 5 readings near 100, 1 at 1000 -- MAD is small, 1000 is way out
-        cycles = (
-            [_make_cycle(i, distance_cm=100.0 + 0.1 * i) for i in range(5)]
-            + [_make_cycle(5, distance_cm=1000.0)]
-        )
+        cycles = [_make_cycle(i, distance_cm=100.0 + 0.1 * i) for i in range(5)] + [
+            _make_cycle(5, distance_cm=1000.0)
+        ]
         kept, outliers = calibrate.mad_reject(cycles, k=3.5)
         assert len(outliers) == 1
         assert outliers[0].index == 5
@@ -183,15 +197,15 @@ class TestMadReject:
         assert outliers == []
 
     def test_distance_none_passed_through(self):
-        cycles = (
-            [_make_cycle(i, distance_cm=100.0) for i in range(3)]
-            + [_make_cycle(3, distance_cm=None, error="x")]
-        )
+        cycles = [_make_cycle(i, distance_cm=100.0) for i in range(3)] + [
+            _make_cycle(3, distance_cm=None, error="x")
+        ]
         kept, _ = calibrate.mad_reject(cycles, k=3.5)
         assert any(c.distance_cm is None for c in kept)
 
 
 # ---------- aggregate ----------
+
 
 class TestAggregate:
     def test_empty_returns_none_fields(self):
@@ -242,8 +256,7 @@ class TestAggregate:
 
     def test_no_temperatures(self):
         cycles = [
-            _make_cycle(i, distance_cm=100.0, temperature_c=None)
-            for i in range(3)
+            _make_cycle(i, distance_cm=100.0, temperature_c=None) for i in range(3)
         ]
         s = calibrate.aggregate(cycles)
         assert s["mean_temperature_c"] is None
@@ -267,6 +280,7 @@ class TestAggregate:
 
 
 # ---------- sanity_check ----------
+
 
 class TestSanityCheck:
     def test_within_tolerance(self):
@@ -303,6 +317,7 @@ class TestSanityCheck:
 
 # ---------- select_sensor ----------
 
+
 class TestSelectSensor:
     def test_single_sensor_no_id(self):
         cfg = _make_station_config(n_sensors=1)
@@ -332,6 +347,7 @@ class TestSelectSensor:
 
 # ---------- regex / write_yaml_height ----------
 
+
 class TestHeightRegex:
     def test_matches_standard_line(self):
         text = "  sensor_height_cm: 5.08\n"
@@ -358,9 +374,9 @@ class TestWriteYAMLHeight:
     def test_preserves_comments_and_indentation(self, tmp_path: Path):
         original = (
             "station:\n"
-            "  id: \"TEST01\"\n"
+            '  id: "TEST01"\n'
             "  sensor_height_cm: 5.08  # placeholder, calibrate me\n"
-            "  hardware_profile: \"52pi-ep0123\"\n"
+            '  hardware_profile: "52pi-ep0123"\n'
         )
         cfg_path = tmp_path / "station.yaml"
         cfg_path.write_text(original, encoding="utf-8")
@@ -370,23 +386,20 @@ class TestWriteYAMLHeight:
         new_text = cfg_path.read_text(encoding="utf-8")
         assert "sensor_height_cm: 152.34" in new_text
         assert "# placeholder, calibrate me" in new_text  # trailing comment kept
-        assert "hardware_profile: \"52pi-ep0123\"" in new_text  # ordering kept
+        assert 'hardware_profile: "52pi-ep0123"' in new_text  # ordering kept
         assert backup.exists()
         assert backup.read_text(encoding="utf-8") == original
 
     def test_missing_line_raises(self, tmp_path: Path):
         cfg_path = tmp_path / "station.yaml"
-        cfg_path.write_text("station:\n  id: \"X\"\n", encoding="utf-8")
+        cfg_path.write_text('station:\n  id: "X"\n', encoding="utf-8")
         with pytest.raises(RuntimeError, match="Could not find"):
             calibrate.write_yaml_height(cfg_path, 100.0)
 
     def test_multiple_matches_raises(self, tmp_path: Path):
         cfg_path = tmp_path / "station.yaml"
         cfg_path.write_text(
-            "station:\n"
-            "  sensor_height_cm: 5.08\n"
-            "other:\n"
-            "  sensor_height_cm: 10.0\n",
+            "station:\n  sensor_height_cm: 5.08\nother:\n  sensor_height_cm: 10.0\n",
             encoding="utf-8",
         )
         with pytest.raises(RuntimeError, match="Found 2"):
@@ -394,19 +407,13 @@ class TestWriteYAMLHeight:
 
     def test_atomic_replace_no_tmp_left(self, tmp_path: Path):
         cfg_path = tmp_path / "station.yaml"
-        cfg_path.write_text(
-            "station:\n  sensor_height_cm: 5.08\n", encoding="utf-8"
-        )
+        cfg_path.write_text("station:\n  sensor_height_cm: 5.08\n", encoding="utf-8")
         calibrate.write_yaml_height(cfg_path, 100.0)
         assert not (tmp_path / "station.yaml.tmp").exists()
 
-    def test_preserves_file_mode_for_backup_and_rewritten_config(
-        self, tmp_path: Path
-    ):
+    def test_preserves_file_mode_for_backup_and_rewritten_config(self, tmp_path: Path):
         cfg_path = tmp_path / "station.yaml"
-        cfg_path.write_text(
-            "station:\n  sensor_height_cm: 5.08\n", encoding="utf-8"
-        )
+        cfg_path.write_text("station:\n  sensor_height_cm: 5.08\n", encoding="utf-8")
         os.chmod(cfg_path, 0o640)
 
         backup = calibrate.write_yaml_height(cfg_path, 100.0)
@@ -416,6 +423,7 @@ class TestWriteYAMLHeight:
 
 
 # ---------- append_history_csv ----------
+
 
 class TestHistoryCSV:
     def test_creates_with_header(self, tmp_path: Path):
@@ -442,21 +450,29 @@ class TestHistoryCSV:
 
 # ---------- run_cycle / run_cycles ----------
 
+
 class TestRunCycle:
     def test_passes_temperature_to_distance_read(self):
         from snowsensor.sensor.ultrasonic import SensorResult
 
         mock_sensor = MagicMock()
         mock_sensor.read_distance_cm.return_value = SensorResult(
-            distance_cm=100.0, num_samples=5, num_valid=5,
-            spread_cm=0.1, error=None,
+            distance_cm=100.0,
+            num_samples=5,
+            num_valid=5,
+            spread_cm=0.1,
+            error=None,
         )
         mock_temp = MagicMock()
         mock_temp.read_temperature_c.return_value = -5.5
 
         cycle = calibrate.run_cycle(
-            mock_sensor, mock_temp, sensor_id="default",
-            cycle_idx=0, samples=5, inter_pulse_delay_ms=10,
+            mock_sensor,
+            mock_temp,
+            sensor_id="default",
+            cycle_idx=0,
+            samples=5,
+            inter_pulse_delay_ms=10,
         )
 
         assert cycle.temperature_c == -5.5
@@ -470,12 +486,19 @@ class TestRunCycle:
 
         mock_sensor = MagicMock()
         mock_sensor.read_distance_cm.return_value = SensorResult(
-            distance_cm=100.0, num_samples=5, num_valid=5,
-            spread_cm=0.1, error=None,
+            distance_cm=100.0,
+            num_samples=5,
+            num_valid=5,
+            spread_cm=0.1,
+            error=None,
         )
         cycle = calibrate.run_cycle(
-            mock_sensor, None, sensor_id="default",
-            cycle_idx=0, samples=5, inter_pulse_delay_ms=10,
+            mock_sensor,
+            None,
+            sensor_id="default",
+            cycle_idx=0,
+            samples=5,
+            inter_pulse_delay_ms=10,
         )
         assert cycle.temperature_c is None
         # And the distance call gets temperature_c=None
@@ -489,13 +512,20 @@ class TestRunCycles:
 
         mock_sensor = MagicMock()
         mock_sensor.read_distance_cm.return_value = SensorResult(
-            distance_cm=100.0, num_samples=5, num_valid=5,
-            spread_cm=0.1, error=None,
+            distance_cm=100.0,
+            num_samples=5,
+            num_valid=5,
+            spread_cm=0.1,
+            error=None,
         )
         with patch.object(calibrate.time, "sleep") as mock_sleep:
             cycles = calibrate.run_cycles(
-                mock_sensor, None, sensor_id="default",
-                n_cycles=3, samples=5, inter_pulse_delay_ms=10,
+                mock_sensor,
+                None,
+                sensor_id="default",
+                n_cycles=3,
+                samples=5,
+                inter_pulse_delay_ms=10,
                 cycle_delay_s=2.0,
             )
         assert len(cycles) == 3
@@ -506,6 +536,7 @@ class TestRunCycles:
 
 
 # ---------- parse_args ----------
+
 
 class TestParseArgs:
     def test_defaults(self):
@@ -527,9 +558,19 @@ class TestParseArgs:
 
     def test_overrides(self):
         args = calibrate.parse_args(
-            ["--cycles", "10", "--cycle-delay", "1.5",
-             "--samples-per-cycle", "5", "--mad-k", "2.0",
-             "--no-temperature", "--sensor-id", "stake-A"]
+            [
+                "--cycles",
+                "10",
+                "--cycle-delay",
+                "1.5",
+                "--samples-per-cycle",
+                "5",
+                "--mad-k",
+                "2.0",
+                "--no-temperature",
+                "--sensor-id",
+                "stake-A",
+            ]
         )
         assert args.cycles == 10
         assert args.cycle_delay == 1.5
@@ -541,19 +582,30 @@ class TestParseArgs:
 
 # ---------- main() integration paths ----------
 
+
 class TestMainIntegration:
     """End-to-end tests with mocked hardware."""
 
-    def _patch_sensors(self, distance_cm=100.0, temp_c=20.0,
-                       num_samples=5, num_valid=5, spread_cm=0.1, error=None):
+    def _patch_sensors(
+        self,
+        distance_cm=100.0,
+        temp_c=20.0,
+        num_samples=5,
+        num_valid=5,
+        spread_cm=0.1,
+        error=None,
+    ):
         """Return context-manager-style patches for UltrasonicSensor + TemperatureSensor."""
         from snowsensor.sensor.ultrasonic import SensorResult
 
         ultra_inst = MagicMock()
         ultra_inst.initialize.return_value = True
         ultra_inst.read_distance_cm.return_value = SensorResult(
-            distance_cm=distance_cm, num_samples=num_samples,
-            num_valid=num_valid, spread_cm=spread_cm, error=error,
+            distance_cm=distance_cm,
+            num_samples=num_samples,
+            num_valid=num_valid,
+            spread_cm=spread_cm,
+            error=error,
         )
         ultra_inst.cleanup = MagicMock()
 
@@ -564,14 +616,19 @@ class TestMainIntegration:
 
         return ultra_inst, temp_inst
 
-    def _write_yaml(self, tmp_path: Path, height: float = 200.0,
-                    pin_trig: int = 5, pin_echo: int = 6) -> Path:
+    def _write_yaml(
+        self,
+        tmp_path: Path,
+        height: float = 200.0,
+        pin_trig: int = 5,
+        pin_echo: int = 6,
+    ) -> Path:
         cfg = tmp_path / "station.yaml"
         cfg.write_text(
             f"station:\n"
-            f"  id: \"TEST01\"\n"
+            f'  id: "TEST01"\n'
             f"  sensor_height_cm: {height}\n"
-            f"  hardware_profile: \"52pi-ep0123\"\n"
+            f'  hardware_profile: "52pi-ep0123"\n'
             f"\n"
             f"pins:\n"
             f"  ds18b20_data: 4\n"
@@ -585,7 +642,7 @@ class TestMainIntegration:
             f"      echo_pin: {pin_echo}\n"
             f"\n"
             f"storage:\n"
-            f"  csv_path: \"/tmp/x.csv\"\n"
+            f'  csv_path: "/tmp/x.csv"\n'
             f"\n"
             f"lora:\n"
             f"  key_file: lora.key\n",
@@ -600,17 +657,27 @@ class TestMainIntegration:
         monkeypatch.setattr(calibrate.time, "sleep", lambda *_: None)
 
         ultra_inst, temp_inst = self._patch_sensors(distance_cm=100.0)
-        with patch.object(calibrate, "UltrasonicSensor", return_value=ultra_inst), \
-             patch.object(calibrate, "TemperatureSensor", return_value=temp_inst):
-            rc = calibrate.main([
-                "--config", str(cfg_path),
-                "--cycles", "5", "--cycle-delay", "0",
-            ])
+        with (
+            patch.object(calibrate, "UltrasonicSensor", return_value=ultra_inst),
+            patch.object(calibrate, "TemperatureSensor", return_value=temp_inst),
+        ):
+            rc = calibrate.main(
+                [
+                    "--config",
+                    str(cfg_path),
+                    "--cycles",
+                    "5",
+                    "--cycle-delay",
+                    "0",
+                ]
+            )
 
         assert rc == calibrate.EXIT_OK
         # Config not modified
         assert "100.0" in cfg_path.read_text() or "100" in cfg_path.read_text()
-        assert "100.00" not in cfg_path.read_text()  # we didn't write the formatted version
+        assert (
+            "100.00" not in cfg_path.read_text()
+        )  # we didn't write the formatted version
         # JSON log written
         logs = list((tmp_path / "calib").glob("*.json"))
         assert len(logs) == 1
@@ -624,13 +691,21 @@ class TestMainIntegration:
         monkeypatch.setattr(calibrate.time, "sleep", lambda *_: None)
 
         ultra_inst, temp_inst = self._patch_sensors(distance_cm=100.0)
-        with patch.object(calibrate, "UltrasonicSensor", return_value=ultra_inst), \
-             patch.object(calibrate, "TemperatureSensor", return_value=temp_inst):
-            rc = calibrate.main([
-                "--config", str(cfg_path),
-                "--cycles", "5", "--cycle-delay", "0",
-                "--apply",
-            ])
+        with (
+            patch.object(calibrate, "UltrasonicSensor", return_value=ultra_inst),
+            patch.object(calibrate, "TemperatureSensor", return_value=temp_inst),
+        ):
+            rc = calibrate.main(
+                [
+                    "--config",
+                    str(cfg_path),
+                    "--cycles",
+                    "5",
+                    "--cycle-delay",
+                    "0",
+                    "--apply",
+                ]
+            )
         assert rc == calibrate.EXIT_SANITY_REFUSED
         assert "5.08" in cfg_path.read_text()  # not overwritten
 
@@ -640,13 +715,22 @@ class TestMainIntegration:
         monkeypatch.setattr(calibrate.time, "sleep", lambda *_: None)
 
         ultra_inst, temp_inst = self._patch_sensors(distance_cm=100.0)
-        with patch.object(calibrate, "UltrasonicSensor", return_value=ultra_inst), \
-             patch.object(calibrate, "TemperatureSensor", return_value=temp_inst):
-            rc = calibrate.main([
-                "--config", str(cfg_path),
-                "--cycles", "5", "--cycle-delay", "0",
-                "--apply", "--force",
-            ])
+        with (
+            patch.object(calibrate, "UltrasonicSensor", return_value=ultra_inst),
+            patch.object(calibrate, "TemperatureSensor", return_value=temp_inst),
+        ):
+            rc = calibrate.main(
+                [
+                    "--config",
+                    str(cfg_path),
+                    "--cycles",
+                    "5",
+                    "--cycle-delay",
+                    "0",
+                    "--apply",
+                    "--force",
+                ]
+            )
         assert rc == calibrate.EXIT_OK
         assert "100.00" in cfg_path.read_text()
         # Backup created
@@ -661,12 +745,20 @@ class TestMainIntegration:
 
         # Every cycle has spread=999 -> all rejected
         ultra_inst, temp_inst = self._patch_sensors(spread_cm=999.0)
-        with patch.object(calibrate, "UltrasonicSensor", return_value=ultra_inst), \
-             patch.object(calibrate, "TemperatureSensor", return_value=temp_inst):
-            rc = calibrate.main([
-                "--config", str(cfg_path),
-                "--cycles", "5", "--cycle-delay", "0",
-            ])
+        with (
+            patch.object(calibrate, "UltrasonicSensor", return_value=ultra_inst),
+            patch.object(calibrate, "TemperatureSensor", return_value=temp_inst),
+        ):
+            rc = calibrate.main(
+                [
+                    "--config",
+                    str(cfg_path),
+                    "--cycles",
+                    "5",
+                    "--cycle-delay",
+                    "0",
+                ]
+            )
         assert rc == calibrate.EXIT_QC_FAILED
 
     def test_hardware_init_failure(self, tmp_path, monkeypatch):
@@ -677,10 +769,16 @@ class TestMainIntegration:
         ultra_inst.initialize.return_value = False
         ultra_inst.get_last_error_reason.return_value = "ultrasonic_no_device"
         with patch.object(calibrate, "UltrasonicSensor", return_value=ultra_inst):
-            rc = calibrate.main([
-                "--config", str(cfg_path),
-                "--cycles", "5", "--cycle-delay", "0",
-            ])
+            rc = calibrate.main(
+                [
+                    "--config",
+                    str(cfg_path),
+                    "--cycles",
+                    "5",
+                    "--cycle-delay",
+                    "0",
+                ]
+            )
         assert rc == calibrate.EXIT_HARDWARE
 
     def test_no_temperature_skips_temp_sensor(self, tmp_path, monkeypatch):
@@ -689,46 +787,66 @@ class TestMainIntegration:
         monkeypatch.setattr(calibrate.time, "sleep", lambda *_: None)
 
         ultra_inst, temp_inst = self._patch_sensors(distance_cm=100.0)
-        with patch.object(calibrate, "UltrasonicSensor", return_value=ultra_inst), \
-             patch.object(calibrate, "TemperatureSensor", return_value=temp_inst) as TempCls:
-            rc = calibrate.main([
-                "--config", str(cfg_path),
-                "--cycles", "3", "--cycle-delay", "0",
-                "--no-temperature",
-            ])
+        with (
+            patch.object(calibrate, "UltrasonicSensor", return_value=ultra_inst),
+            patch.object(
+                calibrate, "TemperatureSensor", return_value=temp_inst
+            ) as TempCls,
+        ):
+            rc = calibrate.main(
+                [
+                    "--config",
+                    str(cfg_path),
+                    "--cycles",
+                    "3",
+                    "--cycle-delay",
+                    "0",
+                    "--no-temperature",
+                ]
+            )
         assert rc == calibrate.EXIT_OK
         TempCls.assert_not_called()  # never instantiated
 
-    def test_inter_pulse_delay_zero_cli_override_is_used(
-        self, tmp_path, monkeypatch
-    ):
+    def test_inter_pulse_delay_zero_cli_override_is_used(self, tmp_path, monkeypatch):
         cfg_path = self._write_yaml(tmp_path, height=100.0)
         monkeypatch.setattr(calibrate, "DEFAULT_OUTPUT_DIR", tmp_path / "calib")
         monkeypatch.setattr(calibrate.time, "sleep", lambda *_: None)
 
         ultra_inst, temp_inst = self._patch_sensors(distance_cm=100.0)
-        with patch.object(calibrate, "UltrasonicSensor", return_value=ultra_inst), \
-             patch.object(calibrate, "TemperatureSensor", return_value=temp_inst):
-            rc = calibrate.main([
-                "--config", str(cfg_path),
-                "--cycles", "3", "--cycle-delay", "0",
-                "--samples-per-cycle", "1",
-                "--inter-pulse-delay-ms", "0",
-            ])
+        with (
+            patch.object(calibrate, "UltrasonicSensor", return_value=ultra_inst),
+            patch.object(calibrate, "TemperatureSensor", return_value=temp_inst),
+        ):
+            rc = calibrate.main(
+                [
+                    "--config",
+                    str(cfg_path),
+                    "--cycles",
+                    "3",
+                    "--cycle-delay",
+                    "0",
+                    "--samples-per-cycle",
+                    "1",
+                    "--inter-pulse-delay-ms",
+                    "0",
+                ]
+            )
 
         assert rc == calibrate.EXIT_OK
         kwargs = ultra_inst.read_distance_cm.call_args.kwargs
         assert kwargs["num_samples"] == 1
         assert kwargs["inter_pulse_delay_ms"] == 0
 
-    def test_samples_per_cycle_less_than_one_returns_hardware_error(
-        self, tmp_path
-    ):
+    def test_samples_per_cycle_less_than_one_returns_hardware_error(self, tmp_path):
         cfg_path = self._write_yaml(tmp_path, height=100.0)
-        rc = calibrate.main([
-            "--config", str(cfg_path),
-            "--samples-per-cycle", "0",
-        ])
+        rc = calibrate.main(
+            [
+                "--config",
+                str(cfg_path),
+                "--samples-per-cycle",
+                "0",
+            ]
+        )
         assert rc == calibrate.EXIT_HARDWARE
 
     def test_writeback_rollback_on_invalid_config(self, tmp_path, monkeypatch):
@@ -741,21 +859,31 @@ class TestMainIntegration:
 
         # Force load_config to fail on the second call (post-write validation)
         from snowsensor.sensor.config import load_config as real_load
+
         call_count = {"n": 0}
+
         def fake_load(path):
             call_count["n"] += 1
             if call_count["n"] == 1:
                 return real_load(path)
             raise calibrate.ConfigError("simulated bad rewrite")
 
-        with patch.object(calibrate, "UltrasonicSensor", return_value=ultra_inst), \
-             patch.object(calibrate, "TemperatureSensor", return_value=temp_inst), \
-             patch.object(calibrate, "load_config", side_effect=fake_load):
-            rc = calibrate.main([
-                "--config", str(cfg_path),
-                "--cycles", "3", "--cycle-delay", "0",
-                "--apply",
-            ])
+        with (
+            patch.object(calibrate, "UltrasonicSensor", return_value=ultra_inst),
+            patch.object(calibrate, "TemperatureSensor", return_value=temp_inst),
+            patch.object(calibrate, "load_config", side_effect=fake_load),
+        ):
+            rc = calibrate.main(
+                [
+                    "--config",
+                    str(cfg_path),
+                    "--cycles",
+                    "3",
+                    "--cycle-delay",
+                    "0",
+                    "--apply",
+                ]
+            )
         assert rc == calibrate.EXIT_WRITEBACK_FAILED
         # Config restored from backup
         assert cfg_path.read_text() == original_text

@@ -190,7 +190,10 @@ class TestLoadConfigInvalidTypes:
             load_config(_write_yaml(tmp_path, data))
 
     def test_sensor_height_cm_as_string(self, tmp_path):
-        data = {**VALID_CONFIG, "station": {"id": "DAVIES-01", "sensor_height_cm": "tall"}}
+        data = {
+            **VALID_CONFIG,
+            "station": {"id": "DAVIES-01", "sensor_height_cm": "tall"},
+        }
         with pytest.raises(ConfigError, match="number"):
             load_config(_write_yaml(tmp_path, data))
 
@@ -351,7 +354,9 @@ class TestLoraModulationConfig:
         minimal = {
             "station": {"id": "X", "sensor_height_cm": 100},
             "pins": {
-                "ds18b20_data": 3, "lora_cs": 4, "lora_reset": 5,
+                "ds18b20_data": 3,
+                "lora_cs": 4,
+                "lora_reset": 5,
             },
             "sensors": {
                 "ultrasonic": [
@@ -572,6 +577,7 @@ def test_shipped_config_loads(filename, monkeypatch):
     """Ensure the live config and the shipped template remain loadable."""
     # The real key is gitignored and absent in CI; stub only the file read.
     import snowsensor.protocol.lora_config as lora_config_module
+
     monkeypatch.setattr(lora_config_module.auth, "load_key", lambda path: TEST_KEY)
     path = Path(__file__).resolve().parent.parent / "config" / filename
     cfg = load_config(path)
@@ -875,11 +881,16 @@ class TestEncoding:
         # PyYAML chokes on the non-ASCII bytes in the bundled example
         # (e.g. em-dashes in comments).
         monkeypatch.setattr(
-            locale, "getpreferredencoding", lambda *a, **k: "ascii",
+            locale,
+            "getpreferredencoding",
+            lambda *a, **k: "ascii",
         )
         p = tmp_path / "station.yaml"
         (tmp_path / "lora.key").write_text(TEST_KEY.hex())
-        data = {**VALID_CONFIG, "lora": {**VALID_CONFIG["lora"], "key_file": "lora.key"}}
+        data = {
+            **VALID_CONFIG,
+            "lora": {**VALID_CONFIG["lora"], "key_file": "lora.key"},
+        }
         body = "# Comment with em-dash — must round-trip cleanly\n" + yaml.dump(data)
         p.write_bytes(body.encode("utf-8"))
         cfg = load_config(p)

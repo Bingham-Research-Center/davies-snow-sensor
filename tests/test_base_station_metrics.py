@@ -10,13 +10,18 @@ from snowsensor.base_station import metrics
 
 
 def _vcgencmd_completed(stdout: str, returncode: int = 0):
-    return subprocess.CompletedProcess(args=["vcgencmd"], returncode=returncode, stdout=stdout, stderr="")
+    return subprocess.CompletedProcess(
+        args=["vcgencmd"], returncode=returncode, stdout=stdout, stderr=""
+    )
 
 
 class TestVcgencmdParsers:
     def test_core_voltage_parses(self):
-        with patch.object(metrics.subprocess, "run",
-                          return_value=_vcgencmd_completed("volt=1.2750V\n")):
+        with patch.object(
+            metrics.subprocess,
+            "run",
+            return_value=_vcgencmd_completed("volt=1.2750V\n"),
+        ):
             assert metrics.read_core_voltage() == 1.275
 
     def test_core_voltage_missing_binary(self):
@@ -24,23 +29,31 @@ class TestVcgencmdParsers:
             assert metrics.read_core_voltage() is None
 
     def test_core_voltage_returncode_nonzero(self):
-        with patch.object(metrics.subprocess, "run",
-                          return_value=_vcgencmd_completed("", returncode=1)):
+        with patch.object(
+            metrics.subprocess,
+            "run",
+            return_value=_vcgencmd_completed("", returncode=1),
+        ):
             assert metrics.read_core_voltage() is None
 
     def test_temp_parses(self):
-        with patch.object(metrics.subprocess, "run",
-                          return_value=_vcgencmd_completed("temp=42.8'C\n")):
+        with patch.object(
+            metrics.subprocess, "run", return_value=_vcgencmd_completed("temp=42.8'C\n")
+        ):
             assert metrics.read_soc_temp_c() == 42.8
 
     def test_temp_missing(self):
-        with patch.object(metrics.subprocess, "run",
-                          return_value=_vcgencmd_completed("garbage")):
+        with patch.object(
+            metrics.subprocess, "run", return_value=_vcgencmd_completed("garbage")
+        ):
             assert metrics.read_soc_temp_c() is None
 
     def test_throttled_flags_parses(self):
-        with patch.object(metrics.subprocess, "run",
-                          return_value=_vcgencmd_completed("throttled=0x50000\n")):
+        with patch.object(
+            metrics.subprocess,
+            "run",
+            return_value=_vcgencmd_completed("throttled=0x50000\n"),
+        ):
             assert metrics.read_throttled_flags() == "0x50000"
 
     def test_throttled_flags_missing(self):
@@ -87,8 +100,9 @@ class TestCpuPercent:
 
 class TestSample:
     def test_returns_metrics_row_with_timestamp(self):
-        with patch.object(metrics.subprocess, "run",
-                          return_value=_vcgencmd_completed("volt=1.2750V")):
+        with patch.object(
+            metrics.subprocess, "run", return_value=_vcgencmd_completed("volt=1.2750V")
+        ):
             row = metrics.sample()
             assert row.timestamp.endswith("Z")
             # Timestamp ends in millisecond Z (e.g. 2026-05-06T20:00:00.123Z)

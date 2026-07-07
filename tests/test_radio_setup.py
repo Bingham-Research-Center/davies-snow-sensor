@@ -33,8 +33,13 @@ sys.modules.setdefault("adafruit_rfm9x", _adafruit_rfm9x)
 from snowsensor.protocol import radio_setup  # noqa: E402
 
 ARGS = dict(
-    cs_pin=7, reset_pin=25, frequency_mhz=915.0, tx_power=23,
-    spreading_factor=12, signal_bandwidth_hz=125000, coding_rate=5,
+    cs_pin=7,
+    reset_pin=25,
+    frequency_mhz=915.0,
+    tx_power=23,
+    spreading_factor=12,
+    signal_bandwidth_hz=125000,
+    coding_rate=5,
     preamble_length=8,
 )
 
@@ -55,9 +60,11 @@ class TestCreateRadio:
 
     def test_partial_failure_releases_created_resources(self):
         spi = MagicMock()
-        with patch("busio.SPI", return_value=spi), \
-             patch("adafruit_rfm9x.RFM9x", side_effect=RuntimeError("SPI fail")), \
-             pytest.raises(RuntimeError):
+        with (
+            patch("busio.SPI", return_value=spi),
+            patch("adafruit_rfm9x.RFM9x", side_effect=RuntimeError("SPI fail")),
+            pytest.raises(RuntimeError),
+        ):
             radio_setup.create_radio(**ARGS)
         spi.deinit.assert_called_once()
 

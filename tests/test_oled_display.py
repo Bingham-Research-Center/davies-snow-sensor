@@ -70,8 +70,13 @@ class TestStatusLines:
         assert all(len(ln) <= MAX_LINE_CHARS for ln in lines)
 
     def test_with_packet_seconds(self):
-        st = LinkStatus(station_id="DAVIES-01", rssi=-119, snr=-3.5,
-                        last_recv_monotonic=100.0, packet_count=5)
+        st = LinkStatus(
+            station_id="DAVIES-01",
+            rssi=-119,
+            snr=-3.5,
+            last_recv_monotonic=100.0,
+            packet_count=5,
+        )
         lines = status_lines(st, "BASE-01", now=112.0)
         assert lines[0] == "BASE-01"
         assert "DAVIES-01" in lines[1]
@@ -80,9 +85,14 @@ class TestStatusLines:
         assert all(len(ln) <= MAX_LINE_CHARS for ln in lines)
 
     def test_with_packet_minutes_and_error_flag(self):
-        st = LinkStatus(station_id="DAVIES-01", rssi=-120, snr=-5.0,
-                        last_recv_monotonic=0.0, packet_count=3,
-                        error_flags="ultrasonic_read_error")
+        st = LinkStatus(
+            station_id="DAVIES-01",
+            rssi=-120,
+            snr=-5.0,
+            last_recv_monotonic=0.0,
+            packet_count=3,
+            error_flags="ultrasonic_read_error",
+        )
         lines = status_lines(st, "BASE-01", now=240.0)
         assert "4m ago" in lines[3]
         assert "err" in lines[3]

@@ -68,7 +68,8 @@ class LoRaReceiver:
         return True
 
     def receive_packet(
-        self, timeout_seconds: float = 1.0,
+        self,
+        timeout_seconds: float = 1.0,
     ) -> tuple[bytes, int, float] | None:
         """Block for up to timeout_seconds. Return (payload, rssi, snr) or None."""
         if not self._initialized or self._rfm9x is None:
@@ -76,7 +77,8 @@ class LoRaReceiver:
             return None
         try:
             packet = self._rfm9x.receive(
-                timeout=timeout_seconds, with_header=False,
+                timeout=timeout_seconds,
+                with_header=False,
             )
             if packet is None:
                 self._last_error = None
@@ -96,9 +98,10 @@ class LoRaReceiver:
             self._last_error = "lora_not_initialized"
             return False
         from snowsensor.protocol import auth, wire
-        msg = auth.append_tag(
-            wire.format_ack(station_id, timestamp), self._key
-        ).encode("utf-8")
+
+        msg = auth.append_tag(wire.format_ack(station_id, timestamp), self._key).encode(
+            "utf-8"
+        )
         # Size the transmit window to the ACK's time-on-air so send() doesn't
         # truncate it at the library's fixed 2.0 s default (matters at high SF
         # / CR8, where even the short ACK can approach that ceiling).

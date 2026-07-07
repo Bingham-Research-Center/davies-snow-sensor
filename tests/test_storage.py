@@ -233,7 +233,9 @@ class TestUnparseableRows:
     def test_torn_final_line_skipped_sensor_storage(self, tmp_path):
         path = tmp_path / "sensors.csv"
         good = "2025-01-15T12:00:00Z,1,north,150.0,31,31,0.5,"
-        path.write_text(",".join(SENSOR_COLUMNS) + "\n" + good + "\n" + good[:28] + "\n")
+        path.write_text(
+            ",".join(SENSOR_COLUMNS) + "\n" + good + "\n" + good[:28] + "\n"
+        )
         rows = SensorStorage(path).read_all()
         assert len(rows) == 1
         assert rows[0].sensor_id == "north"
@@ -250,8 +252,13 @@ class TestSensorStorage:
         path = tmp_path / "sensors.csv"
         ss = SensorStorage(path)
         sr = SensorReading(
-            timestamp="2025-01-15T12:00:00Z", cycle_id=1, sensor_id="north",
-            distance_cm=150.0, num_samples=31, num_valid=31, spread_cm=0.5,
+            timestamp="2025-01-15T12:00:00Z",
+            cycle_id=1,
+            sensor_id="north",
+            distance_cm=150.0,
+            num_samples=31,
+            num_valid=31,
+            spread_cm=0.5,
         )
         ss.append(sr)
         lines = path.read_text().strip().splitlines()
@@ -262,8 +269,13 @@ class TestSensorStorage:
         path = tmp_path / "sensors.csv"
         ss = SensorStorage(path)
         original = SensorReading(
-            timestamp="2025-01-15T12:00:00Z", cycle_id=5, sensor_id="south",
-            distance_cm=148.0, num_samples=31, num_valid=28, spread_cm=1.2,
+            timestamp="2025-01-15T12:00:00Z",
+            cycle_id=5,
+            sensor_id="south",
+            distance_cm=148.0,
+            num_samples=31,
+            num_valid=28,
+            spread_cm=1.2,
             error=None,
         )
         ss.append(original)
@@ -275,8 +287,13 @@ class TestSensorStorage:
         path = tmp_path / "sensors.csv"
         ss = SensorStorage(path)
         sr = SensorReading(
-            timestamp="2025-01-15T12:00:00Z", cycle_id=1, sensor_id="north",
-            distance_cm=None, num_samples=31, num_valid=5, spread_cm=None,
+            timestamp="2025-01-15T12:00:00Z",
+            cycle_id=1,
+            sensor_id="north",
+            distance_cm=None,
+            num_samples=31,
+            num_valid=5,
+            spread_cm=None,
             error="ultrasonic_unavailable",
         )
         ss.append(sr)
@@ -303,8 +320,13 @@ class TestSensorStorage:
         path.write_text("")  # pre-created but empty
         ss = SensorStorage(path)
         sr = SensorReading(
-            timestamp="2025-01-15T12:00:00Z", cycle_id=1, sensor_id="north",
-            distance_cm=150.0, num_samples=31, num_valid=31, spread_cm=0.5,
+            timestamp="2025-01-15T12:00:00Z",
+            cycle_id=1,
+            sensor_id="north",
+            distance_cm=150.0,
+            num_samples=31,
+            num_valid=31,
+            spread_cm=0.5,
         )
         ss.append(sr)
         lines = path.read_text().strip().splitlines()
@@ -329,8 +351,11 @@ class TestReadingSelectedUltrasonicId:
 class TestReadingNewFields:
     def test_reproducibility_fields_round_trip(self, storage):
         r = _sample_reading(
-            cycle_id=42, boot_id="abc-123", software_version="v1.0",
-            config_id="deadbeef", quality_flag=5,
+            cycle_id=42,
+            boot_id="abc-123",
+            software_version="v1.0",
+            config_id="deadbeef",
+            quality_flag=5,
         )
         storage.append(r)
         result = storage.read_all()[0]
@@ -358,8 +383,13 @@ class TestFsync:
         path = tmp_path / "sensors.csv"
         ss = SensorStorage(path, fsync=True)
         sr = SensorReading(
-            timestamp="2025-01-15T12:00:00Z", cycle_id=1, sensor_id="north",
-            distance_cm=150.0, num_samples=31, num_valid=31, spread_cm=0.5,
+            timestamp="2025-01-15T12:00:00Z",
+            cycle_id=1,
+            sensor_id="north",
+            distance_cm=150.0,
+            num_samples=31,
+            num_valid=31,
+            spread_cm=0.5,
         )
         ss.append(sr)
         rows = ss.read_all()
@@ -369,10 +399,12 @@ class TestFsync:
     def test_batch_writes_with_fsync(self, csv_path):
         s = Storage(csv_path, fsync=True)
         for i in range(5):
-            s.append(_sample_reading(
-                timestamp=f"2025-01-15T00:{i:02d}:00Z",
-                cycle_id=i + 1,
-            ))
+            s.append(
+                _sample_reading(
+                    timestamp=f"2025-01-15T00:{i:02d}:00Z",
+                    cycle_id=i + 1,
+                )
+            )
         rows = s.read_all()
         assert len(rows) == 5
         assert rows[0].cycle_id == 1

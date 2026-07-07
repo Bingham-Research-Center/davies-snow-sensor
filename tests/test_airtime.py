@@ -16,14 +16,17 @@ class TestSymbolTime:
 
 
 class TestLowDataRateOptimize:
-    @pytest.mark.parametrize("sf,bw,expected", [
-        (12, 125000, True),    # 32.77 ms
-        (11, 125000, True),    # 16.38 ms — right at threshold
-        (10, 125000, False),   # 8.19 ms
-        (12, 250000, True),    # 16.38 ms — right at threshold
-        (12, 500000, False),   # 8.19 ms
-        (7, 125000, False),    # 1.02 ms
-    ])
+    @pytest.mark.parametrize(
+        "sf,bw,expected",
+        [
+            (12, 125000, True),  # 32.77 ms
+            (11, 125000, True),  # 16.38 ms — right at threshold
+            (10, 125000, False),  # 8.19 ms
+            (12, 250000, True),  # 16.38 ms — right at threshold
+            (12, 500000, False),  # 8.19 ms
+            (7, 125000, False),  # 1.02 ms
+        ],
+    )
     def test_threshold(self, sf, bw, expected):
         # Parity with the inline LDRO calc in the radio wrappers' test_ldro_threshold.
         assert airtime.low_datarate_optimize(sf, bw) is expected
@@ -31,12 +34,15 @@ class TestLowDataRateOptimize:
 
 class TestTimeOnAir:
     # Anchors hand-computed from AN1200.13 (CRC on, explicit header, LDRO auto).
-    @pytest.mark.parametrize("pl,sf,bw,cr,pre,expected_ms", [
-        (13, 12, 125000, 5, 8, 1155.07),   # Semtech canonical example
-        (66, 12, 125000, 5, 8, 2957.31),   # real DATA + header, corrected preset
-        (66, 12, 125000, 8, 12, 4464.64),  # old SF12/CR8/preamble12 preset
-        (66, 7, 125000, 5, 8, 123.14),     # current SF7 config (why SF7 works today)
-    ])
+    @pytest.mark.parametrize(
+        "pl,sf,bw,cr,pre,expected_ms",
+        [
+            (13, 12, 125000, 5, 8, 1155.07),  # Semtech canonical example
+            (66, 12, 125000, 5, 8, 2957.31),  # real DATA + header, corrected preset
+            (66, 12, 125000, 8, 12, 4464.64),  # old SF12/CR8/preamble12 preset
+            (66, 7, 125000, 5, 8, 123.14),  # current SF7 config (why SF7 works today)
+        ],
+    )
     def test_anchor_values(self, pl, sf, bw, cr, pre, expected_ms):
         toa_ms = airtime.time_on_air_s(pl, sf, bw, cr, pre) * 1000
         assert toa_ms == pytest.approx(expected_ms, abs=0.1)

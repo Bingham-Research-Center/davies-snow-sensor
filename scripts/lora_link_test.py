@@ -68,14 +68,22 @@ def _banner(mode: str, sf: int, bw: int, cr: int, pre: int, extra: str) -> None:
     )
 
 
-def run_tx(tx, sf: int, bw: int, cr: int, pre: int,
-           interval: float, count: int) -> int:
-    toa_ms = airtime.time_on_air_s(
-        len(b"LT,000000") + airtime.RADIOHEAD_HEADER_BYTES, sf, bw, cr, pre
-    ) * 1000
-    _banner("TX", sf, bw, cr, pre,
-            f"ToA~{toa_ms:.0f} ms, interval {interval}s, "
-            f"count {'inf' if count == 0 else count}")
+def run_tx(tx, sf: int, bw: int, cr: int, pre: int, interval: float, count: int) -> int:
+    toa_ms = (
+        airtime.time_on_air_s(
+            len(b"LT,000000") + airtime.RADIOHEAD_HEADER_BYTES, sf, bw, cr, pre
+        )
+        * 1000
+    )
+    _banner(
+        "TX",
+        sf,
+        bw,
+        cr,
+        pre,
+        f"ToA~{toa_ms:.0f} ms, interval {interval}s, "
+        f"count {'inf' if count == 0 else count}",
+    )
 
     seq = 0
     ok_count = 0
@@ -100,6 +108,7 @@ def _try_reset_button(pin_name: str = "D12"):
     try:
         import board
         import digitalio
+
         btn = digitalio.DigitalInOut(getattr(board, pin_name))
         btn.direction = digitalio.Direction.INPUT
         btn.pull = digitalio.Pull.UP
@@ -112,8 +121,14 @@ def run_rx(rx, sf: int, bw: int, cr: int, pre: int, oled: bool = False) -> int:
     window = airtime.receive_window_s(wire.MAX_DATA_PAYLOAD_BYTES, sf, bw, cr, pre)
     sens = SENSITIVITY_DBM.get((sf, bw))
     snr_limit = DEMOD_SNR_LIMIT_DB.get(sf)
-    _banner("RX", sf, bw, cr, pre,
-            f"listen window {window:.1f}s — waiting for packets (Ctrl-C to stop)")
+    _banner(
+        "RX",
+        sf,
+        bw,
+        cr,
+        pre,
+        f"listen window {window:.1f}s — waiting for packets (Ctrl-C to stop)",
+    )
 
     display = None
     button = None
@@ -122,7 +137,9 @@ def run_rx(rx, sf: int, bw: int, cr: int, pre: int, oled: bool = False) -> int:
         if display.initialize():
             button = _try_reset_button()  # press to re-baseline while repositioning
         else:
-            print(f"  (OLED unavailable: {display.get_last_error_reason()}; console only)")
+            print(
+                f"  (OLED unavailable: {display.get_last_error_reason()}; console only)"
+            )
             display = None
 
     received = 0
@@ -147,7 +164,7 @@ def run_rx(rx, sf: int, bw: int, cr: int, pre: int, oled: bool = False) -> int:
                 print(f"  other packet: {text!r} rssi={rssi}dBm snr={snr:.1f}dB")
                 continue
             try:
-                seq = int(text[len(LINKTEST_PREFIX):])
+                seq = int(text[len(LINKTEST_PREFIX) :])
             except ValueError:
                 continue
 
@@ -200,23 +217,36 @@ def main() -> int:
         description="LoRa link test: blast/measure packets to sweep SF/BW/CR.",
     )
     role = parser.add_mutually_exclusive_group(required=True)
-    role.add_argument("--tx", action="store_true", help="Transmit test packets (station)")
+    role.add_argument(
+        "--tx", action="store_true", help="Transmit test packets (station)"
+    )
     role.add_argument("--rx", action="store_true", help="Receive and measure (base)")
     parser.add_argument(
         "--config",
         help="Path to YAML (default: config/station.yaml for --tx, "
-             "config/receiver.yaml for --rx)",
+        "config/receiver.yaml for --rx)",
     )
     parser.add_argument("--sf", type=int, help="Spreading factor override (6-12)")
     parser.add_argument("--bw", type=int, help="Signal bandwidth Hz override")
     parser.add_argument("--cr", type=int, help="Coding rate override (5-8 == 4/5..4/8)")
     parser.add_argument("--preamble", type=int, help="Preamble length override")
-    parser.add_argument("--interval", type=float, default=3.0,
-                        help="TX seconds between packets (default 3)")
-    parser.add_argument("--count", type=int, default=0,
-                        help="TX packet count, 0 = until Ctrl-C (default 0)")
-    parser.add_argument("--oled", action="store_true",
-                        help="RX: mirror RSSI/SNR to the bonnet OLED (for aiming)")
+    parser.add_argument(
+        "--interval",
+        type=float,
+        default=3.0,
+        help="TX seconds between packets (default 3)",
+    )
+    parser.add_argument(
+        "--count",
+        type=int,
+        default=0,
+        help="TX packet count, 0 = until Ctrl-C (default 0)",
+    )
+    parser.add_argument(
+        "--oled",
+        action="store_true",
+        help="RX: mirror RSSI/SNR to the bonnet OLED (for aiming)",
+    )
     args = parser.parse_args()
 
     config_path = args.config or str(
@@ -226,10 +256,12 @@ def main() -> int:
     if args.tx:
         from snowsensor.sensor.config import load_config
         from snowsensor.sensor.lora import LoRaTransmitter
+
         build = LoRaTransmitter
     else:
         from snowsensor.base_station.config import load_config
         from snowsensor.base_station.radio import LoRaReceiver
+
         build = LoRaReceiver
 
     try:

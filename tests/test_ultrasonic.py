@@ -160,9 +160,7 @@ class TestReadDistance:
     def test_mostly_none_readings(self):
         mock_hw = MagicMock()
         # 5 readings, 4 are None; 1 valid passes through — QC layer decides acceptance.
-        type(mock_hw).distance = PropertyMock(
-            side_effect=[None, None, None, None, 1.5]
-        )
+        type(mock_hw).distance = PropertyMock(side_effect=[None, None, None, None, 1.5])
         mock_hw.speed_of_sound = 343.26
         sensor = self._make_initialized_sensor(mock_hw)
 
@@ -233,7 +231,9 @@ class TestReadDistance:
 
         result = sensor.read_distance_cm(num_samples=3)
 
-        assert result.distance_cm == 123.4  # round(123.45, 1) = 123.4 (banker's rounding)
+        assert (
+            result.distance_cm == 123.4
+        )  # round(123.45, 1) = 123.4 (banker's rounding)
         assert result.error is None
 
     def test_inter_pulse_delay_used(self):
@@ -250,9 +250,7 @@ class TestReadDistance:
 
     def test_single_valid_reading_spread_zero(self):
         mock_hw = MagicMock()
-        type(mock_hw).distance = PropertyMock(
-            side_effect=[None, 1.50, None]
-        )
+        type(mock_hw).distance = PropertyMock(side_effect=[None, 1.50, None])
         mock_hw.speed_of_sound = 343.26
         sensor = self._make_initialized_sensor(mock_hw)
 

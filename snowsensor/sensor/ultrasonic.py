@@ -93,8 +93,11 @@ class UltrasonicSensor:
             self._last_error = "ultrasonic_not_initialized"
             self._last_read_duration_ms = 0
             return SensorResult(
-                distance_cm=None, num_samples=0, num_valid=0,
-                spread_cm=None, error="ultrasonic_not_initialized",
+                distance_cm=None,
+                num_samples=0,
+                num_valid=0,
+                spread_cm=None,
+                error="ultrasonic_not_initialized",
             )
 
         if temperature_c is not None:
@@ -114,13 +117,13 @@ class UltrasonicSensor:
                 if raw is not None:
                     valid_readings.append(raw * 100)  # convert to cm
         except Exception:
-            self._last_read_duration_ms = int(
-                (time.monotonic() - start) * 1000
-            )
+            self._last_read_duration_ms = int((time.monotonic() - start) * 1000)
             self._last_error = "ultrasonic_read_error"
             return SensorResult(
-                distance_cm=None, num_samples=num_samples,
-                num_valid=len(valid_readings), spread_cm=None,
+                distance_cm=None,
+                num_samples=num_samples,
+                num_valid=len(valid_readings),
+                spread_cm=None,
                 error="ultrasonic_read_error",
             )
 
@@ -130,19 +133,28 @@ class UltrasonicSensor:
         if num_valid == 0:
             self._last_error = "ultrasonic_unavailable"
             return SensorResult(
-                distance_cm=None, num_samples=num_samples,
-                num_valid=0, spread_cm=None,
+                distance_cm=None,
+                num_samples=num_samples,
+                num_valid=0,
+                spread_cm=None,
                 error="ultrasonic_unavailable",
             )
 
         median_cm = statistics.median(valid_readings)
-        spread_cm = round(median_absolute_deviation(valid_readings), 2) if num_valid > 1 else 0.0
+        spread_cm = (
+            round(median_absolute_deviation(valid_readings), 2)
+            if num_valid > 1
+            else 0.0
+        )
         distance = self._validate_distance_cm(median_cm)
         error = self._last_error  # set by _validate_distance_cm if OOR
 
         return SensorResult(
-            distance_cm=distance, num_samples=num_samples,
-            num_valid=num_valid, spread_cm=spread_cm, error=error,
+            distance_cm=distance,
+            num_samples=num_samples,
+            num_valid=num_valid,
+            spread_cm=spread_cm,
+            error=error,
         )
 
     def _validate_distance_cm(self, value: float) -> float | None:

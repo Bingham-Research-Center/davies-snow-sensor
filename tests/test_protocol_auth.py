@@ -13,15 +13,17 @@ OTHER_KEY = bytes(range(1, 33))
 
 
 def _data_message(error_flags=""):
-    return wire.format_data({
-        "station_id": "DAVIES-01",
-        "timestamp": "2026-07-06T12:00:00Z",
-        "snow_depth_cm": 42.0,
-        "distance_raw_cm": 158.0,
-        "temperature_c": -12.5,
-        "sensor_height_cm": 200.0,
-        "error_flags": error_flags,
-    })
+    return wire.format_data(
+        {
+            "station_id": "DAVIES-01",
+            "timestamp": "2026-07-06T12:00:00Z",
+            "snow_depth_cm": 42.0,
+            "distance_raw_cm": 158.0,
+            "temperature_c": -12.5,
+            "sensor_height_cm": 200.0,
+            "error_flags": error_flags,
+        }
+    )
 
 
 class TestTagRoundTrip:

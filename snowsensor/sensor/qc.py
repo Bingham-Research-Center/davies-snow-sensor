@@ -88,7 +88,10 @@ def compute_quality_flag(
         min_valid = min_valid_samples(qc)
         if selected_result.num_valid < min_valid:
             flag |= SELECTED_TOO_FEW_VALID
-        if selected_result.spread_cm is not None and selected_result.spread_cm > qc.max_spread_cm:
+        if (
+            selected_result.spread_cm is not None
+            and selected_result.spread_cm > qc.max_spread_cm
+        ):
             flag |= SELECTED_TOO_NOISY
 
     if snow_depth_cm is not None:

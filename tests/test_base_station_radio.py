@@ -55,7 +55,9 @@ class TestModulationConfig:
 
     def test_kwargs_override_defaults(self):
         rx = LoRaReceiver(
-            cs_pin=7, reset_pin=25, key=KEY,
+            cs_pin=7,
+            reset_pin=25,
+            key=KEY,
             spreading_factor=7,
             signal_bandwidth_hz=250000,
             coding_rate=5,
@@ -68,17 +70,23 @@ class TestModulationConfig:
         assert radio.preamble_length == 8
         assert radio.low_datarate_optimize is False
 
-    @pytest.mark.parametrize("sf,bw,expected_ldro", [
-        (12, 125000, True),
-        (11, 125000, True),
-        (10, 125000, False),
-        (12, 250000, True),
-        (12, 500000, False),
-    ])
+    @pytest.mark.parametrize(
+        "sf,bw,expected_ldro",
+        [
+            (12, 125000, True),
+            (11, 125000, True),
+            (10, 125000, False),
+            (12, 250000, True),
+            (12, 500000, False),
+        ],
+    )
     def test_ldro_threshold(self, sf, bw, expected_ldro):
         rx = LoRaReceiver(
-            cs_pin=7, reset_pin=25, key=KEY,
-            spreading_factor=sf, signal_bandwidth_hz=bw,
+            cs_pin=7,
+            reset_pin=25,
+            key=KEY,
+            spreading_factor=sf,
+            signal_bandwidth_hz=bw,
         )
         radio = _init_with_mock(rx)
         assert radio.low_datarate_optimize is expected_ldro
@@ -118,6 +126,7 @@ class TestReceivePacket:
         radio.receive.return_value = None
         assert rx.receive_packet() is None
         assert rx.get_last_error_reason() is None
+
     def test_receive_error_returns_none(self):
         rx = LoRaReceiver(cs_pin=7, reset_pin=25, key=KEY)
         radio = _init_with_mock(rx)
@@ -155,13 +164,25 @@ class TestSendAck:
         assert auth.verify_and_strip(sent, KEY) == "ACK,DAVIES-01,20260613T120000Z"
 
     def test_xmit_timeout_scales_with_sf(self):
-        rx_lo = LoRaReceiver(cs_pin=7, reset_pin=25, key=KEY, spreading_factor=7,
-                             coding_rate=5, preamble_length=8)
+        rx_lo = LoRaReceiver(
+            cs_pin=7,
+            reset_pin=25,
+            key=KEY,
+            spreading_factor=7,
+            coding_rate=5,
+            preamble_length=8,
+        )
         radio_lo = _init_with_mock(rx_lo)
         rx_lo.send_ack("DAVIES-01", "20260613T120000Z")
 
-        rx_hi = LoRaReceiver(cs_pin=7, reset_pin=25, key=KEY, spreading_factor=12,
-                             coding_rate=5, preamble_length=8)
+        rx_hi = LoRaReceiver(
+            cs_pin=7,
+            reset_pin=25,
+            key=KEY,
+            spreading_factor=12,
+            coding_rate=5,
+            preamble_length=8,
+        )
         radio_hi = _init_with_mock(rx_hi)
         rx_hi.send_ack("DAVIES-01", "20260613T120000Z")
 

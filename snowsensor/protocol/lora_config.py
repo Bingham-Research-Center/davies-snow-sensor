@@ -67,18 +67,26 @@ def parse_lora(raw: dict | None, config_dir: Path) -> LoraConfig:
 
     freq = parse_number(raw, "frequency", "lora", defaults.frequency)
     if not any(lo <= freq <= hi for lo, hi in ISM_BANDS):
-        raise ConfigError(
-            f"LoRa frequency {freq} MHz is not in any supported ISM band"
-        )
+        raise ConfigError(f"LoRa frequency {freq} MHz is not in any supported ISM band")
 
     tx_power = parse_int(raw, "tx_power", "lora", defaults.tx_power)
     if tx_power < 5 or tx_power > 23:
-        raise ConfigError(
-            f"TX power {tx_power} dBm is out of range (must be 5-23)"
-        )
+        raise ConfigError(f"TX power {tx_power} dBm is out of range (must be 5-23)")
 
-    sf = parse_int_in(raw, "spreading_factor", "lora", VALID_SPREADING_FACTORS, defaults.spreading_factor)
-    bw = parse_int_in(raw, "signal_bandwidth_hz", "lora", VALID_BANDWIDTHS_HZ, defaults.signal_bandwidth_hz)
+    sf = parse_int_in(
+        raw,
+        "spreading_factor",
+        "lora",
+        VALID_SPREADING_FACTORS,
+        defaults.spreading_factor,
+    )
+    bw = parse_int_in(
+        raw,
+        "signal_bandwidth_hz",
+        "lora",
+        VALID_BANDWIDTHS_HZ,
+        defaults.signal_bandwidth_hz,
+    )
 
     cr = parse_int(raw, "coding_rate", "lora", defaults.coding_rate)
     if cr not in VALID_CODING_RATES:
@@ -89,7 +97,9 @@ def parse_lora(raw: dict | None, config_dir: Path) -> LoraConfig:
     preamble = parse_int_range(
         raw, "preamble_length", "lora", 1, MAX_PREAMBLE_LENGTH, defaults.preamble_length
     )
-    ack = parse_positive_number(raw, "ack_timeout_seconds", "lora", defaults.ack_timeout_seconds)
+    ack = parse_positive_number(
+        raw, "ack_timeout_seconds", "lora", defaults.ack_timeout_seconds
+    )
 
     return LoraConfig(
         frequency=freq,

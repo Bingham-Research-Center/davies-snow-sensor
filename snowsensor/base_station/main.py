@@ -42,7 +42,9 @@ class RadioDeadError(Exception):
 
 
 async def metrics_loop(
-    storage: MetricsStorage, interval_seconds: int, stop: asyncio.Event,
+    storage: MetricsStorage,
+    interval_seconds: int,
+    stop: asyncio.Event,
     data_dir: str | None = None,
 ) -> None:
     """Periodically sample Pi system metrics and append to the metrics CSV."""
@@ -58,9 +60,14 @@ async def metrics_loop(
         try:
             row = sample_metrics()
             await asyncio.to_thread(storage.append, row)
-            log.debug("metrics: cpu=%s mem=%s/%s load=%s temp=%s",
-                      row.cpu_percent, row.mem_used_mb, row.mem_total_mb,
-                      row.load_1m, row.soc_temp_c)
+            log.debug(
+                "metrics: cpu=%s mem=%s/%s load=%s temp=%s",
+                row.cpu_percent,
+                row.mem_used_mb,
+                row.mem_total_mb,
+                row.load_1m,
+                row.soc_temp_c,
+            )
         except Exception:
             log.exception("metrics sample/append failed; continuing")
         if data_dir is not None:
@@ -70,12 +77,15 @@ async def metrics_loop(
                 continue
             if free < DISK_FREE_FLOOR_BYTES and not disk_low:
                 disk_low = True
-                log.warning("disk: %.0f MB free on %s, below %.0f MB floor",
-                            free / 1e6, data_dir, DISK_FREE_FLOOR_BYTES / 1e6)
+                log.warning(
+                    "disk: %.0f MB free on %s, below %.0f MB floor",
+                    free / 1e6,
+                    data_dir,
+                    DISK_FREE_FLOOR_BYTES / 1e6,
+                )
             elif free >= DISK_FREE_FLOOR_BYTES and disk_low:
                 disk_low = False
-                log.info("disk: recovered to %.0f MB free on %s",
-                         free / 1e6, data_dir)
+                log.info("disk: recovered to %.0f MB free on %s", free / 1e6, data_dir)
 
 
 async def receive_loop(
@@ -114,12 +124,16 @@ async def receive_loop(
         try:
             text = payload_bytes.decode("utf-8", errors="replace").strip()
         except Exception:
-            log.warning("packet: undecodable bytes len=%d rssi=%d", len(payload_bytes), rssi)
+            log.warning(
+                "packet: undecodable bytes len=%d rssi=%d", len(payload_bytes), rssi
+            )
             continue
 
         verified = auth.verify_and_strip(text, key)
         if verified is None:
-            log.warning("packet: bad or missing auth tag (rssi=%d): %r — not ACKed", rssi, text)
+            log.warning(
+                "packet: bad or missing auth tag (rssi=%d): %r — not ACKed", rssi, text
+            )
             continue
 
         packet = wire.parse_data(verified)
@@ -129,26 +143,38 @@ async def receive_loop(
 
         station_id = packet["station_id"]
         if not registry.is_known(station_id):
-            log.warning("packet: unknown sender %r (rssi=%d) — not ACKed", station_id, rssi)
+            log.warning(
+                "packet: unknown sender %r (rssi=%d) — not ACKed", station_id, rssi
+            )
             continue
 
         # Authentic but stale = a replay (or a badly skewed sensor clock).
         # No ACK: the base must not vouch for data it won't store.
         if not auth.timestamp_fresh(packet["timestamp"], now_fn()):
-            log.warning("packet: stale timestamp %s from %s — not ACKed",
-                        packet["timestamp"], station_id)
+            log.warning(
+                "packet: stale timestamp %s from %s — not ACKed",
+                packet["timestamp"],
+                station_id,
+            )
             continue
 
         # ACK first so the sender doesn't retry while we're writing CSV.
         sent = radio.send_ack(station_id, packet["timestamp"])
         if not sent:
-            log.error("ack: failed to send for %s @ %s (%s)",
-                      station_id, packet["timestamp"], radio.get_last_error_reason())
+            log.error(
+                "ack: failed to send for %s @ %s (%s)",
+                station_id,
+                packet["timestamp"],
+                radio.get_last_error_reason(),
+            )
             # Keep going — we still want to log the packet.
 
         if last_stored.get(station_id) == packet["timestamp"]:
-            log.info("packet: duplicate from %s @ %s — re-ACKed, not re-stored",
-                     station_id, packet["timestamp"])
+            log.info(
+                "packet: duplicate from %s @ %s — re-ACKed, not re-stored",
+                station_id,
+                packet["timestamp"],
+            )
             continue
 
         row = PacketRow(
@@ -172,8 +198,13 @@ async def receive_loop(
 
         log.info(
             "packet: %s snow=%s temp=%s rssi=%d snr=%.1f flags=%r ack=%s",
-            station_id, packet["snow_depth_cm"], packet["temperature_c"],
-            rssi, snr, packet["error_flags"], "ok" if sent else "fail",
+            station_id,
+            packet["snow_depth_cm"],
+            packet["temperature_c"],
+            rssi,
+            snr,
+            packet["error_flags"],
+            "ok" if sent else "fail",
         )
 
         if status is not None:
@@ -251,7 +282,8 @@ async def run(config: ReceiverConfig) -> int:
     )
     log.info(
         "receive window sized to %.1f s for SF%d",
-        recv_timeout, config.lora.spreading_factor,
+        recv_timeout,
+        config.lora.spreading_factor,
     )
 
     # Optional OLED link readout. A missing/flaky panel must never take down
@@ -260,8 +292,10 @@ async def run(config: ReceiverConfig) -> int:
     display = OledDisplay()
     display_enabled = config.display.enabled and display.initialize()
     if config.display.enabled and not display_enabled:
-        log.warning("OLED unavailable (%s); continuing without display",
-                    display.get_last_error_reason())
+        log.warning(
+            "OLED unavailable (%s); continuing without display",
+            display.get_last_error_reason(),
+        )
 
     stop = asyncio.Event()
     loop = asyncio.get_running_loop()
@@ -269,10 +303,21 @@ async def run(config: ReceiverConfig) -> int:
         loop.add_signal_handler(sig, stop.set)
 
     tasks = [
-        receive_loop(radio, registry, packet_storage, stop, recv_timeout, status,
-                     key=config.lora.key),
-        metrics_loop(metrics_storage, config.metrics.sample_interval_seconds, stop,
-                     data_dir=config.storage.data_dir),
+        receive_loop(
+            radio,
+            registry,
+            packet_storage,
+            stop,
+            recv_timeout,
+            status,
+            key=config.lora.key,
+        ),
+        metrics_loop(
+            metrics_storage,
+            config.metrics.sample_interval_seconds,
+            stop,
+            data_dir=config.storage.data_dir,
+        ),
     ]
     if display_enabled:
         tasks.append(display_loop(display, status, config.station_id, stop))

@@ -25,7 +25,10 @@ def utc_now_iso() -> str:
 def _vcgencmd(args: list[str], timeout: float = 1.0) -> str | None:
     try:
         res = subprocess.run(
-            ["vcgencmd", *args], capture_output=True, text=True, timeout=timeout,
+            ["vcgencmd", *args],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
         )
     except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
         return None

@@ -112,6 +112,8 @@ class MetricsStorage:
 
     def append(self, row: MetricsRow) -> None:
         append_csv(
-            self.path_for(row.timestamp), METRICS_COLUMNS, row_dict(row),
+            self.path_for(row.timestamp),
+            METRICS_COLUMNS,
+            row_dict(row),
             fsync=self._fsync,
         )

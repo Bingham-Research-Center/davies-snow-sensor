@@ -46,7 +46,10 @@ def ensure_csv_header(path: Path, columns: tuple[str, ...]) -> None:
 
 
 def append_csv(
-    path: Path, columns: tuple[str, ...], row: dict, fsync: bool = False,
+    path: Path,
+    columns: tuple[str, ...],
+    row: dict,
+    fsync: bool = False,
 ) -> None:
     """Append a single dict row, creating the file with header if missing."""
     path = Path(path)

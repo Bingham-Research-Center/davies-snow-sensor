@@ -20,8 +20,11 @@ from snowsensor.sensor.ultrasonic import SensorResult
 
 def _good_result(**overrides):
     defaults = dict(
-        distance_cm=150.0, num_samples=31, num_valid=31,
-        spread_cm=0.5, error=None,
+        distance_cm=150.0,
+        num_samples=31,
+        num_valid=31,
+        spread_cm=0.5,
+        error=None,
     )
     defaults.update(overrides)
     return SensorResult(**defaults)

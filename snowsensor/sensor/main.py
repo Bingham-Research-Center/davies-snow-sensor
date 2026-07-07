@@ -33,9 +33,12 @@ def _warn_if_disk_low(csv_path: str) -> None:
     except OSError:
         return
     if free < DISK_FREE_FLOOR_BYTES:
-        logger.warning("disk: %.0f MB free under %s, below %.0f MB floor",
-                       free / 1e6, Path(csv_path).parent,
-                       DISK_FREE_FLOOR_BYTES / 1e6)
+        logger.warning(
+            "disk: %.0f MB free under %s, below %.0f MB floor",
+            free / 1e6,
+            Path(csv_path).parent,
+            DISK_FREE_FLOOR_BYTES / 1e6,
+        )
 
 
 def _select_best_sensor(
@@ -67,7 +70,9 @@ def _sensor_csv_path(main_csv_path: str | Path) -> Path:
 class SensorStation:
     """Orchestrates a single measurement cycle: read → transmit → save."""
 
-    def __init__(self, config: StationConfig, config_path: str | Path | None = None) -> None:
+    def __init__(
+        self, config: StationConfig, config_path: str | Path | None = None
+    ) -> None:
         self._config = config
         self._config_path = config_path
         self._config_id = config_id(config_path) if config_path else ""
@@ -152,8 +157,11 @@ class SensorStation:
                 errors.append(f"{sensor_id}:{err}")
                 logger.warning("Ultrasonic %s init failed: %s", sensor_id, err)
                 sensor_results[sensor_id] = SensorResult(
-                    distance_cm=None, num_samples=0, num_valid=0,
-                    spread_cm=None, error=err,
+                    distance_cm=None,
+                    num_samples=0,
+                    num_valid=0,
+                    spread_cm=None,
+                    error=err,
                 )
             else:
                 result = sensor.read_distance_cm(
@@ -168,7 +176,9 @@ class SensorStation:
                 else:
                     logger.info(
                         "Ultrasonic %s distance: %.1f cm (spread: %s)",
-                        sensor_id, result.distance_cm, result.spread_cm,
+                        sensor_id,
+                        result.distance_cm,
+                        result.spread_cm,
                     )
                 sensor_results[sensor_id] = result
 
@@ -179,8 +189,11 @@ class SensorStation:
                 errors.append(f"{sensor_id}:{err}")
                 logger.warning("MaxBotix %s init failed: %s", sensor_id, err)
                 sensor_results[sensor_id] = SensorResult(
-                    distance_cm=None, num_samples=0, num_valid=0,
-                    spread_cm=None, error=err,
+                    distance_cm=None,
+                    num_samples=0,
+                    num_valid=0,
+                    spread_cm=None,
+                    error=err,
                 )
             else:
                 result = sensor.read_distance_cm(num_samples=qc.num_samples)
@@ -191,7 +204,9 @@ class SensorStation:
                 else:
                     logger.info(
                         "MaxBotix %s distance: %.1f cm (spread: %s)",
-                        sensor_id, result.distance_cm, result.spread_cm,
+                        sensor_id,
+                        result.distance_cm,
+                        result.spread_cm,
                     )
                 sensor_results[sensor_id] = result
 
@@ -202,8 +217,11 @@ class SensorStation:
                 errors.append(f"{sensor_id}:{err}")
                 logger.warning("A02YYUW %s init failed: %s", sensor_id, err)
                 sensor_results[sensor_id] = SensorResult(
-                    distance_cm=None, num_samples=0, num_valid=0,
-                    spread_cm=None, error=err,
+                    distance_cm=None,
+                    num_samples=0,
+                    num_valid=0,
+                    spread_cm=None,
+                    error=err,
                 )
             else:
                 result = sensor.read_distance_cm(num_samples=qc.num_samples)
@@ -214,7 +232,9 @@ class SensorStation:
                 else:
                     logger.info(
                         "A02YYUW %s distance: %.1f cm (spread: %s)",
-                        sensor_id, result.distance_cm, result.spread_cm,
+                        sensor_id,
+                        result.distance_cm,
+                        result.spread_cm,
                     )
                 sensor_results[sensor_id] = result
 
@@ -237,7 +257,9 @@ class SensorStation:
             try:
                 self._sensor_storage.append(sr)
             except Exception:
-                logger.warning("Sensor CSV append failed for %s", sensor_id, exc_info=True)
+                logger.warning(
+                    "Sensor CSV append failed for %s", sensor_id, exc_info=True
+                )
                 storage_failed = True
 
         best = _select_best_sensor(sensor_results, qc)
@@ -246,9 +268,7 @@ class SensorStation:
 
         snow_depth_cm: float | None = None
         if distance_raw_cm is not None:
-            snow_depth_cm = round(
-                self._config.sensor_height_cm - distance_raw_cm, 1
-            )
+            snow_depth_cm = round(self._config.sensor_height_cm - distance_raw_cm, 1)
 
         lora_tx_success = False
         if not self._lora.initialize():

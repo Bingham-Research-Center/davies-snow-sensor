@@ -89,13 +89,9 @@ def _require_number(
     value = float(value)
     if minimum is not None:
         if inclusive_minimum and value < minimum:
-            raise PowerBudgetError(
-                f"Field '{key}' in '{section}' must be >= {minimum}"
-            )
+            raise PowerBudgetError(f"Field '{key}' in '{section}' must be >= {minimum}")
         if not inclusive_minimum and value <= minimum:
-            raise PowerBudgetError(
-                f"Field '{key}' in '{section}' must be > {minimum}"
-            )
+            raise PowerBudgetError(f"Field '{key}' in '{section}' must be > {minimum}")
     return value
 
 
@@ -148,9 +144,7 @@ def _int_or_default(
             f"Field '{key}' in '{section}' must be an integer, got {type(value).__name__}"
         )
     if minimum is not None and value < minimum:
-        raise PowerBudgetError(
-            f"Field '{key}' in '{section}' must be >= {minimum}"
-        )
+        raise PowerBudgetError(f"Field '{key}' in '{section}' must be >= {minimum}")
     return value
 
 
@@ -303,10 +297,8 @@ def load_power_budget_config(path: str | Path) -> PowerBudgetConfig:
 
 
 def average_current_per_unit_ma(component: ComponentConfig) -> float:
-    return (
-        component.sleep_current_ma
-        + component.duty_cycle_fraction
-        * (component.active_current_ma - component.sleep_current_ma)
+    return component.sleep_current_ma + component.duty_cycle_fraction * (
+        component.active_current_ma - component.sleep_current_ma
     )
 
 
@@ -341,9 +333,9 @@ def estimate_power_budget(config: PowerBudgetConfig) -> PowerBudgetResult:
         total_average_power_w * 1000.0 / config.report_voltage_v
     )
     daily_energy_wh = total_average_power_w * 24.0
-    required_battery_capacity_wh = (
-        daily_energy_wh * config.autonomy_days
-    ) / (config.depth_of_discharge * config.efficiency)
+    required_battery_capacity_wh = (daily_energy_wh * config.autonomy_days) / (
+        config.depth_of_discharge * config.efficiency
+    )
     required_battery_capacity_ah = (
         required_battery_capacity_wh / config.battery_voltage_v
     )
@@ -359,7 +351,9 @@ def estimate_power_budget(config: PowerBudgetConfig) -> PowerBudgetResult:
 
 
 def format_report(config: PowerBudgetConfig, result: PowerBudgetResult) -> str:
-    name_width = max(len("Component"), *(len(component.name) for component in result.components))
+    name_width = max(
+        len("Component"), *(len(component.name) for component in result.components)
+    )
     lines = [
         "Power Budget Estimate",
         "",
@@ -408,7 +402,9 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Estimate station power draw from YAML component assumptions."
     )
-    parser.add_argument("--config", required=True, help="Path to power budget YAML file")
+    parser.add_argument(
+        "--config", required=True, help="Path to power budget YAML file"
+    )
     return parser.parse_args(argv)
 
 

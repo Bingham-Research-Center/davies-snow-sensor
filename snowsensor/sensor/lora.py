@@ -101,8 +101,7 @@ class LoRaTransmitter:
             return False
 
         timeout = (
-            self._ack_timeout_seconds if timeout_seconds is None
-            else timeout_seconds
+            self._ack_timeout_seconds if timeout_seconds is None else timeout_seconds
         )
         message = auth.append_tag(wire.format_data(payload), self._key)
         encoded = message.encode("utf-8")
@@ -126,7 +125,8 @@ class LoRaTransmitter:
                 remaining = max(0.0, deadline - time.monotonic())
                 try:
                     packet = self._rfm9x.receive(
-                        timeout=remaining, with_header=False,
+                        timeout=remaining,
+                        with_header=False,
                     )
                 except Exception:
                     self._last_error = "lora_recv_error"
@@ -156,9 +156,7 @@ class LoRaTransmitter:
             else:
                 self._last_error = "lora_ack_timeout"
 
-        self._last_transmit_duration_ms = int(
-            (time.monotonic() - start) * 1000
-        )
+        self._last_transmit_duration_ms = int((time.monotonic() - start) * 1000)
         return False
 
     def sleep(self) -> None:
@@ -192,4 +190,3 @@ class LoRaTransmitter:
         self._last_error = None
         self._last_rssi = None
         self._last_transmit_duration_ms = 0
-

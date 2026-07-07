@@ -20,12 +20,15 @@ spec.loader.exec_module(sync_timer)
 
 
 class TestRenderOnCalendar:
-    @pytest.mark.parametrize("minutes,expected", [
-        (1, "*:0/1"),
-        (15, "*:0/15"),
-        (30, "*:0/30"),
-        (60, "*:00"),
-    ])
+    @pytest.mark.parametrize(
+        "minutes,expected",
+        [
+            (1, "*:0/1"),
+            (15, "*:0/15"),
+            (30, "*:0/30"),
+            (60, "*:00"),
+        ],
+    )
     def test_valid(self, minutes, expected):
         assert sync_timer.render_on_calendar(minutes) == expected
 
