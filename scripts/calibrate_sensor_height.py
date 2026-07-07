@@ -46,6 +46,7 @@ from snowsensor.sensor.config import (
     config_id,
     load_config,
 )
+from snowsensor.protocol.timestamp import utc_now_iso
 from snowsensor.sensor.temperature import TemperatureSensor
 from snowsensor.sensor.ultrasonic import SensorResult, UltrasonicSensor
 
@@ -114,10 +115,6 @@ class SanityResult:
 # ---- Helpers ----
 
 
-def utc_iso() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-
-
 def select_sensor(cfg: StationConfig, sensor_id: str | None) -> UltrasonicSensorConfig:
     if cfg.sensors is None or not cfg.sensors.ultrasonic:
         raise CalibrationError(
@@ -165,7 +162,7 @@ def run_cycle(
 
     return Cycle(
         index=cycle_idx,
-        timestamp_utc=utc_iso(),
+        timestamp_utc=utc_now_iso(),
         sensor_id=sensor_id,
         distance_cm=result.distance_cm,
         num_samples=result.num_samples,
@@ -466,7 +463,7 @@ def write_logs(
     verify_cycle: Cycle | None = None,
 ) -> Path:
     """Write per-run JSON log + append a row to history.csv. Return the JSON path."""
-    ts_iso = utc_iso()
+    ts_iso = utc_now_iso()
     ts_compact = ts_iso.replace(":", "").replace("-", "")
     git_sha = get_git_sha()
     cfg_hash = config_id(config_path) if config_path.exists() else None

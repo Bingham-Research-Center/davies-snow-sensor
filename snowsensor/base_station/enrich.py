@@ -21,30 +21,18 @@ import argparse
 import csv
 import os
 import sys
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from snowsensor.base_station.storage import PACKET_COLUMNS, StorageError
+from snowsensor.protocol.timestamp import parse_iso_utc
 
 DERIVED_COLUMNS = ("recv_local", "latency_s")
 OUTPUT_COLUMNS = DERIVED_COLUMNS + PACKET_COLUMNS
 
 DEFAULT_INPUT = "/home/admin/data/DAVIES-01/packets.csv"
 DEFAULT_TZ = "America/Denver"
-
-
-def parse_iso_utc(text: str) -> datetime | None:
-    """Parse an ISO 8601 UTC timestamp ('...Z'). Returns None for empty/malformed."""
-    if not text:
-        return None
-    try:
-        dt = datetime.fromisoformat(text)
-    except ValueError:
-        return None
-    if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=timezone.utc)
-    return dt.astimezone(timezone.utc)
 
 
 def to_local(dt: datetime, tz: ZoneInfo) -> str:

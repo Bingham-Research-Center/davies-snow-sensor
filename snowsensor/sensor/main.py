@@ -8,9 +8,9 @@ import os
 import shutil
 import signal
 import sys
-from datetime import datetime, timezone
 from pathlib import Path
 
+from snowsensor.protocol.timestamp import utc_now_iso
 from snowsensor.sensor.a02yyuw import A02yyuwSensor
 from snowsensor.sensor.config import QCConfig, StationConfig, config_id, load_config
 from snowsensor.sensor.cycle import get_boot_id, read_and_increment_cycle_id
@@ -124,7 +124,7 @@ class SensorStation:
         through the error_flags string and QC bitmask instead of raising, so the
         systemd oneshot unit doesn't enter `failed` state on a bad sensor read.
         """
-        timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        timestamp = utc_now_iso()
         errors: list[str] = []
         storage_failed = False
         _warn_if_disk_low(self._config.storage.csv_path)
