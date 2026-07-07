@@ -114,12 +114,12 @@ class TestMetricsStorage:
     def test_creates_in_receiver_subdir(self, tmp_path):
         s = MetricsStorage(tmp_path)
         s.append(self._row())
-        assert (tmp_path / "_receiver" / "metrics.csv").exists()
+        assert (tmp_path / "_receiver" / "metrics_2026-05.csv").exists()
 
     def test_header(self, tmp_path):
         s = MetricsStorage(tmp_path)
         s.append(self._row())
-        header, rows = _read_csv(tmp_path / "_receiver" / "metrics.csv")
+        header, rows = _read_csv(tmp_path / "_receiver" / "metrics_2026-05.csv")
         assert tuple(header) == METRICS_COLUMNS
         assert rows[0]["cpu_percent"] == "4.2"
         assert rows[0]["throttled_flags"] == "0x0"
@@ -128,12 +128,20 @@ class TestMetricsStorage:
         s = MetricsStorage(tmp_path)
         s.append(self._row())
         s.append(self._row(timestamp="2026-05-06T20:00:30.000Z", cpu_percent=5.0))
-        _, rows = _read_csv(tmp_path / "_receiver" / "metrics.csv")
+        _, rows = _read_csv(tmp_path / "_receiver" / "metrics_2026-05.csv")
         assert len(rows) == 2
+
+    def test_monthly_rotation(self, tmp_path):
+        s = MetricsStorage(tmp_path)
+        s.append(self._row(timestamp="2026-05-31T23:59:30.000Z"))
+        s.append(self._row(timestamp="2026-06-01T00:00:00.000Z"))
+        assert (tmp_path / "_receiver" / "metrics_2026-05.csv").exists()
+        _, june = _read_csv(tmp_path / "_receiver" / "metrics_2026-06.csv")
+        assert len(june) == 1
 
     def test_none_fields_become_empty(self, tmp_path):
         s = MetricsStorage(tmp_path)
         s.append(self._row(cpu_percent=None, core_voltage_v=None))
-        _, rows = _read_csv(tmp_path / "_receiver" / "metrics.csv")
+        _, rows = _read_csv(tmp_path / "_receiver" / "metrics_2026-05.csv")
         assert rows[0]["cpu_percent"] == ""
         assert rows[0]["core_voltage_v"] == ""

@@ -81,7 +81,7 @@ Under `storage.data_dir`:
     DAVIES-02/              # only if DAVIES-02 is added to stations
         packets.csv
     _receiver/
-        metrics.csv         # one row per Pi-metrics sample
+        metrics_YYYY-MM.csv # one row per Pi-metrics sample, monthly files
 ```
 
 ### `packets.csv` columns
@@ -99,7 +99,7 @@ Under `storage.data_dir`:
 | rssi | int | dBm of the received DATA packet |
 | snr | float | dB of the received DATA packet |
 
-### `metrics.csv` columns
+### Metrics CSV columns (`metrics_YYYY-MM.csv`)
 
 | Column | Type | Description |
 |---|---|---|
@@ -125,7 +125,7 @@ journalctl -u base-station.service -f
 tail -20 /home/admin/data/DAVIES-01/packets.csv
 
 # Recent system metrics
-tail -10 /home/admin/data/_receiver/metrics.csv
+tail -10 /home/admin/data/_receiver/metrics_$(date -u +%Y-%m).csv
 
 # Service status
 systemctl status base-station.service

@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import time
 from datetime import datetime, timezone
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -256,6 +257,56 @@ class TestReceiveLoopRadioDeath:
 
         radio.get_last_error_reason.side_effect = last_error
         asyncio.run(receive_loop(radio, registry, storage, stop, 0.001, key=KEY, now_fn=lambda: NOW))
+
+
+class TestMetricsLoopDiskFloor:
+    def test_warns_once_then_recovers(self, caplog):
+        from collections import namedtuple
+        from snowsensor.base_station.main import DISK_FREE_FLOOR_BYTES, metrics_loop
+
+        Usage = namedtuple("Usage", "total used free")
+        frees = [1, 1, DISK_FREE_FLOOR_BYTES * 2]
+        seen = {"n": 0}
+
+        async def scenario():
+            storage = MagicMock()
+            stop = asyncio.Event()
+
+            def on_append(row):
+                seen["n"] += 1
+                if seen["n"] >= 3:
+                    stop.set()
+
+            storage.append.side_effect = on_append
+            with patch("snowsensor.base_station.main.shutil.disk_usage",
+                       side_effect=lambda _: Usage(0, 0, frees[min(seen["n"] - 1, 2)])):
+                await metrics_loop(storage, 0.001, stop, data_dir="/data")
+
+        with caplog.at_level(logging.INFO, logger="base_station"):
+            asyncio.run(scenario())
+        warnings = [r for r in caplog.records
+                    if r.levelno == logging.WARNING and "below" in r.message]
+        recoveries = [r for r in caplog.records if "recovered" in r.message]
+        assert len(warnings) == 1
+        assert len(recoveries) == 1
+
+    def test_no_warning_when_disk_fine(self, caplog):
+        from collections import namedtuple
+        from snowsensor.base_station.main import DISK_FREE_FLOOR_BYTES, metrics_loop
+
+        Usage = namedtuple("Usage", "total used free")
+
+        async def scenario():
+            storage = MagicMock()
+            stop = asyncio.Event()
+            storage.append.side_effect = lambda row: stop.set()
+            with patch("snowsensor.base_station.main.shutil.disk_usage",
+                       return_value=Usage(0, 0, DISK_FREE_FLOOR_BYTES * 2)):
+                await metrics_loop(storage, 0.001, stop, data_dir="/data")
+
+        with caplog.at_level(logging.INFO, logger="base_station"):
+            asyncio.run(scenario())
+        assert not [r for r in caplog.records if "disk" in r.message]
 
 
 class TestDisplayLoop:

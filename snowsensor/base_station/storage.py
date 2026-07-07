@@ -4,9 +4,9 @@ Layout under config.storage.data_dir (default /home/admin/data):
 
     <data_dir>/
         DAVIES-01/
-            packets.csv          # one row per received packet
+            packets.csv             # one row per received packet
         _receiver/
-            metrics.csv          # one row per metrics sample
+            metrics_YYYY-MM.csv     # one row per metrics sample, monthly files
 """
 
 from __future__ import annotations
@@ -97,15 +97,21 @@ class PacketStorage:
 
 
 class MetricsStorage:
-    """Append-only CSV writer for receiver Pi system metrics."""
+    """Append-only CSV writer for receiver Pi system metrics.
+
+    Rotated monthly by row timestamp: the 30 s cadence grows ~100 MB/year,
+    the only CSV here whose size ever matters. Science CSVs stay unrotated.
+    """
 
     def __init__(self, data_dir: str | Path, fsync: bool = False) -> None:
-        self._path = Path(data_dir) / "_receiver" / "metrics.csv"
+        self._dir = Path(data_dir) / "_receiver"
         self._fsync = fsync
 
-    @property
-    def path(self) -> Path:
-        return self._path
+    def path_for(self, timestamp: str) -> Path:
+        return self._dir / f"metrics_{timestamp[:7]}.csv"
 
     def append(self, row: MetricsRow) -> None:
-        append_csv(self._path, METRICS_COLUMNS, row_dict(row), fsync=self._fsync)
+        append_csv(
+            self.path_for(row.timestamp), METRICS_COLUMNS, row_dict(row),
+            fsync=self._fsync,
+        )

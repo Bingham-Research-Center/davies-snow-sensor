@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import logging
 import os
+import shutil
 import signal
 import sys
 from datetime import datetime, timezone
@@ -21,6 +22,20 @@ from snowsensor.sensor.temperature import TemperatureSensor
 from snowsensor.sensor.ultrasonic import SensorResult, UltrasonicSensor
 
 logger = logging.getLogger(__name__)
+
+# Warn once per cycle when the data filesystem drops below this floor.
+DISK_FREE_FLOOR_BYTES = 500 * 1024 * 1024
+
+
+def _warn_if_disk_low(csv_path: str) -> None:
+    try:
+        free = shutil.disk_usage(Path(csv_path).parent).free
+    except OSError:
+        return
+    if free < DISK_FREE_FLOOR_BYTES:
+        logger.warning("disk: %.0f MB free under %s, below %.0f MB floor",
+                       free / 1e6, Path(csv_path).parent,
+                       DISK_FREE_FLOOR_BYTES / 1e6)
 
 
 def _select_best_sensor(
@@ -106,6 +121,7 @@ class SensorStation:
         timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         errors: list[str] = []
         storage_failed = False
+        _warn_if_disk_low(self._config.storage.csv_path)
 
         try:
             self._storage.initialize()
