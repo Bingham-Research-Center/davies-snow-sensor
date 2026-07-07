@@ -124,10 +124,7 @@ class LoRaTransmitter:
             while time.monotonic() < deadline:
                 remaining = max(0.0, deadline - time.monotonic())
                 try:
-                    packet = self._rfm9x.receive(
-                        timeout=remaining,
-                        with_header=False,
-                    )
+                    packet = radio_setup.receive_idle(self._rfm9x, remaining)
                 except Exception:
                     self._last_error = "lora_recv_error"
                     break

@@ -6,6 +6,8 @@ without the CircuitPython libraries installed.
 
 from __future__ import annotations
 
+import time
+
 from snowsensor.protocol import airtime
 
 
@@ -60,6 +62,27 @@ def create_radio(
     except Exception:
         release(spi, cs, reset)
         raise
+
+
+def receive_idle(rfm9x, timeout_s: float, poll_interval_s: float = 0.01):
+    """Receive one packet, sleeping between rx_done polls.
+
+    adafruit_rfm9x.receive() polls rx_done in a tight loop with no sleep,
+    burning a full core for the whole receive window — continuously on the
+    base station, and during the ACK wait on the battery-powered sensor.
+    This waits the same window at ~0% CPU; once rx_done is set, the
+    library's receive(timeout=0) skips its spin loop and just extracts the
+    FIFO payload, so the packet path is unchanged.
+
+    Returns the payload bytes or None on timeout.
+    """
+    rfm9x.listen()
+    deadline = time.monotonic() + timeout_s
+    while time.monotonic() < deadline:
+        if rfm9x.rx_done:
+            return rfm9x.receive(timeout=0, with_header=False)
+        time.sleep(poll_interval_s)
+    return None
 
 
 def release(*resources) -> None:
