@@ -9,14 +9,14 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from src.base_station.main import (
+from snowsensor.base_station.main import (
     MAX_CONSECUTIVE_RADIO_ERRORS,
     RadioDeadError,
     display_loop,
     receive_loop,
 )
-from src.base_station.oled_display import LinkStatus
-from src.protocol import auth, wire
+from snowsensor.base_station.oled_display import LinkStatus
+from snowsensor.protocol import auth, wire
 
 KEY = bytes(range(32))
 # Fixed clock for the replay-freshness check, near the fixture timestamps.

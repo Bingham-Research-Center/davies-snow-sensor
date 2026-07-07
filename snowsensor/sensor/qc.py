@@ -5,9 +5,9 @@ from __future__ import annotations
 import math
 from datetime import datetime
 
-from src.sensor.config import QCConfig
-from src.sensor.storage import Reading
-from src.sensor.ultrasonic import SensorResult
+from snowsensor.sensor.config import QCConfig
+from snowsensor.sensor.storage import Reading
+from snowsensor.sensor.ultrasonic import SensorResult
 
 TEMP_MISSING = 1 << 0
 ALL_ULTRASONIC_FAILED = 1 << 1

@@ -46,7 +46,7 @@ sudo -u "$TARGET_USER" "$VENV_DIR/bin/pip" install --quiet -e "$REPO_DIR[hardwar
 # --- step 3: derive data dir from receiver.yaml and create it ---
 DATA_DIR=$("$VENV_DIR/bin/python" -c "
 import sys
-from src.base_station.config import load_config, ConfigError
+from snowsensor.base_station.config import load_config, ConfigError
 try:
     print(load_config(sys.argv[1]).storage.data_dir)
 except (FileNotFoundError, ConfigError) as e:

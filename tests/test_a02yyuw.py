@@ -11,7 +11,7 @@ _serial = types.ModuleType("serial")
 _serial.Serial = MagicMock
 sys.modules.setdefault("serial", _serial)
 
-from src.sensor.a02yyuw import A02yyuwSensor, parse_frame
+from snowsensor.sensor.a02yyuw import A02yyuwSensor, parse_frame
 
 
 def _frame(distance_mm: int) -> bytes:

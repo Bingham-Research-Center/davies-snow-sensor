@@ -1,4 +1,4 @@
-"""Tests for src.base_station.metrics — vcgencmd / proc parsers, mocked."""
+"""Tests for snowsensor.base_station.metrics — vcgencmd / proc parsers, mocked."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import io
 import subprocess
 from unittest.mock import patch
 
-from src.base_station import metrics
+from snowsensor.base_station import metrics
 
 
 def _vcgencmd_completed(stdout: str, returncode: int = 0):

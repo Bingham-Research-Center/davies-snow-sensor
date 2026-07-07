@@ -1,7 +1,7 @@
 """Continuous HC-SR04 distance readings for hardware verification.
 
 Uses the production UltrasonicSensor wrapper so readings match exactly what
-src.sensor.main sees during a cycle. Pins default to the values in
+snowsensor.sensor.main sees during a cycle. Pins default to the values in
 config/station.yaml; override with --trig / --echo.
 
 Usage:
@@ -19,8 +19,8 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from src.sensor.config import load_config
-from src.sensor.ultrasonic import UltrasonicSensor
+from snowsensor.sensor.config import load_config
+from snowsensor.sensor.ultrasonic import UltrasonicSensor
 
 
 def main() -> int:

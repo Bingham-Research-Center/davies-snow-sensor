@@ -11,7 +11,7 @@ _serial = types.ModuleType("serial")
 _serial.Serial = MagicMock
 sys.modules.setdefault("serial", _serial)
 
-from src.sensor.maxbotix import MaxbotixSensor, parse_frame
+from snowsensor.sensor.maxbotix import MaxbotixSensor, parse_frame
 
 
 class TestParseFrame:

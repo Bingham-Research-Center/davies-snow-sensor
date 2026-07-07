@@ -1,4 +1,4 @@
-"""Tests for the shared RFM95W bring-up (src/protocol/radio_setup.py)."""
+"""Tests for the shared RFM95W bring-up (snowsensor/protocol/radio_setup.py)."""
 
 from __future__ import annotations
 
@@ -30,7 +30,7 @@ sys.modules.setdefault("busio", _busio)
 sys.modules.setdefault("digitalio", _digitalio)
 sys.modules.setdefault("adafruit_rfm9x", _adafruit_rfm9x)
 
-from src.protocol import radio_setup  # noqa: E402
+from snowsensor.protocol import radio_setup  # noqa: E402
 
 ARGS = dict(
     cs_pin=7, reset_pin=25, frequency_mhz=915.0, tx_power=23,

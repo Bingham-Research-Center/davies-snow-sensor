@@ -39,7 +39,7 @@ Two separate things:
    ignored the `False` and waited out the ACK window, which looked exactly like
    "matching config, zero packets."
 
-That bug is fixed: `src/protocol/airtime.py` computes each packet's
+That bug is fixed: `snowsensor/protocol/airtime.py` computes each packet's
 time-on-air and `transmit()`/`send_ack()` size `xmit_timeout` to it (with a
 2.0 s floor, so SF7 is unchanged). The receiver's listen window is sized the
 same way (`receive_window_s`). So high SF now works — measure and ramp it.

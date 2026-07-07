@@ -6,7 +6,7 @@ without the CircuitPython libraries installed.
 
 from __future__ import annotations
 
-from src.protocol import airtime
+from snowsensor.protocol import airtime
 
 
 def create_radio(

@@ -38,7 +38,7 @@ _w1.errors = _errors
 sys.modules.setdefault("w1thermsensor", _w1)
 sys.modules.setdefault("w1thermsensor.errors", _errors)
 
-from src.sensor.temperature import TemperatureSensor
+from snowsensor.sensor.temperature import TemperatureSensor
 
 
 class TestInitialize:

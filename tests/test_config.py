@@ -6,7 +6,7 @@ import pytest
 import yaml
 from pathlib import Path
 
-from src.sensor.config import (
+from snowsensor.sensor.config import (
     ConfigError,
     StationConfig,
     LoraConfig,
@@ -571,7 +571,7 @@ class TestLoraKey:
 def test_shipped_config_loads(filename, monkeypatch):
     """Ensure the live config and the shipped template remain loadable."""
     # The real key is gitignored and absent in CI; stub only the file read.
-    import src.protocol.lora_config as lora_config_module
+    import snowsensor.protocol.lora_config as lora_config_module
     monkeypatch.setattr(lora_config_module.auth, "load_key", lambda path: TEST_KEY)
     path = Path(__file__).resolve().parent.parent / "config" / filename
     cfg = load_config(path)

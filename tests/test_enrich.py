@@ -1,4 +1,4 @@
-"""Tests for src.base_station.enrich — readable derived view of packets.csv."""
+"""Tests for snowsensor.base_station.enrich — readable derived view of packets.csv."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 from zoneinfo import ZoneInfo
 
-from src.base_station.enrich import (
+from snowsensor.base_station.enrich import (
     OUTPUT_COLUMNS,
     enrich_file,
     enrich_row,
@@ -17,7 +17,7 @@ from src.base_station.enrich import (
     parse_iso_utc,
     to_local,
 )
-from src.base_station.storage import PACKET_COLUMNS, StorageError
+from snowsensor.base_station.storage import PACKET_COLUMNS, StorageError
 
 
 DENVER = ZoneInfo("America/Denver")

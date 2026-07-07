@@ -33,8 +33,8 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from src.base_station.oled_display import OledDisplay, aiming_lines
-from src.protocol import airtime, wire
+from snowsensor.base_station.oled_display import OledDisplay, aiming_lines
+from snowsensor.protocol import airtime, wire
 
 # Approximate SX1276 (RFM95W) receiver sensitivity at BW125, from the datasheet.
 # Used only to print a rough "RSSI vs floor" margin; treat as ballpark.
@@ -224,12 +224,12 @@ def main() -> int:
     )
 
     if args.tx:
-        from src.sensor.config import load_config
-        from src.sensor.lora import LoRaTransmitter
+        from snowsensor.sensor.config import load_config
+        from snowsensor.sensor.lora import LoRaTransmitter
         build = LoRaTransmitter
     else:
-        from src.base_station.config import load_config
-        from src.base_station.radio import LoRaReceiver
+        from snowsensor.base_station.config import load_config
+        from snowsensor.base_station.radio import LoRaReceiver
         build = LoRaReceiver
 
     try:

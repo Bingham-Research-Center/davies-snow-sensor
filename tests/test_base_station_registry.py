@@ -1,9 +1,9 @@
-"""Tests for src.base_station.registry."""
+"""Tests for snowsensor.base_station.registry."""
 
 from __future__ import annotations
 
-from src.base_station.config import StationEntry
-from src.base_station.registry import StationRegistry
+from snowsensor.base_station.config import StationEntry
+from snowsensor.base_station.registry import StationRegistry
 
 
 def _entries(*ids: str) -> list[StationEntry]:

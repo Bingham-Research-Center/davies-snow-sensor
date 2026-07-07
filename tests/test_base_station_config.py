@@ -1,4 +1,4 @@
-"""Tests for src.base_station.config — receiver YAML loader."""
+"""Tests for snowsensor.base_station.config — receiver YAML loader."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from src.base_station.config import (
+from snowsensor.base_station.config import (
     ConfigError,
     DisplayConfig,
     LoraConfig,
@@ -293,7 +293,7 @@ class TestExampleFile:
     def test_example_loads(self, monkeypatch):
         # The shipped receiver.example.yaml should always be a valid config.
         # The real key is gitignored and absent in CI; stub only the file read.
-        import src.protocol.lora_config as lora_config_module
+        import snowsensor.protocol.lora_config as lora_config_module
         monkeypatch.setattr(lora_config_module.auth, "load_key", lambda path: TEST_KEY)
         repo = Path(__file__).resolve().parents[1]
         cfg = load_config(repo / "config" / "receiver.example.yaml")

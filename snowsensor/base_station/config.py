@@ -8,9 +8,9 @@ from pathlib import Path
 import yaml
 
 # LoraConfig is re-exported: it is part of this module's public surface even
-# though the shared contract lives in src/protocol/lora_config.py.
-from src.protocol.lora_config import LoraConfig, parse_lora
-from src.protocol.validation import (
+# though the shared contract lives in snowsensor/protocol/lora_config.py.
+from snowsensor.protocol.lora_config import LoraConfig, parse_lora
+from snowsensor.protocol.validation import (
     ConfigError,
     require,
     require_int,

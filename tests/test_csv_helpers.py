@@ -1,4 +1,4 @@
-"""Direct tests for src/protocol/csv_helpers.py."""
+"""Direct tests for snowsensor/protocol/csv_helpers.py."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 import pytest
 
-from src.protocol.csv_helpers import (
+from snowsensor.protocol.csv_helpers import (
     StorageError,
     append_csv,
     ensure_csv_header,

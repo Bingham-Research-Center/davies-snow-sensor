@@ -14,7 +14,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from src.protocol.csv_helpers import (
+from snowsensor.protocol.csv_helpers import (
     StorageError as _StorageError,
     append_csv,
     row_dict,

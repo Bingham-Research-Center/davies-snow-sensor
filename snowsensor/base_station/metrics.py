@@ -10,7 +10,7 @@ import re
 import subprocess
 from datetime import datetime, timezone
 
-from src.base_station.storage import MetricsRow
+from snowsensor.base_station.storage import MetricsRow
 
 _CORE_VOLT_RE = re.compile(r"volt=([\d.]+)V")
 _TEMP_RE = re.compile(r"temp=([\d.]+)'C")

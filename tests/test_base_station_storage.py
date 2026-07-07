@@ -1,4 +1,4 @@
-"""Tests for src.base_station.storage — packet + metrics CSV writers."""
+"""Tests for snowsensor.base_station.storage — packet + metrics CSV writers."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from src.base_station.storage import (
+from snowsensor.base_station.storage import (
     METRICS_COLUMNS,
     PACKET_COLUMNS,
     MetricsRow,

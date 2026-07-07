@@ -1,4 +1,4 @@
-"""Tests for LoRa packet authentication (src/protocol/auth.py)."""
+"""Tests for LoRa packet authentication (snowsensor/protocol/auth.py)."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from src.protocol import auth, wire
+from snowsensor.protocol import auth, wire
 
 KEY = bytes(range(32))
 OTHER_KEY = bytes(range(1, 33))

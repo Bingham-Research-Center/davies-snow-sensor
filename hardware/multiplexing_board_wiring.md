@@ -47,7 +47,7 @@ Important behavior:
   - **Mode-select resistor R19 on the controller PCB MUST be left open** to
     keep the module in Mode 1 (HC-SR04-compatible pulse-echo). Fitting
     R19 = 47k / 120k / 360k switches the module to UART output modes, which
-    `src/sensor/ultrasonic.py` does not handle.
+    `snowsensor/sensor/ultrasonic.py` does not handle.
   - ECHO needs the same 1k/2k voltage divider as the HC-SR04.
   - The transducer hangs off the controller PCB on a cable — mount the
     transducer downward at the snow target; keep the PCB in the enclosure.
@@ -88,5 +88,5 @@ pins:
   ds18b20_data: 4
 ```
 
-Validation in `src/sensor/config.py` will reject LoRa/OLED reserved pins
+Validation in `snowsensor/sensor/config.py` will reject LoRa/OLED reserved pins
 for `hcsr04_trigger`, `hcsr04_echo`, and `ds18b20_data`.

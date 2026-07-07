@@ -39,15 +39,15 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from src.sensor.config import (
+from snowsensor.sensor.config import (
     ConfigError,
     StationConfig,
     UltrasonicSensorConfig,
     config_id,
     load_config,
 )
-from src.sensor.temperature import TemperatureSensor
-from src.sensor.ultrasonic import SensorResult, UltrasonicSensor
+from snowsensor.sensor.temperature import TemperatureSensor
+from snowsensor.sensor.ultrasonic import SensorResult, UltrasonicSensor
 
 EXIT_OK = 0
 EXIT_HARDWARE = 2

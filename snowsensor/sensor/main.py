@@ -10,15 +10,15 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-from src.sensor.a02yyuw import A02yyuwSensor
-from src.sensor.config import QCConfig, StationConfig, config_id, load_config
-from src.sensor.cycle import get_boot_id, read_and_increment_cycle_id
-from src.sensor.lora import LoRaTransmitter
-from src.sensor.maxbotix import MaxbotixSensor
-from src.sensor.qc import compute_quality_flag, find_baseline, min_valid_samples
-from src.sensor.storage import Reading, SensorReading, SensorStorage, Storage
-from src.sensor.temperature import TemperatureSensor
-from src.sensor.ultrasonic import SensorResult, UltrasonicSensor
+from snowsensor.sensor.a02yyuw import A02yyuwSensor
+from snowsensor.sensor.config import QCConfig, StationConfig, config_id, load_config
+from snowsensor.sensor.cycle import get_boot_id, read_and_increment_cycle_id
+from snowsensor.sensor.lora import LoRaTransmitter
+from snowsensor.sensor.maxbotix import MaxbotixSensor
+from snowsensor.sensor.qc import compute_quality_flag, find_baseline, min_valid_samples
+from snowsensor.sensor.storage import Reading, SensorReading, SensorStorage, Storage
+from snowsensor.sensor.temperature import TemperatureSensor
+from snowsensor.sensor.ultrasonic import SensorResult, UltrasonicSensor
 
 logger = logging.getLogger(__name__)
 

@@ -1,4 +1,4 @@
-"""Tests for src.base_station.oled_display — formatters pure, OLED I/O mocked."""
+"""Tests for snowsensor.base_station.oled_display — formatters pure, OLED I/O mocked."""
 
 from __future__ import annotations
 
@@ -28,7 +28,7 @@ _ssd = _ensure("adafruit_ssd1306")
 if not hasattr(_ssd, "SSD1306_I2C"):
     _ssd.SSD1306_I2C = MagicMock
 
-from src.base_station.oled_display import (  # noqa: E402
+from snowsensor.base_station.oled_display import (  # noqa: E402
     MAX_LINE_CHARS,
     LinkStatus,
     OledDisplay,

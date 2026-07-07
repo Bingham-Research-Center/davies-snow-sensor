@@ -31,8 +31,8 @@ sys.modules.setdefault("busio", _busio)
 sys.modules.setdefault("digitalio", _digitalio)
 sys.modules.setdefault("adafruit_rfm9x", _adafruit_rfm9x)
 
-from src.protocol import auth
-from src.sensor.lora import LoRaTransmitter
+from snowsensor.protocol import auth
+from snowsensor.sensor.lora import LoRaTransmitter
 
 KEY = bytes(range(32))
 

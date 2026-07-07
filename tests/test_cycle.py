@@ -2,7 +2,7 @@
 
 import pytest
 
-from src.sensor.cycle import get_boot_id, read_and_increment_cycle_id
+from snowsensor.sensor.cycle import get_boot_id, read_and_increment_cycle_id
 
 
 @pytest.fixture
