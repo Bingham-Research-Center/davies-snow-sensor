@@ -26,6 +26,7 @@ hardware = [
 ]
 dev = [
     "pytest>=8.0",
+    "pytest-cov>=5.0",
     "ruff>=0.8",
 ]
 
@@ -35,6 +36,9 @@ snow-sensor = "snowsensor.sensor.main:main"
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["snowsensor*"]
+
+[tool.ruff]
+target-version = "py311"
 
 [tool.ruff.lint.per-file-ignores]
 # Tests and scripts stub hardware modules in sys.modules before importing.
