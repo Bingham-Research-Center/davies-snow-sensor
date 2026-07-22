@@ -85,10 +85,20 @@ Set these in `config/station.yaml`:
 
 ```yaml
 pins:
-  hcsr04_trigger: 5
-  hcsr04_echo: 6
   ds18b20_data: 4
+
+sensors:
+  ultrasonic:
+    - id: "front"
+      trigger_pin: 5
+      echo_pin: 6
 ```
 
-Validation in `snowsensor/sensor/config.py` will reject LoRa/OLED reserved pins
-for `hcsr04_trigger`, `hcsr04_echo`, and `ds18b20_data`.
+JSN-SR04T probes use the same entry shape under `sensors.jsn_sr04t`. The
+legacy single-sensor `pins.hcsr04_trigger`/`pins.hcsr04_echo` pair still
+works, but new configs should use the `sensors:` lists.
+
+With `hardware_profile: "52pi-ep0123"` set, validation in
+`snowsensor/sensor/config.py` rejects LoRa/OLED reserved pins for all GPIO
+sensor trigger/echo pins; pin collisions (including `ds18b20_data`) are
+rejected regardless of profile.

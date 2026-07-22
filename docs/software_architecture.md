@@ -12,7 +12,7 @@ external dependencies, configuration, and error codes.
 | `qc.py` | Per-cycle quality bitmask and best-sensor selection | — | — |
 | `storage.py` | Append-only CSV storage (main + per-sensor) | stdlib `csv` | — |
 | `temperature.py` | DS18B20 temperature readings | `w1thermsensor` | DS18B20 via 1-Wire |
-| `ultrasonic.py` | HC-SR04 distance readings | `gpiozero` (pigpio backend) | HC-SR04 via GPIO |
+| `ultrasonic.py` | HC-SR04 + JSN-SR04T distance readings | `gpiozero` (pigpio backend) | HC-SR04 / JSN-SR04T via GPIO |
 | `maxbotix.py` | MB7374 (HRXL-MaxSonar-WR) distance readings | `pyserial` | MB7374 via TTL serial / USB-TTL adapter |
 | `a02yyuw.py` | DFRobot A02YYUW waterproof ultrasonic readings | `pyserial` | A02YYUW via TTL serial / USB-TTL adapter |
 | `lora.py` | LoRa radio DATA/ACK protocol | `adafruit-circuitpython-rfm9x`, Blinka | RFM95W via SPI |
@@ -37,15 +37,19 @@ StationConfig
 │   ├── lora_cs: int
 │   └── lora_reset: int
 ├── sensors: SensorsConfig   (multi-sensor list; auto-derived from pins.hcsr04_* if absent)
-│   ├── ultrasonic: list[UltrasonicSensorConfig]
-│   │   ├── id: str            (unique per station)
+│   ├── ultrasonic: list[UltrasonicSensorConfig]  (optional; default [])
+│   │   ├── id: str            (unique across all sensor types)
 │   │   ├── trigger_pin: int
 │   │   └── echo_pin: int
-│   ├── maxbotix: list[MaxbotixSensorConfig]  (optional; default [])
+│   ├── jsn_sr04t: list[UltrasonicSensorConfig]  (optional; default [])
+│   │   ├── id: str            (unique across all sensor types)
+│   │   ├── trigger_pin: int
+│   │   └── echo_pin: int
+│   ├── maxbotix: list[SerialSensorConfig]  (optional; default [])
 │   │   ├── id: str            (unique across all sensor types)
 │   │   ├── serial_port: str   (e.g. "/dev/ttyUSB0"; must start with /dev/)
 │   │   └── baud_rate: int     (default 9600)
-│   └── a02yyuw: list[A02yyuwSensorConfig]  (optional; default [])
+│   └── a02yyuw: list[SerialSensorConfig]  (optional; default [])
 │       ├── id: str            (unique across all sensor types)
 │       ├── serial_port: str   (e.g. "/dev/ttyUSB1"; must start with /dev/)
 │       └── baud_rate: int     (default 9600)
@@ -74,9 +78,10 @@ StationConfig
 Validation rules:
 - `station`, `pins`, `storage`, and `lora` (for its `key_file`) sections are required; missing keys raise `ConfigError`.
 - All pin values must be integers in the range 0–27.
-- When `station.hardware_profile == "52pi-ep0123"`, ultrasonic trigger/echo pins in `{2,3,7,8,9,10,11,17,22,23,24,25}` are rejected (LoRa bonnet and 52Pi EP-0123 reservations).
-- `frequency` must be numeric and in an ISM band; integer fields (`tx_power`, `spreading_factor`, `coding_rate`, `preamble_length`, `cycle_interval_minutes`) must be integers; pin collisions across all ultrasonic and non-ultrasonic pins are rejected.
-- Sensor IDs (`sensors.ultrasonic[].id` and `sensors.maxbotix[].id`) share one namespace and must be unique across the whole station.
+- When `station.hardware_profile == "52pi-ep0123"`, GPIO sensor trigger/echo pins (`ultrasonic` and `jsn_sr04t` families) in `{2,3,7,8,9,10,11,17,22,23,24,25}` are rejected (LoRa bonnet and 52Pi EP-0123 reservations).
+- `frequency` must be numeric and in an ISM band; integer fields (`tx_power`, `spreading_factor`, `coding_rate`, `preamble_length`, `cycle_interval_minutes`) must be integers; pin collisions across all GPIO sensor pins and the base pins are rejected.
+- Sensor IDs across all families (`ultrasonic`, `jsn_sr04t`, `maxbotix`, `a02yyuw`) share one namespace and must be unique across the whole station.
+- A `sensors:` block must declare at least one sensor of any family; a config with neither `sensors:` nor the legacy `pins.hcsr04_*` pair is rejected.
 - `sensors.maxbotix[].serial_port` and `sensors.a02yyuw[].serial_port` must be strings starting with `/dev/`; the device is **not** stat'd at config-load time (so CI without hardware still validates).
 - `sensors`, `qc`, and `timing` sections are optional (defaults apply).
 
@@ -168,6 +173,10 @@ adjustment.
 ## ultrasonic.py
 
 Wraps `gpiozero.DistanceSensor` for HC-SR04 pulse-echo distance measurement.
+`JsnSr04tSensor` subclasses `UltrasonicSensor` for the JSN-SR04T waterproof
+probe (Mode 1): identical wiring and read path, its own valid envelope
+(25–450 cm) and echo cutoff (`max_distance` 4.5 m), and `jsn_sr04t_*` error
+codes.
 
 ### Library overview
 
@@ -194,7 +203,7 @@ directly for temperature compensation before each measurement cycle.
 |-----------|-----------|-----|
 | `echo` | From config | GPIO pin connected to HC-SR04 echo |
 | `trigger` | From config | GPIO pin connected to HC-SR04 trigger |
-| `max_distance` | `4.0` | Maximum measurable distance in meters (4 m) |
+| `max_distance` | `4.0` (HC-SR04) / `4.5` (JSN-SR04T) | Maximum measurable distance in meters; gpiozero clamps readings here |
 | `queue_len` | `1` | Disable gpiozero's internal smoothing — we do our own median filtering |
 | `partial` | `True` | Allows `.distance` to return immediately without waiting for a full queue |
 
@@ -315,6 +324,32 @@ checksum does not match are rejected and drop out of the median.
 ### Cleanup
 
 Same shape as `maxbotix.py` — close the port, swallow exceptions, reset state.
+
+## Adding a new sensor model
+
+One PR per model, following this checklist:
+
+1. **Driver class** — subclass `DistanceSensorBase` (GPIO pulse-echo models
+   subclass `UltrasonicSensor`, serial models subclass `SerialDistanceSensor`)
+   and set `KIND` (also the config family name), `LABEL`, `MIN_VALID_CM`,
+   `MAX_VALID_CM`. `JsnSr04tSensor` in `ultrasonic.py` is the minimal example.
+2. **Registry row** — add a `<Class>.KIND: factory` entry to `SENSOR_DRIVERS`
+   in `sensor/main.py`; keep the factory a late-binding lambda so test
+   patches on the module keep working.
+3. **Config family** — add a `SensorsConfig` field in `sensor/config.py` and
+   parse it with `_parse_gpio_sensors` or `_parse_serial_sensors`, sharing the
+   `seen_ids` set (and pin map for GPIO) so cross-family checks stay intact.
+4. **Example config** — commented block in `config/station.example.yaml`.
+5. **Tests** — driver bounds/error-prefix tests (`test_ultrasonic.py` style),
+   a config family suite (`test_config.py` style), and a `build_sensors`
+   mapping assertion in `test_main.py`.
+6. **Docs** — error-code rows here and in `data_schema.md`, the README config
+   table, and a BOM entry.
+
+The cycle loop, QC, storage, wire format, and base station are generic over
+the sensors dict — no changes there. The calibrate and continuous_distance
+scripts build drivers through `SENSOR_DRIVERS`, so they pick up new models
+automatically.
 
 ## lora.py
 
@@ -535,6 +570,11 @@ dtoverlay=w1-gpio,gpiopin=4
 | ultrasonic | `ultrasonic_read_error` | Exception during pulse sampling |
 | ultrasonic | `ultrasonic_unavailable` | All samples were None (no valid readings at all) |
 | ultrasonic | `ultrasonic_out_of_range` | Median outside 2–400 cm |
+| jsn_sr04t | `jsn_sr04t_no_device` | gpiozero DistanceSensor creation failed |
+| jsn_sr04t | `jsn_sr04t_not_initialized` | `read_distance_cm()` called before successful `initialize()` |
+| jsn_sr04t | `jsn_sr04t_read_error` | Exception during pulse sampling |
+| jsn_sr04t | `jsn_sr04t_unavailable` | All samples were None (no valid readings at all) |
+| jsn_sr04t | `jsn_sr04t_out_of_range` | Median outside 25–450 cm |
 | maxbotix | `maxbotix_no_device` | pyserial not installed or `Serial(port, ...)` raised (e.g. /dev/ttyUSB0 missing) |
 | maxbotix | `maxbotix_not_initialized` | `read_distance_cm()` called before successful `initialize()` |
 | maxbotix | `maxbotix_read_error` | Exception during `read_until()` (cable unplugged mid-read) |
