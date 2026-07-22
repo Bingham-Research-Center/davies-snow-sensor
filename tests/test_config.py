@@ -680,6 +680,86 @@ class TestMultiSensorValidation:
         assert cfg.sensors.ultrasonic == []
         assert len(cfg.sensors.a02yyuw) == 1
 
+
+JSN_CONFIG = {
+    **MULTI_SENSOR_CONFIG,
+    "sensors": {
+        "ultrasonic": [
+            {"id": "north", "trigger_pin": 5, "echo_pin": 6},
+        ],
+        "jsn_sr04t": [
+            {"id": "mast_jsn", "trigger_pin": 20, "echo_pin": 21},
+        ],
+    },
+}
+
+
+class TestJsnSr04tConfig:
+    def test_parses_jsn_entries(self, tmp_path):
+        cfg = load_config(_write_yaml(tmp_path, JSN_CONFIG))
+        assert len(cfg.sensors.jsn_sr04t) == 1
+        jsn = cfg.sensors.jsn_sr04t[0]
+        assert jsn.id == "mast_jsn"
+        assert jsn.trigger_pin == 20
+        assert jsn.echo_pin == 21
+
+    def test_jsn_only_station_valid(self, tmp_path):
+        data = {
+            **MULTI_SENSOR_CONFIG,
+            "sensors": {
+                "jsn_sr04t": [{"id": "mast_jsn", "trigger_pin": 20, "echo_pin": 21}],
+            },
+        }
+        cfg = load_config(_write_yaml(tmp_path, data))
+        assert cfg.sensors.ultrasonic == []
+        assert len(cfg.sensors.jsn_sr04t) == 1
+
+    def test_absent_defaults_to_empty_list(self, tmp_path):
+        cfg = load_config(_write_yaml(tmp_path, MULTI_SENSOR_CONFIG))
+        assert cfg.sensors.jsn_sr04t == []
+
+    def test_legacy_config_has_empty_jsn(self, tmp_path):
+        cfg = load_config(_write_yaml(tmp_path, _legacy_config()))
+        assert cfg.sensors.jsn_sr04t == []
+
+
+class TestJsnSr04tValidation:
+    def test_duplicate_id_across_gpio_families(self, tmp_path):
+        data = {
+            **MULTI_SENSOR_CONFIG,
+            "sensors": {
+                "ultrasonic": [{"id": "north", "trigger_pin": 5, "echo_pin": 6}],
+                "jsn_sr04t": [{"id": "north", "trigger_pin": 20, "echo_pin": 21}],
+            },
+        }
+        with pytest.raises(ConfigError, match="Duplicate sensor id"):
+            load_config(_write_yaml(tmp_path, data))
+
+    def test_pin_collision_with_ultrasonic(self, tmp_path):
+        data = {
+            **MULTI_SENSOR_CONFIG,
+            "sensors": {
+                "ultrasonic": [{"id": "north", "trigger_pin": 5, "echo_pin": 6}],
+                "jsn_sr04t": [{"id": "mast_jsn", "trigger_pin": 5, "echo_pin": 21}],
+            },
+        }
+        with pytest.raises(ConfigError, match="collision"):
+            load_config(_write_yaml(tmp_path, data))
+
+    def test_reserved_pin_rejected_with_52pi_profile(self, tmp_path):
+        data = {
+            **MULTI_SENSOR_CONFIG,
+            "station": {
+                **MULTI_SENSOR_CONFIG["station"],
+                "hardware_profile": "52pi-ep0123",
+            },
+            "sensors": {
+                "jsn_sr04t": [{"id": "mast_jsn", "trigger_pin": 17, "echo_pin": 21}],
+            },
+        }
+        with pytest.raises(ConfigError, match="reserved"):
+            load_config(_write_yaml(tmp_path, data))
+
     def test_duplicate_sensor_id(self, tmp_path):
         data = {
             **MULTI_SENSOR_CONFIG,

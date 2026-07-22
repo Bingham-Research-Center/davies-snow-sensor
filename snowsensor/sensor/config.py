@@ -81,6 +81,7 @@ class SerialSensorConfig:
 @dataclass(frozen=True)
 class SensorsConfig:
     ultrasonic: list[UltrasonicSensorConfig] = field(default_factory=list)
+    jsn_sr04t: list[UltrasonicSensorConfig] = field(default_factory=list)
     maxbotix: list[SerialSensorConfig] = field(default_factory=list)
     a02yyuw: list[SerialSensorConfig] = field(default_factory=list)
 
@@ -175,10 +176,15 @@ def _parse_sensors(
         if not isinstance(raw, dict):
             raise ConfigError("'sensors' must be a mapping")
         seen_ids: set[str] = set()
-        ultrasonic, all_pins = _parse_gpio_sensors(
+        ultrasonic, ultra_pins = _parse_gpio_sensors(
             raw.get("ultrasonic"), seen_ids, "ultrasonic", hardware_profile
         )
-        # Check collisions among all GPIO sensor pins
+        jsn_sr04t, jsn_pins = _parse_gpio_sensors(
+            raw.get("jsn_sr04t"), seen_ids, "jsn_sr04t", hardware_profile
+        )
+        # Check collisions among all GPIO sensor pins (ids are globally unique,
+        # so the key merge cannot drop entries)
+        all_pins = {**ultra_pins, **jsn_pins}
         _check_pin_collisions(all_pins)
         # Check collisions against non-sensor pins
         base_pins = {
@@ -190,12 +196,17 @@ def _parse_sensors(
 
         maxbotix = _parse_serial_sensors(raw.get("maxbotix"), seen_ids, "maxbotix")
         a02yyuw = _parse_serial_sensors(raw.get("a02yyuw"), seen_ids, "a02yyuw")
-        if not (ultrasonic or maxbotix or a02yyuw):
+        if not (ultrasonic or jsn_sr04t or maxbotix or a02yyuw):
             raise ConfigError(
                 "At least one sensor must be configured under 'sensors' "
-                "(ultrasonic, maxbotix, or a02yyuw)"
+                "(ultrasonic, jsn_sr04t, maxbotix, or a02yyuw)"
             )
-        return SensorsConfig(ultrasonic=ultrasonic, maxbotix=maxbotix, a02yyuw=a02yyuw)
+        return SensorsConfig(
+            ultrasonic=ultrasonic,
+            jsn_sr04t=jsn_sr04t,
+            maxbotix=maxbotix,
+            a02yyuw=a02yyuw,
+        )
 
     # Legacy: auto-convert from pins config
     if pins.hcsr04_trigger is None or pins.hcsr04_echo is None:
