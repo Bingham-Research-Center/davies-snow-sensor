@@ -13,6 +13,7 @@ _gpiozero.DistanceSensor = MagicMock
 sys.modules.setdefault("gpiozero", _gpiozero)
 
 from snowsensor.sensor.ultrasonic import (
+    JsnSr04tSensor,
     UltrasonicSensor,
     SensorResult,
     speed_of_sound_m_s,
@@ -283,3 +284,66 @@ class TestCleanup:
         sensor = UltrasonicSensor(trigger_pin=23, echo_pin=24)
         sensor.cleanup()  # should not raise
         assert sensor._initialized is False
+
+
+class TestJsnSr04t:
+    def _make_initialized_sensor(self, mock_hw):
+        sensor = JsnSr04tSensor(trigger_pin=20, echo_pin=21)
+        sensor._sensor = mock_hw
+        sensor._initialized = True
+        return sensor
+
+    def test_initialize_passes_own_max_distance(self):
+        sensor = JsnSr04tSensor(trigger_pin=20, echo_pin=21)
+        with patch("gpiozero.DistanceSensor") as MockSensor:
+            assert sensor.initialize() is True
+        MockSensor.assert_called_once_with(
+            echo=21, trigger=20, max_distance=4.5, partial=True, queue_len=1
+        )
+
+    def test_hcsr04_keeps_default_max_distance(self):
+        sensor = UltrasonicSensor(trigger_pin=23, echo_pin=24)
+        with patch("gpiozero.DistanceSensor") as MockSensor:
+            assert sensor.initialize() is True
+        assert MockSensor.call_args.kwargs["max_distance"] == 4.0
+
+    def test_init_failure_uses_own_kind(self):
+        sensor = JsnSr04tSensor(trigger_pin=20, echo_pin=21)
+        with patch("gpiozero.DistanceSensor", side_effect=RuntimeError("bad GPIO")):
+            assert sensor.initialize() is False
+        assert sensor.get_last_error_reason() == "jsn_sr04t_no_device"
+
+    def test_blind_zone_rejected(self):
+        mock_hw = MagicMock()
+        # 0.20m = 20cm: valid for an HC-SR04, inside the JSN-SR04T blind zone
+        type(mock_hw).distance = PropertyMock(return_value=0.20)
+        mock_hw.speed_of_sound = 343.26
+        sensor = self._make_initialized_sensor(mock_hw)
+
+        result = sensor.read_distance_cm(num_samples=3)
+
+        assert result.distance_cm is None
+        assert result.error == "jsn_sr04t_out_of_range"
+
+    def test_reading_beyond_hcsr04_range_accepted(self):
+        mock_hw = MagicMock()
+        # 4.2m = 420cm: out of range for an HC-SR04, valid for the JSN-SR04T
+        type(mock_hw).distance = PropertyMock(return_value=4.2)
+        mock_hw.speed_of_sound = 343.26
+        sensor = self._make_initialized_sensor(mock_hw)
+
+        result = sensor.read_distance_cm(num_samples=3)
+
+        assert result.distance_cm == 420.0
+        assert result.error is None
+
+    def test_beyond_own_range_rejected(self):
+        mock_hw = MagicMock()
+        type(mock_hw).distance = PropertyMock(return_value=4.6)
+        mock_hw.speed_of_sound = 343.26
+        sensor = self._make_initialized_sensor(mock_hw)
+
+        result = sensor.read_distance_cm(num_samples=3)
+
+        assert result.distance_cm is None
+        assert result.error == "jsn_sr04t_out_of_range"
