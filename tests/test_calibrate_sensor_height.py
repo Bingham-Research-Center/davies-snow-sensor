@@ -45,6 +45,7 @@ from snowsensor.sensor.config import (  # noqa: E402
     PinsConfig,
     QCConfig,
     SensorsConfig,
+    SerialSensorConfig,
     StationConfig,
     StorageConfig,
     TimingConfig,
@@ -79,6 +80,7 @@ def _make_cycle(
 def _make_station_config(
     sensor_height_cm: float = 200.0,
     n_sensors: int = 1,
+    n_maxbotix: int = 0,
 ) -> StationConfig:
     sensors = (
         [
@@ -90,7 +92,15 @@ def _make_station_config(
         if n_sensors > 0
         else []
     )
-    sensors_cfg = SensorsConfig(ultrasonic=sensors) if sensors else None
+    maxbotix = [
+        SerialSensorConfig(id=f"mb{i}", serial_port=f"/dev/ttyUSB{i}")
+        for i in range(n_maxbotix)
+    ]
+    sensors_cfg = (
+        SensorsConfig(ultrasonic=sensors, maxbotix=maxbotix)
+        if (sensors or maxbotix)
+        else None
+    )
     return StationConfig(
         station_id="TEST01",
         sensor_height_cm=sensor_height_cm,
@@ -328,8 +338,8 @@ class TestSanityCheck:
 class TestSelectSensor:
     def test_single_sensor_no_id(self):
         cfg = _make_station_config(n_sensors=1)
-        s = calibrate.select_sensor(cfg, None)
-        assert s.id == "s0"
+        kind, s = calibrate.select_sensor(cfg, None)
+        assert (kind, s.id) == ("ultrasonic", "s0")
 
     def test_multiple_sensors_no_id_raises(self):
         cfg = _make_station_config(n_sensors=2)
@@ -338,8 +348,8 @@ class TestSelectSensor:
 
     def test_multiple_sensors_with_id(self):
         cfg = _make_station_config(n_sensors=3)
-        s = calibrate.select_sensor(cfg, "s1")
-        assert s.id == "s1"
+        kind, s = calibrate.select_sensor(cfg, "s1")
+        assert (kind, s.id) == ("ultrasonic", "s1")
 
     def test_invalid_id_raises(self):
         cfg = _make_station_config(n_sensors=2)
@@ -348,8 +358,28 @@ class TestSelectSensor:
 
     def test_no_sensors_raises(self):
         cfg = _make_station_config(n_sensors=0)
-        with pytest.raises(calibrate.CalibrationError, match="No ultrasonic"):
+        with pytest.raises(calibrate.CalibrationError, match="No sensors"):
             calibrate.select_sensor(cfg, None)
+
+    def test_selects_serial_sensor_by_id(self):
+        cfg = _make_station_config(n_sensors=1, n_maxbotix=1)
+        kind, s = calibrate.select_sensor(cfg, "mb0")
+        assert (kind, s.id) == ("maxbotix", "mb0")
+        assert s.serial_port == "/dev/ttyUSB0"
+
+    def test_single_serial_sensor_no_id(self):
+        cfg = _make_station_config(n_sensors=0, n_maxbotix=1)
+        kind, s = calibrate.select_sensor(cfg, None)
+        assert (kind, s.id) == ("maxbotix", "mb0")
+
+
+class TestBuildDriver:
+    def test_dispatches_via_registry(self):
+        entry = UltrasonicSensorConfig(id="s0", trigger_pin=5, echo_pin=6)
+        with patch("snowsensor.sensor.main.UltrasonicSensor") as MockUltra:
+            driver = calibrate.build_driver("ultrasonic", entry)
+        assert driver is MockUltra.return_value
+        MockUltra.assert_called_once_with(trigger_pin=5, echo_pin=6)
 
 
 # ---------- regex / write_yaml_height ----------
@@ -665,7 +695,7 @@ class TestMainIntegration:
 
         ultra_inst, temp_inst = self._patch_sensors(distance_cm=100.0)
         with (
-            patch.object(calibrate, "UltrasonicSensor", return_value=ultra_inst),
+            patch.object(calibrate, "build_driver", return_value=ultra_inst),
             patch.object(calibrate, "TemperatureSensor", return_value=temp_inst),
         ):
             rc = calibrate.main(
@@ -699,7 +729,7 @@ class TestMainIntegration:
 
         ultra_inst, temp_inst = self._patch_sensors(distance_cm=100.0)
         with (
-            patch.object(calibrate, "UltrasonicSensor", return_value=ultra_inst),
+            patch.object(calibrate, "build_driver", return_value=ultra_inst),
             patch.object(calibrate, "TemperatureSensor", return_value=temp_inst),
         ):
             rc = calibrate.main(
@@ -723,7 +753,7 @@ class TestMainIntegration:
 
         ultra_inst, temp_inst = self._patch_sensors(distance_cm=100.0)
         with (
-            patch.object(calibrate, "UltrasonicSensor", return_value=ultra_inst),
+            patch.object(calibrate, "build_driver", return_value=ultra_inst),
             patch.object(calibrate, "TemperatureSensor", return_value=temp_inst),
         ):
             rc = calibrate.main(
@@ -753,7 +783,7 @@ class TestMainIntegration:
         # Every cycle has spread=999 -> all rejected
         ultra_inst, temp_inst = self._patch_sensors(spread_cm=999.0)
         with (
-            patch.object(calibrate, "UltrasonicSensor", return_value=ultra_inst),
+            patch.object(calibrate, "build_driver", return_value=ultra_inst),
             patch.object(calibrate, "TemperatureSensor", return_value=temp_inst),
         ):
             rc = calibrate.main(
@@ -775,7 +805,7 @@ class TestMainIntegration:
         ultra_inst = MagicMock()
         ultra_inst.initialize.return_value = False
         ultra_inst.get_last_error_reason.return_value = "ultrasonic_no_device"
-        with patch.object(calibrate, "UltrasonicSensor", return_value=ultra_inst):
+        with patch.object(calibrate, "build_driver", return_value=ultra_inst):
             rc = calibrate.main(
                 [
                     "--config",
@@ -795,7 +825,7 @@ class TestMainIntegration:
 
         ultra_inst, temp_inst = self._patch_sensors(distance_cm=100.0)
         with (
-            patch.object(calibrate, "UltrasonicSensor", return_value=ultra_inst),
+            patch.object(calibrate, "build_driver", return_value=ultra_inst),
             patch.object(
                 calibrate, "TemperatureSensor", return_value=temp_inst
             ) as TempCls,
@@ -821,7 +851,7 @@ class TestMainIntegration:
 
         ultra_inst, temp_inst = self._patch_sensors(distance_cm=100.0)
         with (
-            patch.object(calibrate, "UltrasonicSensor", return_value=ultra_inst),
+            patch.object(calibrate, "build_driver", return_value=ultra_inst),
             patch.object(calibrate, "TemperatureSensor", return_value=temp_inst),
         ):
             rc = calibrate.main(
@@ -876,7 +906,7 @@ class TestMainIntegration:
             raise calibrate.ConfigError("simulated bad rewrite")
 
         with (
-            patch.object(calibrate, "UltrasonicSensor", return_value=ultra_inst),
+            patch.object(calibrate, "build_driver", return_value=ultra_inst),
             patch.object(calibrate, "TemperatureSensor", return_value=temp_inst),
             patch.object(calibrate, "load_config", side_effect=fake_load),
         ):
