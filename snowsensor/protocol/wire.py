@@ -12,6 +12,14 @@ within their field on the wire.
 The trailing <tag> is a truncated HMAC over the rest of the message; it is
 appended and verified by snowsensor/protocol/auth.py, so the formatters and parsers
 here work on the message *without* it.
+
+Forward compatibility (append-only convention): DATA fields 0-7 are fixed
+forever; any future field is appended after <error_flags>, and receivers
+ignore trailing fields they do not know. Appending a field is therefore a
+sender-side change plus a PROTOCOL_VERSION bump — no lockstep receiver
+deploy. Growth is bounded by MAX_DATA_PAYLOAD_BYTES. Appended fields stay
+under the HMAC: auth.py adds the tag as the final field and strips it with
+rpartition before parsing. ACK parsing stays strict.
 """
 
 from __future__ import annotations
@@ -53,9 +61,10 @@ def parse_data(message: str) -> dict | None:
 
     Numeric fields decode to float or None ("-"). error_flags is returned as
     the on-wire pipe-delimited string; callers split on "|" if they need a list.
+    Extra trailing fields (appended by a newer sender) are ignored.
     """
     parts = [part.strip() for part in message.split(",")]
-    if len(parts) != DATA_FIELD_COUNT or parts[0] != "DATA":
+    if len(parts) < DATA_FIELD_COUNT or parts[0] != "DATA":
         return None
     station_id = parts[1]
     timestamp = parts[2]
