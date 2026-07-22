@@ -36,11 +36,13 @@ def median_absolute_deviation(values: list[float]) -> float:
 class DistanceSensorBase:
     """Shared error naming and result stats for all distance drivers.
 
-    Subclasses set KIND (the error-code prefix, e.g. `maxbotix_no_device`)
+    Subclasses set KIND (the error-code prefix and config family name, e.g.
+    `maxbotix_no_device` / `sensors.maxbotix`), LABEL (display name for logs),
     and MIN/MAX_VALID_CM.
     """
 
     KIND: str
+    LABEL: str
     MIN_VALID_CM: float
     MAX_VALID_CM: float
 
@@ -101,6 +103,7 @@ class UltrasonicSensor(DistanceSensorBase):
     """Thin wrapper around gpiozero.DistanceSensor for HC-SR04 readings."""
 
     KIND = "ultrasonic"
+    LABEL = "Ultrasonic"
     MIN_VALID_CM = 2.0
     MAX_VALID_CM = 400.0
     MAX_DISTANCE_M = 4.0  # gpiozero echo cutoff; readings clamp here
@@ -214,6 +217,7 @@ class JsnSr04tSensor(UltrasonicSensor):
     """
 
     KIND = "jsn_sr04t"
+    LABEL = "JSN-SR04T"
     MIN_VALID_CM = 25.0
     MAX_VALID_CM = 450.0
     MAX_DISTANCE_M = 4.5

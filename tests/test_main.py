@@ -20,6 +20,7 @@ from snowsensor.sensor.config import (
     UltrasonicSensorConfig,
 )
 from snowsensor.sensor.main import (
+    SENSOR_DRIVERS,
     SensorStation,
     _select_best_sensor,
     build_sensors,
@@ -1143,6 +1144,14 @@ class TestSerialSensorsInCycle:
 
 
 class TestBuildSensors:
+    def test_registry_kinds_are_config_families(self):
+        # build_sensors does getattr(sensors, kind): every registry key must
+        # be a SensorsConfig field, i.e. each driver's KIND == its family name.
+        from dataclasses import fields
+
+        config_families = {f.name for f in fields(SensorsConfig)}
+        assert set(SENSOR_DRIVERS) <= config_families
+
     def test_none_builds_nothing(self):
         with patch("snowsensor.sensor.main.UltrasonicSensor") as MockUltra:
             assert build_sensors(None) == {}

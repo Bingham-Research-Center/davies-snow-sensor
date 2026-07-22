@@ -28,6 +28,7 @@ class MaxbotixSensor(SerialDistanceSensor):
     """
 
     KIND = "maxbotix"
+    LABEL = "MaxBotix"
     MIN_VALID_CM = 30.0
     MAX_VALID_CM = 500.0
 

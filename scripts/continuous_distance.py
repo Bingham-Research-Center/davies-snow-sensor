@@ -77,7 +77,7 @@ def main() -> int:
                 )
                 return 1
             kind, entry = matches[0]
-        sensor = SENSOR_DRIVERS[kind][1](entry)
+        sensor = SENSOR_DRIVERS[kind](entry)
         wiring = (
             f"trig={entry.trigger_pin} echo={entry.echo_pin}"
             if hasattr(entry, "trigger_pin")

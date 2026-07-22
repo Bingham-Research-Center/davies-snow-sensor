@@ -150,7 +150,7 @@ def select_sensor(cfg: StationConfig, sensor_id: str | None) -> tuple[str, Senso
 
 def build_driver(kind: str, entry: SensorEntry) -> DistanceSensorBase:
     """Construct the production driver for a configured sensor. Test seam."""
-    return SENSOR_DRIVERS[kind][1](entry)
+    return SENSOR_DRIVERS[kind](entry)
 
 
 # ---- Cycle execution ----

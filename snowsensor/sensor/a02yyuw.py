@@ -32,6 +32,7 @@ class A02yyuwSensor(SerialDistanceSensor):
     """
 
     KIND = "a02yyuw"
+    LABEL = "A02YYUW"
     FRAME_SIZE = 4
     MIN_VALID_CM = 3.0
     MAX_VALID_CM = 450.0
