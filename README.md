@@ -42,7 +42,7 @@ davies-snow-sensor/
 │   │   ├── cycle.py         # Boot/cycle ID tracking
 │   │   ├── qc.py            # Quality-control filtering and selection
 │   │   ├── temperature.py   # DS18B20 temperature readings
-│   │   ├── ultrasonic.py    # HC-SR04 distance readings (temp-compensated)
+│   │   ├── ultrasonic.py    # HC-SR04 + JSN-SR04T distance readings (temp-compensated)
 │   │   ├── maxbotix.py      # MaxBotix MB7374 serial distance readings
 │   │   ├── a02yyuw.py       # DFRobot A02YYUW serial distance readings
 │   │   ├── lora.py          # LoRa DATA/ACK radio protocol
@@ -148,7 +148,8 @@ Key fields:
 | `station.id` | Unique station identifier (convention: `DAVIES-XX`) | *(required)* |
 | `station.sensor_height_cm` | Distance from sensor face to bare ground (cm) | *(required)* |
 | `station.hardware_profile` | Opt into board-specific pin validation. Set to `"52pi-ep0123"` to reject ultrasonic pins reserved by the LoRa bonnet and 52Pi multiplexing board. | *(none)* |
-| `sensors.ultrasonic` | List of HC-SR04-compatible sensors (`id`, `trigger_pin`, `echo_pin`), incl. JSN-SR04T. Use this instead of `pins.hcsr04_*` for multi-sensor stations. | *(optional)* |
+| `sensors.ultrasonic` | List of HC-SR04 sensors (`id`, `trigger_pin`, `echo_pin`). Use this instead of `pins.hcsr04_*` for multi-sensor stations. | *(optional)* |
+| `sensors.jsn_sr04t` | List of JSN-SR04T waterproof probes (`id`, `trigger_pin`, `echo_pin`); same wiring as HC-SR04, own 25–450 cm valid range | *(optional)* |
 | `sensors.maxbotix` | List of MaxBotix MB7374 serial sensors (`id`, `serial_port`, `baud_rate`) | *(optional)* |
 | `sensors.a02yyuw` | List of DFRobot A02YYUW serial sensors (`id`, `serial_port`, `baud_rate`) | *(optional)* |
 | `pins.hcsr04_trigger` | HC-SR04 trigger GPIO (legacy single-sensor path) | *(required unless `sensors.ultrasonic` is set)* |
@@ -218,7 +219,7 @@ The unit is a `Type=oneshot` service triggered by `OnCalendar=*:0/15` with `Pers
 
 ## Architecture
 
-Each measurement cycle follows a linear pipeline: initialize hardware → read DS18B20 temperature → read each configured ultrasonic distance (GPIO sensors use temperature-compensated speed of sound) → run QC selection across sensors → transmit DATA message via LoRa and wait for ACK → append reading to CSV → clean up GPIO and SPI resources. Signal handlers (SIGINT/SIGTERM) ensure graceful hardware cleanup on shutdown.
+Each measurement cycle follows a linear pipeline: initialize hardware → read DS18B20 temperature → read each configured distance sensor (GPIO sensors use temperature-compensated speed of sound) → run QC selection across sensors → transmit DATA message via LoRa and wait for ACK → append reading to CSV → clean up GPIO and SPI resources. Signal handlers (SIGINT/SIGTERM) ensure graceful hardware cleanup on shutdown.
 
 | Module | Purpose |
 |--------|---------|
@@ -226,7 +227,7 @@ Each measurement cycle follows a linear pipeline: initialize hardware → read D
 | `cycle.py` | Boot ID and monotonic cycle counter |
 | `qc.py` | Per-cycle quality bitmask and best-sensor selection |
 | `temperature.py` | DS18B20 readings with retry logic and range validation |
-| `ultrasonic.py` | HC-SR04 median-filtered distance with temperature compensation |
+| `ultrasonic.py` | HC-SR04 and JSN-SR04T median-filtered distance with temperature compensation |
 | `maxbotix.py` | MaxBotix MB7374 distance over USB-TTL serial |
 | `a02yyuw.py` | DFRobot A02YYUW distance over UART serial |
 | `lora.py` | LoRa DATA/ACK protocol with retries and CRC |
