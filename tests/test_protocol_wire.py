@@ -98,11 +98,36 @@ class TestParseData:
         assert wire.parse_data("ACK,SNOW01,20260304T120000Z") is None
         assert wire.parse_data("OTHER,SNOW01,20260304T120000Z,1,2,3,4,") is None
 
-    def test_wrong_field_count_returns_none(self):
-        # Too few
+    def test_too_few_fields_returns_none(self):
         assert wire.parse_data("DATA,SNOW01,20260304T120000Z") is None
-        # Too many
-        assert wire.parse_data("DATA,SNOW01,20260304T120000Z,1,2,3,4,,extra") is None
+        assert wire.parse_data("DATA,SNOW01,20260304T120000Z,1,2,3,4") is None
+
+    def test_extra_trailing_fields_ignored(self):
+        # Append-only forward compatibility: a newer sender may add fields
+        # after error_flags; this receiver parses the v3 fields and drops the rest.
+        result = wire.parse_data(
+            "DATA,SNOW01,20260304T120000Z,42.50,157.50,-5.32,200.00,,7.25"
+        )
+        assert result == {
+            "station_id": "SNOW01",
+            "timestamp": "20260304T120000Z",
+            "snow_depth_cm": 42.5,
+            "distance_raw_cm": 157.5,
+            "temperature_c": -5.32,
+            "sensor_height_cm": 200.0,
+            "error_flags": "",
+        }
+
+    def test_error_flags_position_fixed_with_extra_fields(self):
+        result = wire.parse_data(
+            "DATA,SNOW01,20260304T120000Z,1,2,3,4,temp_read_error|lora_tx_error,x,y"
+        )
+        assert result is not None
+        assert result["error_flags"] == "temp_read_error|lora_tx_error"
+
+    def test_round_trip_with_appended_field(self):
+        message = wire.format_data(_full_payload()) + ",7.25"
+        assert wire.parse_data(message) == _full_payload()
 
     def test_empty_station_returns_none(self):
         assert wire.parse_data("DATA,,20260304T120000Z,1,2,3,4,") is None
