@@ -1,10 +1,11 @@
 """Auto-calibrate the snow sensor mount height.
 
-Run on bare ground (no snow) so the HC-SR04 sees the reference surface.
-The script takes many short measurement cycles, applies the same QC gates
-the main station uses, robustly aggregates across cycles, and prints a
-recommended value for `station.sensor_height_cm`. Pass --apply to write
-the value back to config/station.yaml.
+Run on bare ground (no snow) so the sensor sees the reference surface.
+Works with any configured sensor (pick one with --sensor-id); the script
+takes many short measurement cycles, applies the same QC gates the main
+station uses, robustly aggregates across cycles, and prints a recommended
+value for `station.sensor_height_cm`. Pass --apply to write the value
+back to config/station.yaml.
 
 Examples:
     # Dry run with defaults (20 cycles, ~2.5 min)
@@ -41,6 +42,7 @@ if str(REPO_ROOT) not in sys.path:
 
 from snowsensor.sensor.config import (
     ConfigError,
+    SerialSensorConfig,
     StationConfig,
     UltrasonicSensorConfig,
     config_id,
@@ -48,12 +50,16 @@ from snowsensor.sensor.config import (
 )
 from snowsensor.protocol.csv_helpers import append_csv
 from snowsensor.protocol.timestamp import utc_now_iso
+from snowsensor.sensor.main import SENSOR_DRIVERS
 from snowsensor.sensor.temperature import TemperatureSensor
 from snowsensor.sensor.ultrasonic import (
+    DistanceSensorBase,
     SensorResult,
     UltrasonicSensor,
     median_absolute_deviation,
 )
+
+SensorEntry = UltrasonicSensorConfig | SerialSensorConfig
 
 EXIT_OK = 0
 EXIT_HARDWARE = 2
@@ -120,35 +126,44 @@ class SanityResult:
 # ---- Helpers ----
 
 
-def select_sensor(cfg: StationConfig, sensor_id: str | None) -> UltrasonicSensorConfig:
-    if cfg.sensors is None or not cfg.sensors.ultrasonic:
+def select_sensor(cfg: StationConfig, sensor_id: str | None) -> tuple[str, SensorEntry]:
+    """Pick (kind, config entry) across all sensor families."""
+    available: list[tuple[str, SensorEntry]] = []
+    if cfg.sensors is not None:
+        for kind in SENSOR_DRIVERS:
+            available.extend((kind, e) for e in getattr(cfg.sensors, kind))
+    if not available:
         raise CalibrationError(
-            "No ultrasonic sensors configured. Add a 'sensors.ultrasonic' "
-            "list or 'pins.hcsr04_*' fields to the YAML."
+            "No sensors configured. Add a 'sensors' section "
+            "or 'pins.hcsr04_*' fields to the YAML."
         )
-    sensors = cfg.sensors.ultrasonic
     if sensor_id is not None:
-        for s in sensors:
-            if s.id == sensor_id:
-                return s
-        ids = [s.id for s in sensors]
+        for kind, entry in available:
+            if entry.id == sensor_id:
+                return kind, entry
+        ids = [e.id for _, e in available]
         raise CalibrationError(
             f"--sensor-id '{sensor_id}' not found; available ids: {ids}"
         )
-    if len(sensors) == 1:
-        return sensors[0]
-    ids = [s.id for s in sensors]
+    if len(available) == 1:
+        return available[0]
+    ids = [e.id for _, e in available]
     raise CalibrationError(
-        f"Multiple ultrasonic sensors configured ({ids}); "
+        f"Multiple sensors configured ({ids}); "
         f"pass --sensor-id to choose which to calibrate."
     )
+
+
+def build_driver(kind: str, entry: SensorEntry) -> DistanceSensorBase:
+    """Construct the production driver for a configured sensor. Test seam."""
+    return SENSOR_DRIVERS[kind][1](entry)
 
 
 # ---- Cycle execution ----
 
 
 def run_cycle(
-    sensor: UltrasonicSensor,
+    sensor: DistanceSensorBase,
     temp_sensor: TemperatureSensor | None,
     sensor_id: str,
     cycle_idx: int,
@@ -181,7 +196,7 @@ def run_cycle(
 
 
 def run_cycles(
-    sensor: UltrasonicSensor,
+    sensor: DistanceSensorBase,
     temp_sensor: TemperatureSensor | None,
     sensor_id: str,
     n_cycles: int,
@@ -428,7 +443,8 @@ def write_logs(
     args: argparse.Namespace,
     cfg: StationConfig,
     config_path: Path,
-    usc: UltrasonicSensorConfig,
+    kind: str,
+    usc: SensorEntry,
     cycles: list[Cycle],
     stats: dict,
     samples: int,
@@ -448,10 +464,16 @@ def write_logs(
     else:
         json_path = DEFAULT_OUTPUT_DIR / f"{ts_compact}_{cfg.station_id}.json"
 
+    if hasattr(usc, "trigger_pin"):
+        wiring = {"trigger_pin": usc.trigger_pin, "echo_pin": usc.echo_pin}
+    else:
+        wiring = {"serial_port": usc.serial_port, "baud_rate": usc.baud_rate}
+
     payload = {
         "timestamp_utc": ts_iso,
         "station_id": cfg.station_id,
         "sensor_id": usc.id,
+        "sensor_kind": kind,
         "config_path": str(config_path),
         "config_id": cfg_hash,
         "git_sha": git_sha,
@@ -471,10 +493,7 @@ def write_logs(
             "min_valid_fraction": cfg.qc.min_valid_fraction,
             "max_spread_cm": cfg.qc.max_spread_cm,
         },
-        "pin_assignment": {
-            "trigger_pin": usc.trigger_pin,
-            "echo_pin": usc.echo_pin,
-        },
+        "pin_assignment": wiring,
         "stats": stats,
         "cycles": [asdict(c) for c in cycles],
         "verify_cycle": asdict(verify_cycle) if verify_cycle else None,
@@ -604,7 +623,7 @@ def main(argv: list[str] | None = None) -> int:
         return EXIT_HARDWARE
 
     try:
-        usc = select_sensor(cfg, args.sensor_id)
+        kind, usc = select_sensor(cfg, args.sensor_id)
     except CalibrationError as e:
         print(f"ERROR: {e}", file=sys.stderr)
         return EXIT_HARDWARE
@@ -618,18 +637,21 @@ def main(argv: list[str] | None = None) -> int:
         else args.inter_pulse_delay_ms
     )
 
+    if hasattr(usc, "trigger_pin"):
+        wiring = f"trig={usc.trigger_pin}, echo={usc.echo_pin}"
+    else:
+        wiring = f"port={usc.serial_port}"
     print(
-        f"Calibrating sensor '{usc.id}' (trig={usc.trigger_pin}, "
-        f"echo={usc.echo_pin})\n"
+        f"Calibrating sensor '{usc.id}' ({kind}, {wiring})\n"
         f"  cycles={args.cycles}  samples/cycle={samples}  "
         f"cycle_delay={args.cycle_delay}s  inter_pulse_delay={inter_pulse_delay_ms}ms\n"
         f"  current sensor_height_cm = {cfg.sensor_height_cm} cm\n"
     )
 
-    sensor = UltrasonicSensor(trigger_pin=usc.trigger_pin, echo_pin=usc.echo_pin)
+    sensor = build_driver(kind, usc)
     if not sensor.initialize():
         print(
-            f"ERROR: ultrasonic init failed: {sensor.get_last_error_reason()}",
+            f"ERROR: sensor init failed: {sensor.get_last_error_reason()}",
             file=sys.stderr,
         )
         return EXIT_HARDWARE
@@ -686,6 +708,7 @@ def main(argv: list[str] | None = None) -> int:
             args,
             cfg,
             config_path,
+            kind,
             usc,
             cycles,
             stats,
@@ -766,6 +789,7 @@ def main(argv: list[str] | None = None) -> int:
 
     print("\nVerification cycle ...")
     verify_cycle = _run_verify_cycle(
+        kind,
         usc,
         samples,
         inter_pulse_delay_ms,
@@ -798,12 +822,13 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _run_verify_cycle(
-    usc: UltrasonicSensorConfig,
+    kind: str,
+    usc: SensorEntry,
     samples: int,
     inter_pulse_delay_ms: int,
     skip_temperature: bool,
 ) -> Cycle | None:
-    sensor = UltrasonicSensor(trigger_pin=usc.trigger_pin, echo_pin=usc.echo_pin)
+    sensor = build_driver(kind, usc)
     if not sensor.initialize():
         return None
     temp_sensor: TemperatureSensor | None = None
