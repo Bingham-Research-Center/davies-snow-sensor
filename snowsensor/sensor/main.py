@@ -12,27 +12,60 @@ from pathlib import Path
 
 from snowsensor.protocol.timestamp import utc_now_iso
 from snowsensor.sensor.a02yyuw import A02yyuwSensor
-from snowsensor.sensor.config import QCConfig, StationConfig, config_id, load_config
+from snowsensor.sensor.config import (
+    QCConfig,
+    SensorsConfig,
+    StationConfig,
+    config_id,
+    load_config,
+)
 from snowsensor.sensor.cycle import get_boot_id, read_and_increment_cycle_id
 from snowsensor.sensor.lora import LoRaTransmitter
 from snowsensor.sensor.maxbotix import MaxbotixSensor
 from snowsensor.sensor.qc import compute_quality_flag, find_baseline, min_valid_samples
 from snowsensor.sensor.storage import Reading, SensorReading, SensorStorage, Storage
 from snowsensor.sensor.temperature import TemperatureSensor
-from snowsensor.sensor.ultrasonic import SensorResult, UltrasonicSensor
+from snowsensor.sensor.ultrasonic import (
+    DistanceSensorBase,
+    SensorResult,
+    UltrasonicSensor,
+)
 
 logger = logging.getLogger(__name__)
 
 # Warn once per cycle when the data filesystem drops below this floor.
 DISK_FREE_FLOOR_BYTES = 500 * 1024 * 1024
 
-DistanceDriver = UltrasonicSensor | MaxbotixSensor | A02yyuwSensor
-
-_SENSOR_LABELS = {
-    "ultrasonic": "Ultrasonic",
-    "maxbotix": "MaxBotix",
-    "a02yyuw": "A02YYUW",
+# One row per sensor model: config family name -> (display label, driver factory).
+# Factories are lambdas so driver names resolve on this module at call time,
+# keeping `patch("snowsensor.sensor.main.<Driver>")` effective in tests.
+SENSOR_DRIVERS = {
+    "ultrasonic": (
+        "Ultrasonic",
+        lambda c: UltrasonicSensor(trigger_pin=c.trigger_pin, echo_pin=c.echo_pin),
+    ),
+    "maxbotix": (
+        "MaxBotix",
+        lambda c: MaxbotixSensor(serial_port=c.serial_port, baud_rate=c.baud_rate),
+    ),
+    "a02yyuw": (
+        "A02YYUW",
+        lambda c: A02yyuwSensor(serial_port=c.serial_port, baud_rate=c.baud_rate),
+    ),
 }
+
+
+def build_sensors(
+    sensors: SensorsConfig | None,
+) -> dict[str, tuple[str, DistanceSensorBase]]:
+    """Construct one driver per configured sensor, keyed by unique sensor id."""
+    built: dict[str, tuple[str, DistanceSensorBase]] = {}
+    if sensors is None:
+        return built
+    for kind, (_label, factory) in SENSOR_DRIVERS.items():
+        for entry in getattr(sensors, kind):
+            built[entry.id] = (kind, factory(entry))
+    return built
 
 
 def _warn_if_disk_low(csv_path: str) -> None:
@@ -85,23 +118,9 @@ class SensorStation:
         self._config_path = config_path
         self._config_id = config_id(config_path) if config_path else ""
         self._temp = TemperatureSensor()
-        self._sensors: dict[str, tuple[str, DistanceDriver]] = {}
-        if config.sensors is not None:
-            for u in config.sensors.ultrasonic:
-                self._sensors[u.id] = (
-                    "ultrasonic",
-                    UltrasonicSensor(trigger_pin=u.trigger_pin, echo_pin=u.echo_pin),
-                )
-            for m in config.sensors.maxbotix:
-                self._sensors[m.id] = (
-                    "maxbotix",
-                    MaxbotixSensor(serial_port=m.serial_port, baud_rate=m.baud_rate),
-                )
-            for a in config.sensors.a02yyuw:
-                self._sensors[a.id] = (
-                    "a02yyuw",
-                    A02yyuwSensor(serial_port=a.serial_port, baud_rate=a.baud_rate),
-                )
+        self._sensors: dict[str, tuple[str, DistanceSensorBase]] = build_sensors(
+            config.sensors
+        )
         self._lora = LoRaTransmitter(
             cs_pin=config.pins.lora_cs,
             reset_pin=config.pins.lora_reset,
@@ -153,7 +172,7 @@ class SensorStation:
         qc = self._config.qc
         sensor_results: dict[str, SensorResult] = {}
         for sensor_id, (kind, sensor) in self._sensors.items():
-            label = _SENSOR_LABELS[kind]
+            label = SENSOR_DRIVERS[kind][0]
             if not sensor.initialize():
                 err = sensor.get_last_error_reason() or f"{kind}_init_error"
                 errors.append(f"{sensor_id}:{err}")
