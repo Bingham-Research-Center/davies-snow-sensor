@@ -1151,6 +1151,7 @@ class TestBuildSensors:
     def test_maps_each_family_to_its_driver(self):
         with (
             patch("snowsensor.sensor.main.UltrasonicSensor") as MockUltra,
+            patch("snowsensor.sensor.main.JsnSr04tSensor") as MockJsn,
             patch("snowsensor.sensor.main.MaxbotixSensor") as MockMax,
             patch("snowsensor.sensor.main.A02yyuwSensor") as MockA02,
         ):
@@ -1159,6 +1160,9 @@ class TestBuildSensors:
                     ultrasonic=[
                         UltrasonicSensorConfig(id="u1", trigger_pin=5, echo_pin=6)
                     ],
+                    jsn_sr04t=[
+                        UltrasonicSensorConfig(id="j1", trigger_pin=20, echo_pin=21)
+                    ],
                     maxbotix=[_serial_entry("m1")],
                     a02yyuw=[_serial_entry("a1")],
                 )
@@ -1166,16 +1170,19 @@ class TestBuildSensors:
 
         assert built == {
             "u1": ("ultrasonic", MockUltra.return_value),
+            "j1": ("jsn_sr04t", MockJsn.return_value),
             "m1": ("maxbotix", MockMax.return_value),
             "a1": ("a02yyuw", MockA02.return_value),
         }
         MockUltra.assert_called_once_with(trigger_pin=5, echo_pin=6)
+        MockJsn.assert_called_once_with(trigger_pin=20, echo_pin=21)
         MockMax.assert_called_once_with(serial_port="/dev/ttyUSB0", baud_rate=9600)
         MockA02.assert_called_once_with(serial_port="/dev/ttyUSB0", baud_rate=9600)
 
     def test_family_order_then_config_order(self):
         with (
             patch("snowsensor.sensor.main.UltrasonicSensor"),
+            patch("snowsensor.sensor.main.JsnSr04tSensor"),
             patch("snowsensor.sensor.main.MaxbotixSensor"),
             patch("snowsensor.sensor.main.A02yyuwSensor"),
         ):
@@ -1185,9 +1192,37 @@ class TestBuildSensors:
                         UltrasonicSensorConfig(id="u1", trigger_pin=5, echo_pin=6),
                         UltrasonicSensorConfig(id="u2", trigger_pin=13, echo_pin=19),
                     ],
+                    jsn_sr04t=[
+                        UltrasonicSensorConfig(id="j1", trigger_pin=20, echo_pin=21)
+                    ],
                     maxbotix=[_serial_entry("m1")],
                     a02yyuw=[_serial_entry("a1")],
                 )
             )
 
-        assert list(built) == ["u1", "u2", "m1", "a1"]
+        assert list(built) == ["u1", "u2", "j1", "m1", "a1"]
+
+
+class TestJsnInCycle:
+    def test_jsn_error_prefixed_with_id(self, mock_deps):
+        with patch("snowsensor.sensor.main.JsnSr04tSensor") as MockJsn:
+            jsn = MockJsn.return_value
+            jsn.initialize.return_value = False
+            jsn.get_last_error_reason.return_value = "jsn_sr04t_no_device"
+            cfg = _make_config(
+                sensors=SensorsConfig(
+                    ultrasonic=[
+                        UltrasonicSensorConfig(id="north", trigger_pin=5, echo_pin=6)
+                    ],
+                    jsn_sr04t=[
+                        UltrasonicSensorConfig(
+                            id="mast_jsn", trigger_pin=20, echo_pin=21
+                        )
+                    ],
+                )
+            )
+            station = SensorStation(cfg)
+            station.run_cycle()
+
+        reading = mock_deps["storage"].append.call_args[0][0]
+        assert "mast_jsn:jsn_sr04t_no_device" in reading.error_flags

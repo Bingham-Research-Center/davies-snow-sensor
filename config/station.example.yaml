@@ -27,12 +27,11 @@ pins:
   lora_cs: 7                # RFM95W SPI chip select
   lora_reset: 25            # RFM95W reset
 
-# At least one sensor is required: either this `sensors` section or the legacy
-# single-sensor `pins.hcsr04_trigger`/`pins.hcsr04_echo` pair.
-# Add `sensors.maxbotix` for MB7374 (HRXL-MaxSonar-WR) units wired through a
-# USB-to-TTL adapter (e.g. CP2102) — they appear as /dev/ttyUSB*.
-# JSN-SR04T waterproof probes in Mode 1 are HC-SR04-compatible; list them
-# under `sensors.ultrasonic` with their own trigger/echo pins.
+# At least one sensor (of any family) is required: either this `sensors`
+# section or the legacy single-sensor `pins.hcsr04_trigger`/`pins.hcsr04_echo`
+# pair. Families: `ultrasonic` (HC-SR04 GPIO), `jsn_sr04t` (waterproof GPIO
+# probe, own 25-450 cm envelope), `maxbotix` and `a02yyuw` (serial). MB7374
+# units wire through a USB-to-TTL adapter (e.g. CP2102) — /dev/ttyUSB*.
 sensors:
   ultrasonic:
     - id: "front"
@@ -41,9 +40,10 @@ sensors:
     # - id: "rear"
     #   trigger_pin: 13
     #   echo_pin: 19
-    # - id: "mast_jsn"        # JSN-SR04T waterproof, mode-select left open (Mode 1)
-    #   trigger_pin: 20
-    #   echo_pin: 21
+  # jsn_sr04t:
+  #   - id: "mast_jsn"        # JSN-SR04T waterproof, mode-select R19 left open (Mode 1)
+  #     trigger_pin: 20
+  #     echo_pin: 21
   # maxbotix:
   #   - id: "mast_mb"
   #     serial_port: "/dev/ttyUSB0"

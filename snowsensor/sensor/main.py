@@ -27,6 +27,7 @@ from snowsensor.sensor.storage import Reading, SensorReading, SensorStorage, Sto
 from snowsensor.sensor.temperature import TemperatureSensor
 from snowsensor.sensor.ultrasonic import (
     DistanceSensorBase,
+    JsnSr04tSensor,
     SensorResult,
     UltrasonicSensor,
 )
@@ -43,6 +44,10 @@ SENSOR_DRIVERS = {
     "ultrasonic": (
         "Ultrasonic",
         lambda c: UltrasonicSensor(trigger_pin=c.trigger_pin, echo_pin=c.echo_pin),
+    ),
+    "jsn_sr04t": (
+        "JSN-SR04T",
+        lambda c: JsnSr04tSensor(trigger_pin=c.trigger_pin, echo_pin=c.echo_pin),
     ),
     "maxbotix": (
         "MaxBotix",

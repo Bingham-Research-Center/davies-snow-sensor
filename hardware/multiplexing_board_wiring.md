@@ -51,6 +51,8 @@ Important behavior:
   - ECHO needs the same 1k/2k voltage divider as the HC-SR04.
   - The transducer hangs off the controller PCB on a cable — mount the
     transducer downward at the snow target; keep the PCB in the enclosure.
+  - Declared under `sensors.jsn_sr04t` (own 25–450 cm valid envelope; entries
+    listed under `sensors.ultrasonic` still work but use HC-SR04 limits).
 
 - Ultrasonic (MaxBotix MB7374, TTL serial):
   - **No GPIO and no voltage divider.** The MB7374's USB-A-terminated TTL
