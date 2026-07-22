@@ -55,7 +55,6 @@ from snowsensor.sensor.temperature import TemperatureSensor
 from snowsensor.sensor.ultrasonic import (
     DistanceSensorBase,
     SensorResult,
-    UltrasonicSensor,
     median_absolute_deviation,
 )
 
@@ -72,11 +71,6 @@ DEFAULT_CYCLE_DELAY_S = 5.0
 DEFAULT_MAD_K = 3.5
 DEFAULT_OUTPUT_DIR = REPO_ROOT / "data" / "calibration"
 SANITY_PCT_LIMIT = 0.20
-
-# Cached at import so test patches of calibrate.UltrasonicSensor don't
-# turn these into MagicMock attributes.
-MIN_VALID_CM = UltrasonicSensor.MIN_VALID_CM
-MAX_VALID_CM = UltrasonicSensor.MAX_VALID_CM
 
 HISTORY_HEADERS = [
     "timestamp_utc",
@@ -339,17 +333,23 @@ def aggregate(cycles: list[Cycle]) -> dict:
 # ---- Sanity guard ----
 
 
-def sanity_check(recommended: float, current: float) -> SanityResult:
+def sanity_check(
+    recommended: float,
+    current: float,
+    min_valid_cm: float,
+    max_valid_cm: float,
+) -> SanityResult:
+    """Guard the writeback: bounds come from the selected driver's class."""
     delta = recommended - current
     pct = abs(delta) / current if current > 0 else float("inf")
     reasons: list[str] = []
-    if recommended < MIN_VALID_CM:
+    if recommended < min_valid_cm:
         reasons.append(
-            f"recommended {recommended:.2f}cm < MIN_VALID_CM ({MIN_VALID_CM})"
+            f"recommended {recommended:.2f}cm < MIN_VALID_CM ({min_valid_cm})"
         )
-    if recommended > MAX_VALID_CM:
+    if recommended > max_valid_cm:
         reasons.append(
-            f"recommended {recommended:.2f}cm > MAX_VALID_CM ({MAX_VALID_CM})"
+            f"recommended {recommended:.2f}cm > MAX_VALID_CM ({max_valid_cm})"
         )
     if pct > SANITY_PCT_LIMIT:
         reasons.append(
@@ -745,7 +745,9 @@ def main(argv: list[str] | None = None) -> int:
         return EXIT_QC_FAILED
 
     recommended = float(stats["median_cm"])
-    sanity = sanity_check(recommended, cfg.sensor_height_cm)
+    sanity = sanity_check(
+        recommended, cfg.sensor_height_cm, sensor.MIN_VALID_CM, sensor.MAX_VALID_CM
+    )
     print(f"\nSanity check: delta = {sanity.delta:+.2f} cm ({sanity.pct:.1%})")
     if not sanity.ok:
         print(f"  ! {sanity.reason}")

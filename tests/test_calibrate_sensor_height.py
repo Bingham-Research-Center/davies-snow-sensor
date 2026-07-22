@@ -8,6 +8,7 @@ test_ultrasonic.py does it.
 from __future__ import annotations
 
 import importlib.util
+import json
 import os
 import sys
 import types
@@ -301,34 +302,41 @@ class TestAggregate:
 
 class TestSanityCheck:
     def test_within_tolerance(self):
-        r = calibrate.sanity_check(110.0, 100.0)
+        r = calibrate.sanity_check(110.0, 100.0, 2.0, 400.0)
         assert r.ok is True
         assert r.delta == 10.0
         assert abs(r.pct - 0.1) < 1e-9
 
     def test_at_tolerance_passes(self):
         # 20% exactly should pass (strict-greater check)
-        r = calibrate.sanity_check(120.0, 100.0)
+        r = calibrate.sanity_check(120.0, 100.0, 2.0, 400.0)
         assert r.ok is True
 
     def test_exceeds_pct_limit(self):
-        r = calibrate.sanity_check(150.0, 100.0)
+        r = calibrate.sanity_check(150.0, 100.0, 2.0, 400.0)
         assert r.ok is False
         assert "exceeds" in r.reason
 
     def test_below_min(self):
-        r = calibrate.sanity_check(1.0, 100.0)
+        r = calibrate.sanity_check(1.0, 100.0, 2.0, 400.0)
         assert r.ok is False
         assert "MIN_VALID_CM" in r.reason
 
     def test_above_max(self):
-        r = calibrate.sanity_check(500.0, 100.0)
+        r = calibrate.sanity_check(500.0, 100.0, 2.0, 400.0)
         assert r.ok is False
         assert "MAX_VALID_CM" in r.reason
 
     def test_first_calibration_placeholder_refused(self):
         # Current placeholder 5.08, recommended ~150 -> way over 20%
-        r = calibrate.sanity_check(150.0, 5.08)
+        r = calibrate.sanity_check(150.0, 5.08, 2.0, 400.0)
+        assert r.ok is False
+
+    def test_bounds_follow_driver_envelope(self):
+        # 480 cm is out of range for an HC-SR04 but fine for an MB7374 (30-500)
+        r = calibrate.sanity_check(480.0, 480.0, 30.0, 500.0)
+        assert r.ok is True
+        r = calibrate.sanity_check(480.0, 480.0, 2.0, 400.0)
         assert r.ok is False
 
 
@@ -637,6 +645,9 @@ class TestMainIntegration:
 
         ultra_inst = MagicMock()
         ultra_inst.initialize.return_value = True
+        # Real float bounds: main() reads these off the driver for sanity_check.
+        ultra_inst.MIN_VALID_CM = 2.0
+        ultra_inst.MAX_VALID_CM = 400.0
         ultra_inst.read_distance_cm.return_value = SensorResult(
             distance_cm=distance_cm,
             num_samples=num_samples,
@@ -924,3 +935,102 @@ class TestMainIntegration:
         assert rc == calibrate.EXIT_WRITEBACK_FAILED
         # Config restored from backup
         assert cfg_path.read_text() == original_text
+
+    def _write_serial_yaml(self, tmp_path: Path, height: float = 200.0) -> Path:
+        cfg = tmp_path / "station.yaml"
+        cfg.write_text(
+            f"station:\n"
+            f'  id: "TEST01"\n'
+            f"  sensor_height_cm: {height}\n"
+            f"\n"
+            f"pins:\n"
+            f"  ds18b20_data: 4\n"
+            f"  lora_cs: 8\n"
+            f"  lora_reset: 25\n"
+            f"\n"
+            f"sensors:\n"
+            f"  maxbotix:\n"
+            f"    - id: mb1\n"
+            f'      serial_port: "/dev/ttyUSB0"\n'
+            f"\n"
+            f"storage:\n"
+            f'  csv_path: "/tmp/x.csv"\n'
+            f"\n"
+            f"lora:\n"
+            f"  key_file: lora.key\n",
+            encoding="utf-8",
+        )
+        (tmp_path / "lora.key").write_text(bytes(range(32)).hex())
+        return cfg
+
+    def _serial_sensors(self, distance_cm=200.0):
+        from snowsensor.sensor.ultrasonic import SensorResult
+
+        inst = MagicMock()
+        inst.initialize.return_value = True
+        inst.MIN_VALID_CM = 30.0
+        inst.MAX_VALID_CM = 500.0
+        inst.read_distance_cm.return_value = SensorResult(
+            distance_cm=distance_cm,
+            num_samples=5,
+            num_valid=5,
+            spread_cm=0.1,
+            error=None,
+        )
+        temp_inst = MagicMock()
+        temp_inst.initialize.return_value = True
+        temp_inst.read_temperature_c.return_value = 20.0
+        return inst, temp_inst
+
+    def test_serial_sensor_dry_run_logs_kind_and_port(self, tmp_path, monkeypatch):
+        cfg_path = self._write_serial_yaml(tmp_path, height=200.0)
+        monkeypatch.setattr(calibrate, "DEFAULT_OUTPUT_DIR", tmp_path / "calib")
+        monkeypatch.setattr(calibrate.time, "sleep", lambda *_: None)
+
+        inst, temp_inst = self._serial_sensors(distance_cm=200.0)
+        with (
+            patch.object(calibrate, "build_driver", return_value=inst),
+            patch.object(calibrate, "TemperatureSensor", return_value=temp_inst),
+        ):
+            rc = calibrate.main(
+                ["--config", str(cfg_path), "--cycles", "3", "--cycle-delay", "0"]
+            )
+
+        assert rc == calibrate.EXIT_OK
+        logs = list((tmp_path / "calib").glob("*.json"))
+        assert len(logs) == 1
+        payload = json.loads(logs[0].read_text())
+        assert payload["sensor_kind"] == "maxbotix"
+        assert payload["pin_assignment"] == {
+            "serial_port": "/dev/ttyUSB0",
+            "baud_rate": 9600,
+        }
+
+    def test_serial_beyond_hc_range_applies_with_driver_bounds(
+        self, tmp_path, monkeypatch
+    ):
+        # 480 cm mount: out of HC-SR04 range but valid for an MB7374 (30-500).
+        # The sanity guard must use the selected driver's envelope.
+        cfg_path = self._write_serial_yaml(tmp_path, height=480.0)
+        monkeypatch.setattr(calibrate, "DEFAULT_OUTPUT_DIR", tmp_path / "calib")
+        monkeypatch.setattr(calibrate.time, "sleep", lambda *_: None)
+
+        inst, temp_inst = self._serial_sensors(distance_cm=480.0)
+        with (
+            patch.object(calibrate, "build_driver", return_value=inst),
+            patch.object(calibrate, "TemperatureSensor", return_value=temp_inst),
+        ):
+            rc = calibrate.main(
+                [
+                    "--config",
+                    str(cfg_path),
+                    "--cycles",
+                    "3",
+                    "--cycle-delay",
+                    "0",
+                    "--apply",
+                ]
+            )
+
+        assert rc == calibrate.EXIT_OK
+        assert "480.00" in cfg_path.read_text()
