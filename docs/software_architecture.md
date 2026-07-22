@@ -331,11 +331,11 @@ One PR per model, following this checklist:
 
 1. **Driver class** — subclass `DistanceSensorBase` (GPIO pulse-echo models
    subclass `UltrasonicSensor`, serial models subclass `SerialDistanceSensor`)
-   and set `KIND`, `MIN_VALID_CM`, `MAX_VALID_CM`. `JsnSr04tSensor` in
-   `ultrasonic.py` is the minimal example.
-2. **Registry row** — add the model to `SENSOR_DRIVERS` in `sensor/main.py`
-   (display label + factory lambda; keep the lambda late-binding so test
-   patches on the module keep working).
+   and set `KIND` (also the config family name), `LABEL`, `MIN_VALID_CM`,
+   `MAX_VALID_CM`. `JsnSr04tSensor` in `ultrasonic.py` is the minimal example.
+2. **Registry row** — add a `<Class>.KIND: factory` entry to `SENSOR_DRIVERS`
+   in `sensor/main.py`; keep the factory a late-binding lambda so test
+   patches on the module keep working.
 3. **Config family** — add a `SensorsConfig` field in `sensor/config.py` and
    parse it with `_parse_gpio_sensors` or `_parse_serial_sensors`, sharing the
    `seen_ids` set (and pin map for GPIO) so cross-family checks stay intact.
