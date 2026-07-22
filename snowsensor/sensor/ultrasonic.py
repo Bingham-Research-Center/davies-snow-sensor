@@ -103,17 +103,20 @@ class UltrasonicSensor(DistanceSensorBase):
     KIND = "ultrasonic"
     MIN_VALID_CM = 2.0
     MAX_VALID_CM = 400.0
+    MAX_DISTANCE_M = 4.0  # gpiozero echo cutoff; readings clamp here
     SPEED_OF_SOUND_20C = 343.26  # m/s, gpiozero's default
 
     def __init__(
         self,
         trigger_pin: int,
         echo_pin: int,
-        max_distance_m: float = 4.0,
+        max_distance_m: float | None = None,
     ) -> None:
         self._trigger_pin = trigger_pin
         self._echo_pin = echo_pin
-        self._max_distance_m = max_distance_m
+        self._max_distance_m = (
+            self.MAX_DISTANCE_M if max_distance_m is None else max_distance_m
+        )
         self._sensor = None
         self._initialized = False
         self._last_error: str | None = None
@@ -201,3 +204,16 @@ class UltrasonicSensor(DistanceSensorBase):
         self._initialized = False
         self._last_error = None
         self._last_read_duration_ms = 0
+
+
+class JsnSr04tSensor(UltrasonicSensor):
+    """JSN-SR04T waterproof probe, mode-select open (Mode 1).
+
+    Same HC-SR04 pulse-echo protocol on trigger/echo pins; only the valid
+    envelope differs: 25 cm blind zone, 450 cm max range.
+    """
+
+    KIND = "jsn_sr04t"
+    MIN_VALID_CM = 25.0
+    MAX_VALID_CM = 450.0
+    MAX_DISTANCE_M = 4.5
