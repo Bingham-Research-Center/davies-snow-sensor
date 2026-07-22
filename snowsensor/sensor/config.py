@@ -80,7 +80,7 @@ class SerialSensorConfig:
 
 @dataclass(frozen=True)
 class SensorsConfig:
-    ultrasonic: list[UltrasonicSensorConfig]
+    ultrasonic: list[UltrasonicSensorConfig] = field(default_factory=list)
     maxbotix: list[SerialSensorConfig] = field(default_factory=list)
     a02yyuw: list[SerialSensorConfig] = field(default_factory=list)
 
@@ -174,36 +174,13 @@ def _parse_sensors(
     if raw is not None:
         if not isinstance(raw, dict):
             raise ConfigError("'sensors' must be a mapping")
-        ultra_raw = raw.get("ultrasonic")
-        if not isinstance(ultra_raw, list) or len(ultra_raw) == 0:
-            raise ConfigError("'sensors.ultrasonic' must be a non-empty list")
-        ultrasonic = []
         seen_ids: set[str] = set()
-        all_pins: dict[str, int] = {}
-        for i, entry in enumerate(ultra_raw):
-            section = f"sensors.ultrasonic[{i}]"
-            if not isinstance(entry, dict):
-                raise ConfigError(f"'{section}' must be a mapping")
-            sid = require(entry, "id", section)
-            if not isinstance(sid, str):
-                raise ConfigError(f"Field 'id' in '{section}' must be a string")
-            if sid in seen_ids:
-                raise ConfigError(f"Duplicate sensor id '{sid}'")
-            seen_ids.add(sid)
-            trig = require_int(entry, "trigger_pin", section)
-            echo = require_int(entry, "echo_pin", section)
-            validate_pin(f"{sid}.trigger_pin", trig)
-            validate_pin(f"{sid}.echo_pin", echo)
-            _check_sensor_pin_reserved(f"{sid}.trigger_pin", trig, hardware_profile)
-            _check_sensor_pin_reserved(f"{sid}.echo_pin", echo, hardware_profile)
-            all_pins[f"{sid}.trigger_pin"] = trig
-            all_pins[f"{sid}.echo_pin"] = echo
-            ultrasonic.append(
-                UltrasonicSensorConfig(id=sid, trigger_pin=trig, echo_pin=echo)
-            )
-        # Check collisions among all ultrasonic pins
+        ultrasonic, all_pins = _parse_gpio_sensors(
+            raw.get("ultrasonic"), seen_ids, "ultrasonic", hardware_profile
+        )
+        # Check collisions among all GPIO sensor pins
         _check_pin_collisions(all_pins)
-        # Check collisions against non-ultrasonic pins
+        # Check collisions against non-sensor pins
         base_pins = {
             "ds18b20_data": pins.ds18b20_data,
             "lora_cs": pins.lora_cs,
@@ -213,6 +190,11 @@ def _parse_sensors(
 
         maxbotix = _parse_serial_sensors(raw.get("maxbotix"), seen_ids, "maxbotix")
         a02yyuw = _parse_serial_sensors(raw.get("a02yyuw"), seen_ids, "a02yyuw")
+        if not (ultrasonic or maxbotix or a02yyuw):
+            raise ConfigError(
+                "At least one sensor must be configured under 'sensors' "
+                "(ultrasonic, maxbotix, or a02yyuw)"
+            )
         return SensorsConfig(ultrasonic=ultrasonic, maxbotix=maxbotix, a02yyuw=a02yyuw)
 
     # Legacy: auto-convert from pins config
@@ -240,6 +222,46 @@ def _parse_sensors(
             )
         ]
     )
+
+
+def _parse_gpio_sensors(
+    raw: object,
+    seen_ids: set[str],
+    key: str,
+    hardware_profile: str | None,
+) -> tuple[list[UltrasonicSensorConfig], dict[str, int]]:
+    """Parse an optional `sensors.<key>` GPIO trigger/echo list.
+
+    Returns (entries, pins) where pins maps '<id>.<field>' to the GPIO number
+    so the caller can run collision checks across families.
+    """
+    if raw is None:
+        return [], {}
+    if not isinstance(raw, list):
+        raise ConfigError(f"'sensors.{key}' must be a list")
+
+    entries: list[UltrasonicSensorConfig] = []
+    pins: dict[str, int] = {}
+    for i, entry in enumerate(raw):
+        section = f"sensors.{key}[{i}]"
+        if not isinstance(entry, dict):
+            raise ConfigError(f"'{section}' must be a mapping")
+        sid = require(entry, "id", section)
+        if not isinstance(sid, str):
+            raise ConfigError(f"Field 'id' in '{section}' must be a string")
+        if sid in seen_ids:
+            raise ConfigError(f"Duplicate sensor id '{sid}'")
+        seen_ids.add(sid)
+        trig = require_int(entry, "trigger_pin", section)
+        echo = require_int(entry, "echo_pin", section)
+        validate_pin(f"{sid}.trigger_pin", trig)
+        validate_pin(f"{sid}.echo_pin", echo)
+        _check_sensor_pin_reserved(f"{sid}.trigger_pin", trig, hardware_profile)
+        _check_sensor_pin_reserved(f"{sid}.echo_pin", echo, hardware_profile)
+        pins[f"{sid}.trigger_pin"] = trig
+        pins[f"{sid}.echo_pin"] = echo
+        entries.append(UltrasonicSensorConfig(id=sid, trigger_pin=trig, echo_pin=echo))
+    return entries, pins
 
 
 def _parse_serial_sensors(
