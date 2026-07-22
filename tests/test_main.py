@@ -19,7 +19,12 @@ from snowsensor.sensor.config import (
     TimingConfig,
     UltrasonicSensorConfig,
 )
-from snowsensor.sensor.main import SensorStation, _select_best_sensor, main
+from snowsensor.sensor.main import (
+    SensorStation,
+    _select_best_sensor,
+    build_sensors,
+    main,
+)
 from snowsensor.sensor.qc import RATE_OF_CHANGE_HIGH
 from snowsensor.sensor.qc import compute_quality_flag as real_compute_quality_flag
 from snowsensor.sensor.storage import Reading
@@ -1132,3 +1137,57 @@ class TestSerialSensorsInCycle:
 
         mock_mixed_deps["maxbotix"].cleanup.assert_called_once()
         mock_mixed_deps["a02yyuw"].cleanup.assert_called_once()
+
+
+# ── build_sensors registry ───────────────────────────────────────
+
+
+class TestBuildSensors:
+    def test_none_builds_nothing(self):
+        with patch("snowsensor.sensor.main.UltrasonicSensor") as MockUltra:
+            assert build_sensors(None) == {}
+            MockUltra.assert_not_called()
+
+    def test_maps_each_family_to_its_driver(self):
+        with (
+            patch("snowsensor.sensor.main.UltrasonicSensor") as MockUltra,
+            patch("snowsensor.sensor.main.MaxbotixSensor") as MockMax,
+            patch("snowsensor.sensor.main.A02yyuwSensor") as MockA02,
+        ):
+            built = build_sensors(
+                SensorsConfig(
+                    ultrasonic=[
+                        UltrasonicSensorConfig(id="u1", trigger_pin=5, echo_pin=6)
+                    ],
+                    maxbotix=[_serial_entry("m1")],
+                    a02yyuw=[_serial_entry("a1")],
+                )
+            )
+
+        assert built == {
+            "u1": ("ultrasonic", MockUltra.return_value),
+            "m1": ("maxbotix", MockMax.return_value),
+            "a1": ("a02yyuw", MockA02.return_value),
+        }
+        MockUltra.assert_called_once_with(trigger_pin=5, echo_pin=6)
+        MockMax.assert_called_once_with(serial_port="/dev/ttyUSB0", baud_rate=9600)
+        MockA02.assert_called_once_with(serial_port="/dev/ttyUSB0", baud_rate=9600)
+
+    def test_family_order_then_config_order(self):
+        with (
+            patch("snowsensor.sensor.main.UltrasonicSensor"),
+            patch("snowsensor.sensor.main.MaxbotixSensor"),
+            patch("snowsensor.sensor.main.A02yyuwSensor"),
+        ):
+            built = build_sensors(
+                SensorsConfig(
+                    ultrasonic=[
+                        UltrasonicSensorConfig(id="u1", trigger_pin=5, echo_pin=6),
+                        UltrasonicSensorConfig(id="u2", trigger_pin=13, echo_pin=19),
+                    ],
+                    maxbotix=[_serial_entry("m1")],
+                    a02yyuw=[_serial_entry("a1")],
+                )
+            )
+
+        assert list(built) == ["u1", "u2", "m1", "a1"]
