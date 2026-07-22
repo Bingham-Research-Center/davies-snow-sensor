@@ -633,13 +633,52 @@ class TestMultiSensorConfig:
 
 
 class TestMultiSensorValidation:
-    def test_empty_ultrasonic_list(self, tmp_path):
+    def test_empty_ultrasonic_list_alone_rejected(self, tmp_path):
         data = {
             **MULTI_SENSOR_CONFIG,
             "sensors": {"ultrasonic": []},
         }
-        with pytest.raises(ConfigError, match="non-empty"):
+        with pytest.raises(ConfigError, match="At least one sensor"):
             load_config(_write_yaml(tmp_path, data))
+
+    def test_empty_sensors_section_rejected(self, tmp_path):
+        data = {
+            **MULTI_SENSOR_CONFIG,
+            "sensors": {},
+        }
+        with pytest.raises(ConfigError, match="At least one sensor"):
+            load_config(_write_yaml(tmp_path, data))
+
+    def test_ultrasonic_not_a_list_rejected(self, tmp_path):
+        data = {
+            **MULTI_SENSOR_CONFIG,
+            "sensors": {"ultrasonic": {"id": "north"}},
+        }
+        with pytest.raises(ConfigError, match="must be a list"):
+            load_config(_write_yaml(tmp_path, data))
+
+    def test_maxbotix_only_station_valid(self, tmp_path):
+        data = {
+            **MULTI_SENSOR_CONFIG,
+            "sensors": {
+                "maxbotix": [{"id": "mb1", "serial_port": "/dev/ttyUSB0"}],
+            },
+        }
+        cfg = load_config(_write_yaml(tmp_path, data))
+        assert cfg.sensors.ultrasonic == []
+        assert len(cfg.sensors.maxbotix) == 1
+        assert cfg.sensors.maxbotix[0].id == "mb1"
+
+    def test_a02yyuw_only_station_valid(self, tmp_path):
+        data = {
+            **MULTI_SENSOR_CONFIG,
+            "sensors": {
+                "a02yyuw": [{"id": "a1", "serial_port": "/dev/ttyUSB1"}],
+            },
+        }
+        cfg = load_config(_write_yaml(tmp_path, data))
+        assert cfg.sensors.ultrasonic == []
+        assert len(cfg.sensors.a02yyuw) == 1
 
     def test_duplicate_sensor_id(self, tmp_path):
         data = {
