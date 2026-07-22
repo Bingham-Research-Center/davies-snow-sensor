@@ -1,11 +1,13 @@
-"""Continuous HC-SR04 distance readings for hardware verification.
+"""Continuous distance readings for hardware verification.
 
-Uses the production UltrasonicSensor wrapper so readings match exactly what
-snowsensor.sensor.main sees during a cycle. Pins default to the values in
-config/station.yaml; override with --trig / --echo.
+Uses the production drivers so readings match exactly what
+snowsensor.sensor.main sees during a cycle. By default reads the first
+sensor in config/station.yaml; pick another with --sensor-id, or bypass
+the config entirely with raw HC-SR04 pins via --trig / --echo.
 
 Usage:
-    python scripts/continuous_distance.py [--config path] [--trig N] [--echo N] [--interval SECONDS]
+    python scripts/continuous_distance.py [--config path] [--sensor-id ID]
+        [--trig N] [--echo N] [--interval SECONDS]
 """
 
 from __future__ import annotations
@@ -20,21 +22,29 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from snowsensor.sensor.config import load_config
+from snowsensor.sensor.main import SENSOR_DRIVERS
 from snowsensor.sensor.ultrasonic import UltrasonicSensor
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Continuous HC-SR04 distance readings")
+    parser = argparse.ArgumentParser(
+        description="Continuous distance readings from one configured sensor"
+    )
     parser.add_argument(
         "--config",
         default=str(REPO_ROOT / "config" / "station.yaml"),
-        help="Path to station YAML (used only if --trig/--echo not set)",
+        help="Path to station YAML (used unless --trig/--echo set)",
     )
     parser.add_argument(
-        "--trig", type=int, help="HC-SR04 trigger BCM pin (overrides config)"
+        "--sensor-id",
+        default=None,
+        help="Read this configured sensor by id (default: first in config)",
     )
     parser.add_argument(
-        "--echo", type=int, help="HC-SR04 echo BCM pin (overrides config)"
+        "--trig", type=int, help="Raw HC-SR04 trigger BCM pin (bypasses config)"
+    )
+    parser.add_argument(
+        "--echo", type=int, help="Raw HC-SR04 echo BCM pin (bypasses config)"
     )
     parser.add_argument(
         "--interval", type=float, default=1.0, help="Seconds between reads"
@@ -43,17 +53,38 @@ def main() -> int:
     args = parser.parse_args()
 
     if args.trig is not None and args.echo is not None:
-        trig, echo = args.trig, args.echo
+        sensor = UltrasonicSensor(trigger_pin=args.trig, echo_pin=args.echo)
+        print(f"Using raw HC-SR04 pins: trig={args.trig} echo={args.echo}")
     else:
         cfg = load_config(args.config)
-        sensors = cfg.sensors.ultrasonic if cfg.sensors else []
-        if not sensors:
-            print(f"ERROR: no ultrasonic sensors in {args.config}", file=sys.stderr)
+        available = []
+        if cfg.sensors is not None:
+            for kind in SENSOR_DRIVERS:
+                available.extend((kind, e) for e in getattr(cfg.sensors, kind))
+        if not available:
+            print(f"ERROR: no sensors in {args.config}", file=sys.stderr)
             return 1
-        trig, echo = sensors[0].trigger_pin, sensors[0].echo_pin
-        print(f"Using pins from {args.config}: trig={trig} echo={echo}")
+        if args.sensor_id is None:
+            kind, entry = available[0]
+        else:
+            matches = [(k, e) for k, e in available if e.id == args.sensor_id]
+            if not matches:
+                ids = [e.id for _, e in available]
+                print(
+                    f"ERROR: --sensor-id '{args.sensor_id}' not found; "
+                    f"available ids: {ids}",
+                    file=sys.stderr,
+                )
+                return 1
+            kind, entry = matches[0]
+        sensor = SENSOR_DRIVERS[kind][1](entry)
+        wiring = (
+            f"trig={entry.trigger_pin} echo={entry.echo_pin}"
+            if hasattr(entry, "trigger_pin")
+            else f"port={entry.serial_port}"
+        )
+        print(f"Using sensor '{entry.id}' from {args.config}: {kind}, {wiring}")
 
-    sensor = UltrasonicSensor(trigger_pin=trig, echo_pin=echo)
     if not sensor.initialize():
         print(
             f"ERROR: failed to initialize sensor: {sensor.get_last_error_reason()}",
