@@ -8,9 +8,11 @@ import os
 import shutil
 import signal
 import sys
+from dataclasses import fields as dataclass_fields
 from pathlib import Path
 
 from snowsensor.protocol.timestamp import utc_now_iso
+from snowsensor.protocol.validation import ConfigError
 from snowsensor.sensor.a02yyuw import A02yyuwSensor
 from snowsensor.sensor.config import (
     QCConfig,
@@ -61,14 +63,45 @@ SENSOR_DRIVERS = {
 def build_sensors(
     sensors: SensorsConfig | None,
 ) -> dict[str, tuple[str, DistanceSensorBase]]:
-    """Construct one driver per configured sensor, keyed by unique sensor id."""
+    """Construct one driver per configured sensor, keyed by unique sensor id.
+
+    The SensorsConfig family fields and the SENSOR_DRIVERS registry keys must
+    agree in both directions; a mismatch raises ConfigError at startup instead
+    of silently skipping a family (or never being buildable).
+    """
     built: dict[str, tuple[str, DistanceSensorBase]] = {}
     if sensors is None:
         return built
-    for kind, factory in SENSOR_DRIVERS.items():
-        for entry in getattr(sensors, kind):
+    families = {f.name: getattr(sensors, f.name) for f in dataclass_fields(sensors)}
+    orphaned = sorted(SENSOR_DRIVERS.keys() - families.keys())
+    if orphaned:
+        raise ConfigError(
+            f"SENSOR_DRIVERS registers kinds with no SensorsConfig family "
+            f"field: {', '.join(orphaned)}"
+        )
+    for kind, entries in families.items():
+        factory = SENSOR_DRIVERS.get(kind)
+        if factory is None:
+            if entries:
+                raise ConfigError(
+                    f"No driver registered for configured sensor family '{kind}'"
+                )
+            continue
+        for entry in entries:
             built[entry.id] = (kind, factory(entry))
     return built
+
+
+def sensor_heights(sensors: SensorsConfig | None) -> dict[str, float]:
+    """Per-sensor mounting-height overrides (config `height_cm`), by sensor id."""
+    heights: dict[str, float] = {}
+    if sensors is None:
+        return heights
+    for f in dataclass_fields(sensors):
+        for entry in getattr(sensors, f.name):
+            if entry.height_cm is not None:
+                heights[entry.id] = entry.height_cm
+    return heights
 
 
 def _warn_if_disk_low(csv_path: str) -> None:
@@ -124,6 +157,7 @@ class SensorStation:
         self._sensors: dict[str, tuple[str, DistanceSensorBase]] = build_sensors(
             config.sensors
         )
+        self._sensor_heights: dict[str, float] = sensor_heights(config.sensors)
         self._lora = LoRaTransmitter(
             cs_pin=config.pins.lora_cs,
             reset_pin=config.pins.lora_reset,
@@ -236,9 +270,18 @@ class SensorStation:
         selected_ultrasonic_id: str | None = best[0] if best else None
         distance_raw_cm: float | None = best[1].distance_cm if best else None
 
+        # Height of the selected sensor: per-sensor override if configured,
+        # else the station-wide default. Everything downstream (depth, QC,
+        # wire payload, CSV) uses this so the record stays self-consistent.
+        sensor_height_cm = self._config.sensor_height_cm
+        if selected_ultrasonic_id is not None:
+            sensor_height_cm = self._sensor_heights.get(
+                selected_ultrasonic_id, sensor_height_cm
+            )
+
         snow_depth_cm: float | None = None
         if distance_raw_cm is not None:
-            snow_depth_cm = round(self._config.sensor_height_cm - distance_raw_cm, 1)
+            snow_depth_cm = round(sensor_height_cm - distance_raw_cm, 1)
 
         lora_tx_success = False
         if not self._lora.initialize():
@@ -252,7 +295,7 @@ class SensorStation:
                 "snow_depth_cm": snow_depth_cm,
                 "distance_raw_cm": distance_raw_cm,
                 "temperature_c": temperature_c,
-                "sensor_height_cm": self._config.sensor_height_cm,
+                "sensor_height_cm": sensor_height_cm,
                 "error_flags": ",".join(errors),
             }
             lora_tx_success = self._lora.transmit_with_ack(payload)
@@ -279,7 +322,7 @@ class SensorStation:
             selected_id=selected_ultrasonic_id,
             selected_result=selected_result,
             snow_depth_cm=snow_depth_cm,
-            sensor_height_cm=self._config.sensor_height_cm,
+            sensor_height_cm=sensor_height_cm,
             timestamp=timestamp,
             prev_snow_depth_cm=baseline.snow_depth_cm if baseline else None,
             prev_timestamp=baseline.timestamp if baseline else None,
@@ -298,7 +341,7 @@ class SensorStation:
             snow_depth_cm=snow_depth_cm,
             distance_raw_cm=distance_raw_cm,
             temperature_c=temperature_c,
-            sensor_height_cm=self._config.sensor_height_cm,
+            sensor_height_cm=sensor_height_cm,
             selected_ultrasonic_id=selected_ultrasonic_id,
             quality_flag=quality_flag,
             lora_tx_success=lora_tx_success,

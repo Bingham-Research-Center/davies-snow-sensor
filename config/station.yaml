@@ -24,10 +24,14 @@ sensors:
     # (see sensors.maxbotix below).
   maxbotix:
     - id: "mb7374"            # MaxBotix MB7374 (HRXL-MaxSonar-WRS), serial MBBZRJTT
-      # pinned by serial-number path so it survives ttyUSB* renumbering when the
-      # A02YYUW adapter is added later
+      # pinned by serial-number path so it survives ttyUSB* renumbering
+      # alongside the A02YYUW's CP2102 adapter
       serial_port: "/dev/serial/by-id/usb-MaxBotix_MB7374-1XX_HRXL-MaxSonar-WRS_MBBZRJTT-if00-port0"
       baud_rate: 9600          # MB7374 default; TTL 8N1, streams R<mm> at ~6 Hz
+  a02yyuw:
+    - id: "a02_1"              # DFRobot A02YYUW on CP2102 USB-UART bridge, added 2026-07-23
+      serial_port: "/dev/serial/by-id/usb-Silicon_Labs_CP2102_USB_to_UART_Bridge_Controller_0001-if00-port0"
+      baud_rate: 9600          # A02YYUW default; streams FF/data_h/data_l/checksum frames
 
 lora:
   # CRITICAL: every field below MUST match the peer's lora block on the base

@@ -12,7 +12,10 @@ _gpiozero = types.ModuleType("gpiozero")
 _gpiozero.DistanceSensor = MagicMock
 sys.modules.setdefault("gpiozero", _gpiozero)
 
+import pytest
+
 from snowsensor.sensor.ultrasonic import (
+    DistanceSensorBase,
     JsnSr04tSensor,
     UltrasonicSensor,
     SensorResult,
@@ -347,3 +350,42 @@ class TestJsnSr04t:
 
         assert result.distance_cm is None
         assert result.error == "jsn_sr04t_out_of_range"
+
+
+# ── Driver class contract ─────────────────────────────────────
+
+
+class TestDriverClassContract:
+    def test_subclass_missing_label_fails_at_definition(self):
+        with pytest.raises(TypeError, match="LABEL"):
+
+            class MissingLabel(DistanceSensorBase):
+                KIND = "missing_label"
+                MIN_VALID_CM = 1.0
+                MAX_VALID_CM = 2.0
+
+    def test_error_names_all_missing_attrs(self):
+        with pytest.raises(TypeError, match="KIND, LABEL, MIN_VALID_CM, MAX_VALID_CM"):
+
+            class Empty(DistanceSensorBase):
+                pass
+
+    def test_intermediate_base_opts_out_with_driver_base(self):
+        class Intermediate(DistanceSensorBase):
+            DRIVER_BASE = True
+
+        # Concrete subclass of the intermediate base is still checked
+        with pytest.raises(TypeError, match="LABEL"):
+
+            class Concrete(Intermediate):
+                KIND = "concrete"
+                MIN_VALID_CM = 1.0
+                MAX_VALID_CM = 2.0
+
+    def test_inherited_attrs_satisfy_the_check(self):
+        # JsnSr04tSensor overrides everything, but a subclass that inherits
+        # all four attrs is also complete
+        class Derived(JsnSr04tSensor):
+            pass
+
+        assert Derived.LABEL == "JSN-SR04T"

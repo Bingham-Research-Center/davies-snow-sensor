@@ -69,6 +69,8 @@ class UltrasonicSensorConfig:
     id: str
     trigger_pin: int
     echo_pin: int
+    # Mounting height above ground at zero snow; None = station sensor_height_cm
+    height_cm: float | None = None
 
 
 @dataclass(frozen=True)
@@ -76,6 +78,8 @@ class SerialSensorConfig:
     id: str
     serial_port: str
     baud_rate: int = 9600
+    # Mounting height above ground at zero snow; None = station sensor_height_cm
+    height_cm: float | None = None
 
 
 @dataclass(frozen=True)
@@ -271,7 +275,14 @@ def _parse_gpio_sensors(
         _check_sensor_pin_reserved(f"{sid}.echo_pin", echo, hardware_profile)
         pins[f"{sid}.trigger_pin"] = trig
         pins[f"{sid}.echo_pin"] = echo
-        entries.append(UltrasonicSensorConfig(id=sid, trigger_pin=trig, echo_pin=echo))
+        entries.append(
+            UltrasonicSensorConfig(
+                id=sid,
+                trigger_pin=trig,
+                echo_pin=echo,
+                height_cm=_parse_optional_height(entry, section),
+            )
+        )
     return entries, pins
 
 
@@ -315,10 +326,22 @@ def _parse_serial_sensors(
             raise ConfigError(f"Field 'baud_rate' in '{section}' must be positive")
 
         result.append(
-            SerialSensorConfig(id=sid, serial_port=serial_port, baud_rate=baud_rate)
+            SerialSensorConfig(
+                id=sid,
+                serial_port=serial_port,
+                baud_rate=baud_rate,
+                height_cm=_parse_optional_height(entry, section),
+            )
         )
 
     return result
+
+
+def _parse_optional_height(entry: dict, section: str) -> float | None:
+    """Optional per-sensor `height_cm`; None defers to station sensor_height_cm."""
+    if "height_cm" not in entry:
+        return None
+    return parse_positive_number(entry, "height_cm", section, 0.0)
 
 
 def _parse_storage(raw: dict | None) -> StorageConfig:
