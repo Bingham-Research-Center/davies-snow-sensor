@@ -14,6 +14,8 @@ class SerialDistanceSensor(DistanceSensorBase):
     (read and parse one frame, or None if the frame was invalid/timed out).
     """
 
+    DRIVER_BASE = True  # not a sensor model itself; skip the driver-attr check
+
     def __init__(
         self,
         serial_port: str,

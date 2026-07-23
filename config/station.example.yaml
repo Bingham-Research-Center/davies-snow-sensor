@@ -32,11 +32,15 @@ pins:
 # pair. Families: `ultrasonic` (HC-SR04 GPIO), `jsn_sr04t` (waterproof GPIO
 # probe, own 25-450 cm envelope), `maxbotix` and `a02yyuw` (serial). MB7374
 # units wire through a USB-to-TTL adapter (e.g. CP2102) — /dev/ttyUSB*.
+# Any sensor may set `height_cm` (its own height above ground at zero snow)
+# when it is not mounted at the station-wide `station.sensor_height_cm`;
+# snow depth is computed against the selected sensor's own height.
 sensors:
   ultrasonic:
     - id: "front"
       trigger_pin: 5
       echo_pin: 6
+      # height_cm: 190.0        # optional; omit to use station.sensor_height_cm
     # - id: "rear"
     #   trigger_pin: 13
     #   echo_pin: 19

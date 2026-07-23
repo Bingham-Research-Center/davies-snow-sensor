@@ -14,6 +14,7 @@ from snowsensor.sensor.config import (
     PinsConfig,
     QCConfig,
     SensorsConfig,
+    SerialSensorConfig,
     StationConfig,
     StorageConfig,
     TimingConfig,
@@ -25,7 +26,9 @@ from snowsensor.sensor.main import (
     _select_best_sensor,
     build_sensors,
     main,
+    sensor_heights,
 )
+from snowsensor.protocol.validation import ConfigError
 from snowsensor.sensor.qc import RATE_OF_CHANGE_HIGH
 from snowsensor.sensor.qc import compute_quality_flag as real_compute_quality_flag
 from snowsensor.sensor.storage import Reading
@@ -1074,8 +1077,10 @@ class TestPerSensorCSV:
 
 
 def _serial_entry(sid: str) -> SimpleNamespace:
-    # Duck-typed config entry: only id/serial_port/baud_rate are read.
-    return SimpleNamespace(id=sid, serial_port="/dev/ttyUSB0", baud_rate=9600)
+    # Duck-typed config entry: only id/serial_port/baud_rate/height_cm are read.
+    return SimpleNamespace(
+        id=sid, serial_port="/dev/ttyUSB0", baud_rate=9600, height_cm=None
+    )
 
 
 def _make_mixed_sensor_config():
@@ -1235,3 +1240,92 @@ class TestJsnInCycle:
 
         reading = mock_deps["storage"].append.call_args[0][0]
         assert "mast_jsn:jsn_sr04t_no_device" in reading.error_flags
+
+
+# ── build_sensors registry mismatch ──────────────────────────────
+
+
+class TestBuildSensorsRegistryMismatch:
+    def test_configured_family_without_driver_raises(self):
+        drivers = {k: v for k, v in SENSOR_DRIVERS.items() if k != "maxbotix"}
+        sensors = SensorsConfig(maxbotix=[_serial_entry("m1")])
+        with (
+            patch.dict("snowsensor.sensor.main.SENSOR_DRIVERS", drivers, clear=True),
+            pytest.raises(ConfigError, match="maxbotix"),
+        ):
+            build_sensors(sensors)
+
+    def test_unconfigured_family_without_driver_is_ok(self):
+        drivers = {k: v for k, v in SENSOR_DRIVERS.items() if k != "maxbotix"}
+        sensors = SensorsConfig(
+            ultrasonic=[UltrasonicSensorConfig(id="u1", trigger_pin=5, echo_pin=6)]
+        )
+        with (
+            patch.dict("snowsensor.sensor.main.SENSOR_DRIVERS", drivers, clear=True),
+            patch("snowsensor.sensor.main.UltrasonicSensor"),
+        ):
+            assert list(build_sensors(sensors)) == ["u1"]
+
+    def test_registry_kind_without_config_field_raises(self):
+        with (
+            patch.dict(
+                "snowsensor.sensor.main.SENSOR_DRIVERS", {"phantom": lambda c: None}
+            ),
+            pytest.raises(ConfigError, match="phantom"),
+        ):
+            build_sensors(SensorsConfig())
+
+
+# ── Per-sensor height ────────────────────────────────────────────
+
+
+class TestSensorHeights:
+    def test_collects_overrides_across_families(self):
+        heights = sensor_heights(
+            SensorsConfig(
+                ultrasonic=[
+                    UltrasonicSensorConfig(
+                        id="u1", trigger_pin=5, echo_pin=6, height_cm=190.0
+                    ),
+                    UltrasonicSensorConfig(id="u2", trigger_pin=20, echo_pin=21),
+                ],
+                a02yyuw=[
+                    SerialSensorConfig(
+                        id="a1", serial_port="/dev/ttyUSB1", height_cm=67.5
+                    )
+                ],
+            )
+        )
+        assert heights == {"u1": 190.0, "a1": 67.5}
+
+    def test_none_config_is_empty(self):
+        assert sensor_heights(None) == {}
+
+    def test_selected_sensor_height_drives_depth_payload_and_reading(self, mock_deps):
+        config = _make_config(
+            sensor_height_cm=200.0,
+            sensors=SensorsConfig(
+                ultrasonic=[
+                    UltrasonicSensorConfig(
+                        id="default", trigger_pin=23, echo_pin=24, height_cm=190.0
+                    )
+                ]
+            ),
+        )
+        station = SensorStation(config)
+        station.run_cycle()
+
+        payload = mock_deps["lora"].transmit_with_ack.call_args[0][0]
+        assert payload["snow_depth_cm"] == 40.0
+        assert payload["sensor_height_cm"] == 190.0
+        reading = mock_deps["storage"].append.call_args[0][0]
+        assert reading.snow_depth_cm == 40.0
+        assert reading.sensor_height_cm == 190.0
+
+    def test_sensor_without_override_uses_station_height(self, mock_deps):
+        station = SensorStation(_make_config(sensor_height_cm=200.0))
+        station.run_cycle()
+
+        payload = mock_deps["lora"].transmit_with_ack.call_args[0][0]
+        assert payload["snow_depth_cm"] == 50.0
+        assert payload["sensor_height_cm"] == 200.0

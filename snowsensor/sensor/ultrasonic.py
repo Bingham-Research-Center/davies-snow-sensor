@@ -38,13 +38,30 @@ class DistanceSensorBase:
 
     Subclasses set KIND (the error-code prefix and config family name, e.g.
     `maxbotix_no_device` / `sensors.maxbotix`), LABEL (display name for logs),
-    and MIN/MAX_VALID_CM.
+    and MIN/MAX_VALID_CM. All four are checked at class-definition time so a
+    driver missing one fails at import, not mid-cycle. Intermediate bases that
+    are not themselves a sensor model declare `DRIVER_BASE = True` in their
+    own body to skip the check.
     """
 
     KIND: str
     LABEL: str
     MIN_VALID_CM: float
     MAX_VALID_CM: float
+
+    _REQUIRED_DRIVER_ATTRS = ("KIND", "LABEL", "MIN_VALID_CM", "MAX_VALID_CM")
+
+    def __init_subclass__(cls, **kwargs) -> None:
+        super().__init_subclass__(**kwargs)
+        if cls.__dict__.get("DRIVER_BASE", False):
+            return
+        missing = [a for a in cls._REQUIRED_DRIVER_ATTRS if not hasattr(cls, a)]
+        if missing:
+            raise TypeError(
+                f"Driver class '{cls.__name__}' must define "
+                f"{', '.join(missing)} (or declare DRIVER_BASE = True "
+                f"if it is an intermediate base)"
+            )
 
     _last_error: str | None
     _last_read_duration_ms: int

@@ -1308,3 +1308,71 @@ class TestA02yyuwValidation:
         }
         with pytest.raises(ConfigError, match="positive"):
             load_config(_write_yaml(tmp_path, data))
+
+
+# ── Per-sensor height_cm ─────────────────────────────────────
+
+
+class TestPerSensorHeight:
+    def test_gpio_sensor_height_parsed(self, tmp_path):
+        data = {
+            **MULTI_SENSOR_CONFIG,
+            "sensors": {
+                "ultrasonic": [
+                    {
+                        "id": "north",
+                        "trigger_pin": 5,
+                        "echo_pin": 6,
+                        "height_cm": 190.0,
+                    },
+                ],
+            },
+        }
+        cfg = load_config(_write_yaml(tmp_path, data))
+        assert cfg.sensors.ultrasonic[0].height_cm == 190.0
+
+    def test_serial_sensor_height_parsed(self, tmp_path):
+        data = {
+            **MULTI_SENSOR_CONFIG,
+            "sensors": {
+                "ultrasonic": [{"id": "north", "trigger_pin": 5, "echo_pin": 6}],
+                "a02yyuw": [
+                    {"id": "a02", "serial_port": "/dev/ttyUSB1", "height_cm": 67.5},
+                ],
+            },
+        }
+        cfg = load_config(_write_yaml(tmp_path, data))
+        assert cfg.sensors.a02yyuw[0].height_cm == 67.5
+
+    def test_height_absent_defaults_to_none(self, tmp_path):
+        cfg = load_config(_write_yaml(tmp_path, MULTI_SENSOR_CONFIG))
+        assert all(u.height_cm is None for u in cfg.sensors.ultrasonic)
+
+    def test_height_must_be_positive(self, tmp_path):
+        data = {
+            **MULTI_SENSOR_CONFIG,
+            "sensors": {
+                "ultrasonic": [
+                    {"id": "north", "trigger_pin": 5, "echo_pin": 6, "height_cm": -5},
+                ],
+            },
+        }
+        with pytest.raises(ConfigError, match="height_cm"):
+            load_config(_write_yaml(tmp_path, data))
+
+    def test_height_must_be_a_number(self, tmp_path):
+        data = {
+            **MULTI_SENSOR_CONFIG,
+            "sensors": {
+                "ultrasonic": [
+                    {
+                        "id": "north",
+                        "trigger_pin": 5,
+                        "echo_pin": 6,
+                        "height_cm": "tall",
+                    },
+                ],
+            },
+        }
+        with pytest.raises(ConfigError, match="height_cm"):
+            load_config(_write_yaml(tmp_path, data))
