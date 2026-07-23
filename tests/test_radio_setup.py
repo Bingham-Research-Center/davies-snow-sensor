@@ -139,3 +139,22 @@ class TestReceiveIdle:
 
         assert result == b"pkt"
         assert state["sleeps"] == []
+
+    def test_method_style_rx_done_still_idles(self):
+        # adafruit_rfm9x 2.2.x exposes rx_done as a method returning 0/1; a
+        # bound method is always truthy, so truth-testing the attribute made
+        # this loop spin at full speed and fire receive() with an empty FIFO.
+        state, monotonic, sleep = self._fake_clock()
+        rfm9x = MagicMock()
+        rfm9x.rx_done = MagicMock(side_effect=[0, 0, 1])
+        rfm9x.receive.return_value = b"pkt"
+
+        with (
+            patch("snowsensor.protocol.radio_setup.time.monotonic", monotonic),
+            patch("snowsensor.protocol.radio_setup.time.sleep", sleep),
+        ):
+            result = radio_setup.receive_idle(rfm9x, timeout_s=5.0)
+
+        assert result == b"pkt"
+        rfm9x.receive.assert_called_once_with(timeout=0, with_header=False)
+        assert len(state["sleeps"]) == 2  # idled between polls, not spun

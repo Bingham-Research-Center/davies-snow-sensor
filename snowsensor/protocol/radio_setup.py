@@ -64,6 +64,18 @@ def create_radio(
         raise
 
 
+def _rx_done(rfm9x) -> bool:
+    """True when the radio's RxDone IRQ flag is set.
+
+    adafruit_rfm9x has shipped rx_done both as a property and, in newer 2.x
+    releases, as a plain method. Truth-testing the attribute treats a bound
+    method as "always set", which turns the sleep-poll in receive_idle into
+    a full-speed spin, so call it when callable.
+    """
+    flag = rfm9x.rx_done
+    return bool(flag() if callable(flag) else flag)
+
+
 def receive_idle(rfm9x, timeout_s: float, poll_interval_s: float = 0.01):
     """Receive one packet, sleeping between rx_done polls.
 
@@ -79,7 +91,7 @@ def receive_idle(rfm9x, timeout_s: float, poll_interval_s: float = 0.01):
     rfm9x.listen()
     deadline = time.monotonic() + timeout_s
     while time.monotonic() < deadline:
-        if rfm9x.rx_done:
+        if _rx_done(rfm9x):
             return rfm9x.receive(timeout=0, with_header=False)
         time.sleep(poll_interval_s)
     return None
